@@ -1,0 +1,3 @@
+{% if a.prozent is not None %}<div class="progress" style="height:16px;min-width:120px" title="{{ a.kg|zahl }} kg ({{ a.kg_prozent }} %) · {{ a.paletten|zahl }} Pal. ({{ a.pal_prozent }} %)">
+  <div class="progress-bar {% if a.ueberladen %}bg-danger{% elif a.prozent > 85 %}bg-warning{% else %}bg-success{% endif %}" style="width:{% if a.prozent > 100 %}100{% else %}{{ a.prozent|stringformat:'d' }}{% endif %}%">{{ a.prozent }} %</div></div>
+{% else %}<span class="small text-muted">ohne Fahrzeug</span>{% endif %}

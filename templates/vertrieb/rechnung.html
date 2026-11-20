@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ b.get_belegart_display }} {{ b.nummer }}{% endblock %}
+{% block content %}
+{% hat_recht "vertrieb" "freigeben" as darf_freigeben %}{% hat_recht "edi" "anlegen" as darf_edi %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">{{ b.get_belegart_display }} {{ b.nummer|default:"(Entwurf)" }}</h1>{% include "vertrieb/_status.html" with status=b.status text=b.get_status_display %}
+  <div class="ms-auto d-flex gap-2 flex-wrap">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'belege:detail' b.pk %}"><i class="bi bi-file-text"></i> Beleg</a>
+  {% if b.nummer %}<a class="btn btn-sm btn-primary" href="{% url 'vertrieb:rechnung_datei' b.pk 'zugferd' %}"><i class="bi bi-file-pdf"></i> ZUGFeRD-PDF</a>
+  <a class="btn btn-sm btn-outline-primary" href="{% url 'vertrieb:rechnung_datei' b.pk 'xrechnung' %}"><i class="bi bi-filetype-xml"></i> XRechnung (UBL)</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'vertrieb:rechnung_datei' b.pk 'cii' %}">CII-XML</a>
+  {% if ist_edi and darf_edi %}<form method="post" action="{% url 'vertrieb:rechnung_aktion' b.pk 'invoic' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary">INVOIC erzeugen</button></form>{% endif %}
+  {% if b.belegart == 'RECHNUNG' and darf_freigeben and b.status == 'FESTGESCHRIEBEN' %}<button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#gs">Gutschrift</button>{% endif %}{% endif %}
+  </div></div>
+{% include "vertrieb/_nav.html" with aktiv="rechnungen" %}
+<div class="collapse mb-3" id="gs"><div class="card card-body"><form method="post" action="{% url 'vertrieb:rechnung_aktion' b.pk 'gutschrift' %}" class="d-flex gap-2">{% csrf_token %}<input name="grund" class="form-control form-control-sm" placeholder="Grund (z. B. Reklamation, Storno)"><button class="btn btn-sm btn-danger text-nowrap">Gutschrift über den vollen Betrag erstellen</button></form>
+  <div class="form-text">Rechnungen sind festgeschrieben (GoBD) – eine Korrektur erfolgt ausschließlich per Gutschrift/Stornorechnung.</div></div></div>
+<div class="row g-3 mb-3">
+  <div class="col-lg-4"><div class="card h-100"><div class="card-body small"><div class="fw-semibold">{{ b.partner.nummer }} {{ b.partner.name }}</div>
+    <div>USt-IdNr.: {{ b.partner.ust_id|default:"–" }}</div>{% if b.partner.leitweg_id %}<div>Leitweg-ID: {{ b.partner.leitweg_id }}</div>{% endif %}
+    <div class="mt-2"><span class="text-muted">Datum:</span> {{ b.belegdatum|date:"d.m.Y" }}</div>{% if b.ihre_referenz %}<div><span class="text-muted">Referenz:</span> {{ b.ihre_referenz }}</div>{% endif %}</div></div></div>
+  <div class="col-lg-4"><div class="card h-100"><div class="card-body small"><div class="fw-semibold mb-1">E-Rechnung (EN 16931)</div>
+    {% if pruefung %}{% if pruefung.ok %}<div class="text-success"><i class="bi bi-check-circle"></i> CII- und UBL-XML schemakonform (XSD), Summenprüfung ok</div>{% else %}<div class="text-danger"><i class="bi bi-x-circle"></i> Prüfung fehlgeschlagen:</div><ul class="mb-0">{% for f in pruefung.fehler %}<li>{{ f }}</li>{% endfor %}</ul>{% endif %}
+    <div class="text-muted mt-1">Geprüft offline: XSD (CII D16B / UBL 2.1) und Summen. Schematron (KoSIT) nicht geprüft.</div>{% else %}<div class="text-muted">erst nach Festschreibung</div>{% endif %}
+    {% for h in pflicht %}<div class="text-warning mt-1"><i class="bi bi-info-circle"></i> {{ h }}</div>{% endfor %}</div></div></div>
+  <div class="col-lg-4"><div class="card h-100"><div class="card-body small"><div class="fw-semibold mb-1">Offene Posten (Fibu)</div>
+    {% for op in ops %}<div><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a> fällig {{ op.faellig_am|date:"d.m.Y" }} – offen <strong>{{ op.offen|euro }}</strong></div>{% empty %}<div class="text-muted">Kein offener Posten.</div>{% endfor %}
+    {% if lieferungen %}<div class="fw-semibold mt-2">Lieferscheine</div>{% for lf in lieferungen %}<a href="{% url 'vertrieb:lieferschein' lf.pk %}">{{ lf.nummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
+    {% if gutschriften %}<div class="fw-semibold mt-2">Gutschriften</div>{% for g in gutschriften %}<a href="{% url 'vertrieb:rechnung' g.pk %}">{{ g.nummer }}</a> {% endfor %}{% endif %}</div></div></div>
+</div>
+<div class="card"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Pos.</th><th>Artikel</th><th>Bezeichnung</th><th class="text-end">Menge</th><th class="text-end">Preis</th><th class="text-end">Rabatt</th><th class="text-end">USt</th><th class="text-end">Netto</th></tr></thead>
+<tbody>{% for p in positionen %}<tr><td>{{ p.position }}</td><td>{{ p.artikel.artikelnummer|default:"" }}</td><td>{{ p.bezeichnung }}</td><td class="text-end">{{ p.menge|menge }} {{ p.einheit }}</td><td class="text-end">{{ p.einzelpreis|euro }}</td><td class="text-end">{% if p.rabatt_prozent %}{{ p.rabatt_prozent|zahl }} %{% endif %}</td><td class="text-end">{{ p.steuersatz|zahl }} %</td><td class="text-end">{{ p.betrag_netto|euro }}</td></tr>{% endfor %}</tbody>
+<tfoot><tr><td colspan="7" class="text-end">Netto</td><td class="text-end">{{ b.summe_netto|euro }}</td></tr><tr><td colspan="7" class="text-end">USt</td><td class="text-end">{{ b.summe_steuer|euro }}</td></tr><tr class="fw-semibold"><td colspan="7" class="text-end">Brutto</td><td class="text-end">{{ b.summe_brutto|euro }}</td></tr></tfoot></table></div>
+{% endblock %}

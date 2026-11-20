@@ -88,12 +88,20 @@ class RechteTests(TestCase):
                      "fibu:index", "fibu:konten", "fibu:buchungen", "fibu:buchung_neu", "fibu:kette",
                      "fibu:op_liste", "fibu:er_liste", "fibu:er_neu", "fibu:bank", "fibu:mahnwesen",
                      "fibu:perioden", "fibu:auswertungen", "fibu:bankkonten_liste", "fibu:steuerschluessel_liste",
-                     "fibu:kontierungsregeln_liste", "fibu:mahnstufen_liste", "fibu:basiszinssaetze_liste"]:
+                     "fibu:kontierungsregeln_liste", "fibu:mahnstufen_liste", "fibu:basiszinssaetze_liste",
+                     "vertrieb:index", "vertrieb:pipeline", "vertrieb:angebote", "vertrieb:angebot_neu",
+                     "vertrieb:auftraege", "vertrieb:auftrag_neu", "vertrieb:lieferscheine", "vertrieb:rechnungen",
+                     "vertrieb:edi", "vertrieb:shops", "vertrieb:leads_liste", "vertrieb:edipartner_liste",
+                     "versand:index", "versand:touren", "versand:planen", "versand:lvs", "versand:regionen_liste",
+                     "versand:fahrzeuge_liste"]:
             self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
         # umgesetzte Module leiten von der Platzhalterseite auf ihre Startseite weiter
         self.assertRedirects(self.client.get(reverse("core:platzhalter", args=["produktion"])),
                              reverse("produktion:index"))
         self.assertRedirects(self.client.get(reverse("core:platzhalter", args=["fibu"])), reverse("fibu:index"))
+        for modul in ("vertrieb", "versand"):
+            self.assertRedirects(self.client.get(reverse("core:platzhalter", args=[modul])),
+                                 reverse(f"{modul}:index"))
 
 
 class NummernkreisTests(TestCase):

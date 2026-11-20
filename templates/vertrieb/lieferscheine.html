@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Lieferscheine{% endblock %}
+{% block content %}
+{% hat_recht "vertrieb" "freigeben" as darf_re %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Lieferscheine</h1>
+  <form class="ms-auto d-flex gap-2" method="get">
+    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()"><option value="">alle</option><option value="unberechnet" {% if status == 'unberechnet' %}selected{% endif %}>versandbereit, nicht berechnet</option>
+      {% for c, l in stati %}<option value="{{ c }}" {% if status == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+    <input class="form-control form-control-sm" name="q" value="{{ request.GET.q }}" placeholder="LS / Auftrag / Kunde"></form></div>
+{% include "vertrieb/_nav.html" with aktiv="lieferscheine" %}
+<form method="post" action="{% url 'vertrieb:sammelrechnung' %}">{% csrf_token %}
+<div class="card"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th></th><th>Lieferschein</th><th>Datum</th><th>Auftrag</th><th>Kunde</th><th>PLZ/Ort</th><th>Status</th><th>Rechnung</th></tr></thead>
+<tbody>{% for lf in seite %}<tr><td>{% if not lf.rechnung and lf.status in 'GEBUCHT VERLADEN ZUGESTELLT' %}<input class="form-check-input" type="checkbox" name="lieferung" value="{{ lf.pk }}">{% endif %}</td>
+  <td><a href="{% url 'vertrieb:lieferschein' lf.pk %}">{{ lf.nummer }}</a></td><td>{{ lf.lieferdatum|date:"d.m.Y" }}</td><td><a href="{% url 'vertrieb:auftrag' lf.auftrag_id %}">{{ lf.auftrag.nummer }}</a></td><td>{{ lf.auftrag.partner.name|truncatechars:28 }}</td><td>{{ lf.plz }} {{ lf.ort }}</td>
+  <td>{% include "vertrieb/_status.html" with status=lf.status text=lf.get_status_display %}</td><td>{% if lf.rechnung %}<a href="{% url 'vertrieb:rechnung' lf.rechnung.pk %}">{{ lf.rechnung.nummer }}</a>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="8" class="text-muted text-center py-3">Keine Lieferscheine.</td></tr>{% endfor %}</tbody></table>
+{% if darf_re %}<div class="card-footer bg-white d-flex align-items-center"><span class="small text-muted">Markierte Lieferscheine desselben Kunden zu einer (Sammel-)Rechnung zusammenfassen.</span><button class="btn btn-sm btn-primary ms-auto"><i class="bi bi-receipt"></i> Rechnung erstellen</button></div>{% endif %}
+</div></form>
+{% include "vertrieb/_seiten.html" %}
+{% endblock %}

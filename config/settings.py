@@ -37,6 +37,8 @@ ERP_APPS = [
     "apps.akkord",
     "apps.vertrieb",
     "apps.versand",
+    "apps.edi",
+    "apps.shopapi",
     "apps.fibu",
     "apps.fibu_bank",
     "apps.fibu_mahnwesen",
@@ -54,6 +56,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "rest_framework",
     "rest_framework.authtoken",
+    "drf_spectacular",
     *ERP_APPS,
 ]
 
@@ -152,7 +155,19 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
     "COERCE_DECIMAL_TO_STRING": True,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ERP Mittelstand – REST-API",
+    "DESCRIPTION": "Interne API (Token/Session, Rechte je Modul) und Onlineshop-API (/api/v1/shop/, "
+                   "Header „Authorization: Shop <token>“).",
+    "VERSION": "1.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
+# EDI/EDIFACT: eigene GLN/ILN (Absender in UNB/NAD SU)
+ERP_EIGENE_GLN = os.environ.get("ERP_EIGENE_GLN", "4012345000016")
 
 LOGGING = {
     "version": 1,

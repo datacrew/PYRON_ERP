@@ -2,7 +2,7 @@ from django.apps import AppConfig
 
 
 class VersandConfig(AppConfig):
-    """Gerüst – fachliche Umsetzung folgt laut docs/ROADMAP.md."""
+    """Phase 5 – Vertrieb und Versand."""
 
     name = "apps.versand"
     label = "versand"
@@ -11,9 +11,9 @@ class VersandConfig(AppConfig):
     erp_modul = {
         "code": "versand",
         "name": "Versand",
-        "beschreibung": "Versandlager, Tourenplanung nach Kundenstandort, LVS-Schnittstelle",
+        "beschreibung": "Tourenplanung nach PLZ-Regionen und Liefertagen, Fahrzeugkapazität, Touren-/Ladelisten, LVS-Schnittstelle",
         "icon": "bi-truck",
         "reihenfolge": 70,
-        "url_name": "",
-        "geplant": ['Kommissionierung und Packstücke', 'Tourenplanung nach PLZ-Gebieten/Geokoordinaten', 'Ladelisten und Fahreraufträge', 'Schnittstelle zur Lagerverwaltungssoftware (LVS)', 'Versanddienstleister-Anbindung'],
+        "url_name": "versand:index",
+        "geplant": [],
     }

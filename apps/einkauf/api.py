@@ -1,6 +1,7 @@
 """REST-API Einkauf: Bestellungen/Anfragen mit Positionen und Workflow-Aktionen."""
 from django.db import transaction
 from django.http import HttpResponse
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,6 +13,7 @@ from .models import Bestellung, BestellPosition, EinkaufFehler
 from .pdf import bestellung_pdf
 
 
+@extend_schema_serializer(component_name="EinkaufBestellPosition")
 class PositionSerializer(serializers.ModelSerializer):
     offen_menge = serializers.DecimalField(max_digits=14, decimal_places=3, read_only=True)
     betrag_netto = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)

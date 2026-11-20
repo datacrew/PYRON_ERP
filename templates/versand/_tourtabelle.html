@@ -1,0 +1,3 @@
+<table class="table table-sm table-hover mb-0 align-middle"><thead class="table-light"><tr><th>Tour</th><th>Datum</th><th>Region</th><th>Fahrzeug</th><th class="text-end">Stopps</th><th>Auslastung</th><th>Status</th></tr></thead>
+<tbody>{% for t, a in liste %}<tr><td><a href="{% url 'versand:tour' t.pk %}">{{ t.nummer }}</a></td><td>{{ t.datum|date:"d.m.Y" }}</td><td>{{ t.region.name }}</td><td>{{ t.fahrzeug.kennzeichen|default:"–" }}</td><td class="text-end">{{ t.stopps.count }}</td><td>{% include "versand/_auslastung.html" %}</td><td>{% include "vertrieb/_status.html" with status=t.status text=t.get_status_display %}</td></tr>
+{% empty %}<tr><td colspan="7" class="text-muted text-center">Keine Touren.</td></tr>{% endfor %}</tbody></table>

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Versand{% endblock %}
+{% block content %}
+{% hat_recht "versand" "anlegen" as darf %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-truck"></i> Versand</h1>
+  {% if darf %}<a class="btn btn-sm btn-primary ms-auto" href="{% url 'versand:planen' %}"><i class="bi bi-diagram-3"></i> Touren bilden</a>{% endif %}</div>
+{% include "versand/_nav.html" with aktiv="index" %}
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">Touren heute / morgen</div><div class="fs-4 fw-semibold">{{ k.touren_heute|length }} / {{ k.touren_morgen|length }}</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">Nicht verplante Lieferscheine</div><div class="fs-4 fw-semibold {% if k.unverplant %}text-warning{% endif %}">{{ k.unverplant }}</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">In Kommissionierung (LVS)</div><div class="fs-4 fw-semibold">{{ k.kommissionierung }}</div><div class="small text-muted">{{ k.versandbereit }} versandbereit</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">Unterwegs</div><div class="fs-4 fw-semibold">{{ k.unterwegs }}</div><div class="small text-muted">Lieferscheine verladen</div></div></div></div>
+</div>
+<div class="row g-3 mb-4">{% for titel, urlname, icon, text in kacheln %}{% url urlname as u %}{% include "core/_kachel.html" with url=u icon=icon titel=titel text=text %}{% endfor %}</div>
+<div class="row g-3">
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Touren heute</div>{% include "versand/_tourtabelle.html" with liste=k.touren_heute %}</div></div>
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Touren morgen</div>{% include "versand/_tourtabelle.html" with liste=k.touren_morgen %}</div></div>
+  <div class="col-12"><div class="card"><div class="card-header bg-white fw-semibold">Offene, nicht verplante Lieferscheine</div>
+    <table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Lieferschein</th><th>Datum</th><th>Kunde</th><th>PLZ/Ort</th><th class="text-end">kg</th><th class="text-end">Pal.</th><th>Status</th></tr></thead>
+    <tbody>{% for lf in offen %}<tr><td><a href="{% url 'vertrieb:lieferschein' lf.pk %}">{{ lf.nummer }}</a></td><td>{{ lf.lieferdatum|date:"d.m.Y" }}</td><td>{{ lf.auftrag.partner.name|truncatechars:30 }}</td><td>{{ lf.plz }} {{ lf.ort }}</td><td class="text-end">{{ lf.gewicht|zahl }}</td><td class="text-end">{{ lf.paletten|zahl }}</td><td>{% include "vertrieb/_status.html" with status=lf.status text=lf.get_status_display %}</td></tr>
+    {% empty %}<tr><td colspan="7" class="text-muted text-center">Alle Lieferscheine sind verplant.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+{% endblock %}

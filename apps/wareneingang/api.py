@@ -1,5 +1,6 @@
 """REST-API Wareneingang: Buchung gegen Bestellung, QS-Entscheid, PDF."""
 from django.http import HttpResponse
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -50,6 +51,7 @@ class BuchPositionSerializer(serializers.Serializer):
     restmenge_abschliessen = serializers.BooleanField(required=False, default=False)
 
 
+@extend_schema_serializer(component_name="WareneingangBuchung")
 class BuchungSerializer(serializers.Serializer):
     bestellung = serializers.PrimaryKeyRelatedField(queryset=Bestellung.objects)
     lieferschein_nr = serializers.CharField()

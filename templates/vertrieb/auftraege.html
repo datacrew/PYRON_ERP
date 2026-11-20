@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Kundenaufträge{% endblock %}
+{% block content %}
+{% hat_recht "vertrieb" "anlegen" as darf %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Kundenaufträge</h1>
+  <form class="ms-auto d-flex gap-2" method="get">
+    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()"><option value="offen" {% if status == 'offen' %}selected{% endif %}>offen</option><option value="" {% if not status %}selected{% endif %}>alle</option>
+      {% for c, l in stati %}<option value="{{ c }}" {% if status == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+    <select name="quelle" class="form-select form-select-sm" onchange="this.form.submit()"><option value="">alle Quellen</option>{% for c, l in quellen %}<option value="{{ c }}" {% if request.GET.quelle == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+    <input class="form-control form-control-sm" name="q" value="{{ request.GET.q }}" placeholder="Nummer / Kunde / Bestell-Nr."></form>
+  {% if darf %}<a class="btn btn-sm btn-primary" href="{% url 'vertrieb:auftrag_neu' %}"><i class="bi bi-plus"></i> Neu</a>{% endif %}</div>
+{% include "vertrieb/_nav.html" with aktiv="auftraege" %}
+<div class="card"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Auftrag</th><th>Datum</th><th>Kunde</th><th>Bestell-Nr. Kunde</th><th>Quelle</th><th>Liefertermin</th><th class="text-end">Netto</th><th>Status</th></tr></thead>
+<tbody>{% for a in seite %}<tr><td><a href="{% url 'vertrieb:auftrag' a.pk %}">{{ a.nummer }}</a></td><td>{{ a.bestelldatum|date:"d.m.Y" }}</td><td>{{ a.partner.name|truncatechars:30 }}</td><td>{{ a.ihre_referenz }}</td><td>{{ a.get_quelle_display }}</td><td>{{ a.liefertermin|date:"d.m.Y" }}</td><td class="text-end">{{ a.summe_netto|euro }}</td><td>{% include "vertrieb/_status.html" with status=a.status text=a.get_status_display %}</td></tr>
+{% empty %}<tr><td colspan="8" class="text-muted text-center py-3">Keine Aufträge.</td></tr>{% endfor %}</tbody></table></div>
+{% include "vertrieb/_seiten.html" %}
+{% endblock %}

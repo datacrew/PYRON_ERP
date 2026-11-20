@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Lieferschein {{ lf.nummer }}{% endblock %}
+{% block content %}
+{% hat_recht "vertrieb" "freigeben" as darf_freigeben %}{% hat_recht "edi" "anlegen" as darf_edi %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Lieferschein {{ lf.nummer }}</h1>{% include "vertrieb/_status.html" with status=lf.status text=lf.get_status_display %}
+  <div class="ms-auto d-flex gap-2">
+  {% if lf.status in 'ERFASST KOMMISSIONIERUNG KOMMISSIONIERT' and darf_buchen %}<form method="post" action="{% url 'vertrieb:lieferschein_aktion' lf.pk 'buchen' %}">{% csrf_token %}<button class="btn btn-sm btn-primary"><i class="bi bi-box-arrow-right"></i> Warenausgang buchen</button></form>{% endif %}
+  {% if lf.beleg.nummer %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'belege:pdf' lf.beleg.pk %}"><i class="bi bi-file-pdf"></i> PDF</a>{% endif %}
+  {% if lf.status in 'GEBUCHT VERLADEN ZUGESTELLT' and not lf.rechnung and darf_freigeben %}<form method="post" action="{% url 'vertrieb:lieferschein_aktion' lf.pk 'rechnung' %}">{% csrf_token %}<button class="btn btn-sm btn-success"><i class="bi bi-receipt"></i> Rechnung erstellen</button></form>{% endif %}
+  {% if ist_edi and darf_edi and lf.beleg.nummer %}<form method="post" action="{% url 'vertrieb:lieferschein_aktion' lf.pk 'desadv' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary">DESADV erzeugen</button></form>{% endif %}
+  {% if lf.status != 'STORNIERT' and not lf.rechnung and darf_freigeben %}<form method="post" action="{% url 'vertrieb:lieferschein_aktion' lf.pk 'stornieren' %}" onsubmit="return confirm('Lieferschein stornieren?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger">Stornieren</button></form>{% endif %}
+  </div></div>
+{% include "vertrieb/_nav.html" with aktiv="lieferscheine" %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-4"><div class="card h-100"><div class="card-body small"><div class="text-muted">Lieferanschrift</div><div class="fw-semibold">{{ lf.name }}</div>{{ lf.strasse }}<br>{{ lf.land }}-{{ lf.plz }} {{ lf.ort }}</div></div></div>
+  <div class="col-lg-8"><div class="card h-100"><div class="card-body small row">
+    <div class="col-6"><span class="text-muted">Auftrag:</span> <a href="{% url 'vertrieb:auftrag' lf.auftrag_id %}">{{ lf.auftrag.nummer }}</a> ({{ lf.auftrag.partner.name }})</div>
+    <div class="col-6"><span class="text-muted">Lieferdatum:</span> {{ lf.lieferdatum|date:"d.m.Y" }}</div>
+    <div class="col-6"><span class="text-muted">Versandlager:</span> {{ lf.lagerort }}</div>
+    <div class="col-6"><span class="text-muted">Gewicht:</span> {{ lf.gewicht|zahl }} kg · {{ lf.paletten|zahl }} Pal. · {{ lf.packstuecke }} Packst.</div>
+    <div class="col-6"><span class="text-muted">Tour:</span> {% if tourstopp %}<a href="{% url 'versand:tour' tourstopp.tour_id %}">{{ tourstopp.tour.nummer }}</a> ({{ tourstopp.tour.datum|date:"d.m.Y" }}, Stopp {{ tourstopp.reihenfolge }}){% else %}–{% endif %}</div>
+    <div class="col-6"><span class="text-muted">Rechnung:</span> {% if lf.rechnung %}<a href="{% url 'vertrieb:rechnung' lf.rechnung.pk %}">{{ lf.rechnung.nummer }}</a>{% else %}–{% endif %}</div>
+    <div class="col-6"><span class="text-muted">LVS-Referenz:</span> {{ lf.kommissionier_referenz }}</div></div></div></div>
+</div>
+<div class="card"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Pos.</th><th>Artikel</th><th class="text-end">Menge</th><th>Charge</th><th class="text-end">Kommissioniert (LVS)</th><th>Packstück</th></tr></thead>
+<tbody>{% for p in positionen %}<tr><td>{{ p.auftrag_position.position }}</td><td>{{ p.auftrag_position.artikel.artikelnummer }} {{ p.auftrag_position.bezeichnung|truncatechars:40 }}</td><td class="text-end">{{ p.menge|menge }} {{ p.auftrag_position.einheit }}</td><td>{{ p.charge.chargennummer|default:"" }}</td><td class="text-end">{{ p.kommissioniert|default_if_none:""|menge }}</td><td>{{ p.packstueck }}</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

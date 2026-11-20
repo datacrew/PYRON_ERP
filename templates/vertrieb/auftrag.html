@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Auftrag {{ a.nummer }}{% endblock %}
+{% block content %}
+{% hat_recht "vertrieb" "anlegen" as darf_anlegen %}{% hat_recht "vertrieb" "freigeben" as darf_freigeben %}{% hat_recht "produktion" "anlegen" as darf_fa %}{% hat_recht "edi" "anlegen" as darf_edi %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Auftrag {{ a.nummer }}</h1>{% include "vertrieb/_status.html" with status=a.status text=a.get_status_display %}
+  <div class="ms-auto d-flex gap-2">
+  {% if a.status == 'ERFASST' and darf_freigeben %}<form method="post" action="{% url 'vertrieb:auftrag_aktion' a.pk 'bestaetigen' %}">{% csrf_token %}<button class="btn btn-sm btn-primary"><i class="bi bi-check2-square"></i> Bestätigen (AB)</button></form>{% endif %}
+  {% if a.ab_beleg %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'belege:pdf' a.ab_beleg.pk %}"><i class="bi bi-file-pdf"></i> AB {{ a.ab_beleg.nummer }}</a>{% endif %}
+  {% if ist_edi and darf_edi and a.ab_beleg %}<form method="post" action="{% url 'vertrieb:auftrag_aktion' a.pk 'ordrsp' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary">ORDRSP erzeugen</button></form>{% endif %}
+  {% if a.status in 'ERFASST BESTAETIGT' and darf_freigeben %}<button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#storno">Stornieren</button>{% endif %}
+  </div></div>
+{% include "vertrieb/_nav.html" with aktiv="auftraege" %}
+<div class="collapse mb-3" id="storno"><div class="card card-body"><form method="post" action="{% url 'vertrieb:auftrag_aktion' a.pk 'stornieren' %}" class="d-flex gap-2">{% csrf_token %}{{ storno_form.grund }}<button class="btn btn-sm btn-danger">Auftrag stornieren</button></form></div></div>
+<div class="row g-3 mb-3">
+  <div class="col-lg-4"><div class="card h-100"><div class="card-body small">
+    <div class="fw-semibold">{{ a.partner.nummer }} {{ a.partner.name }}</div>
+    <div class="text-muted">Lieferadresse:</div>{% with ad=a.lieferadresse %}<div>{{ ad.name }}<br>{{ ad.strasse }}<br>{{ ad.land }}-{{ ad.plz }} {{ ad.ort }}</div>{% endwith %}</div></div></div>
+  <div class="col-lg-8"><div class="card h-100"><div class="card-body small row">
+    <div class="col-6"><span class="text-muted">Auftragsdatum:</span> {{ a.bestelldatum|date:"d.m.Y" }}</div>
+    <div class="col-6"><span class="text-muted">Wunschtermin:</span> {{ a.liefertermin|date:"d.m.Y"|default:"–" }}</div>
+    <div class="col-6"><span class="text-muted">Bestell-Nr. Kunde:</span> {{ a.ihre_referenz|default:"–" }}</div>
+    <div class="col-6"><span class="text-muted">Quelle:</span> {{ a.get_quelle_display }}{% if a.angebot %} ({{ a.angebot.nummer }}){% endif %}</div>
+    <div class="col-6"><span class="text-muted">Zuständig:</span> {{ a.zustaendig|default:"–" }}</div>
+    <div class="col-6"><span class="text-muted">Summe netto:</span> <strong>{{ a.summe_netto|euro }}</strong></div>
+    {% if a.bemerkung %}<div class="col-12 mt-2">{{ a.bemerkung|linebreaksbr }}</div>{% endif %}</div></div></div>
+</div>
+<form method="post" action="{% url 'vertrieb:auftrag_aktion' a.pk 'liefern' %}">{% csrf_token %}
+<div class="card mb-3"><div class="card-header bg-white fw-semibold d-flex align-items-center">Positionen
+  {% if a.status in 'BESTAETIGT TEILGELIEFERT' and darf_anlegen %}<div class="ms-auto d-flex gap-2 align-items-center"><span class="small text-muted">Lieferdatum</span><input type="date" name="lieferdatum" class="form-control form-control-sm" style="width:auto"><button class="btn btn-sm btn-primary"><i class="bi bi-box-seam"></i> Lieferschein anlegen</button></div>{% endif %}</div>
+<div class="table-responsive"><table class="table table-sm mb-0 align-middle"><thead class="table-light"><tr><th>Pos.</th><th>Artikel</th><th class="text-end">Menge</th><th class="text-end">Preis</th><th class="text-end">Rabatt</th><th class="text-end">Netto</th><th>Termin</th><th class="text-end">Geliefert</th><th class="text-end">Berechnet</th>{% if a.status in 'BESTAETIGT TEILGELIEFERT' %}<th style="width:110px">Liefern</th>{% endif %}</tr></thead>
+<tbody>{% for p in a.positionen.all %}<tr><td>{{ p.position }}</td><td>{{ p.artikel.artikelnummer }} {{ p.bezeichnung|truncatechars:40 }}{% if p.kundenartikelnummer %}<div class="small text-muted">Kd.-Art.: {{ p.kundenartikelnummer }}</div>{% endif %}</td>
+  <td class="text-end">{{ p.menge|menge }} {{ p.einheit }}</td><td class="text-end">{{ p.einzelpreis|euro }}</td><td class="text-end">{% if p.rabatt_prozent %}{{ p.rabatt_prozent|zahl }} %{% endif %}</td><td class="text-end">{{ p.betrag_netto|euro }}</td>
+  <td class="{% if p.rueckstand %}text-danger{% endif %}">{{ p.liefertermin|date:"d.m.Y" }}</td><td class="text-end">{{ p.menge_geliefert|menge }}</td><td class="text-end">{{ p.menge_berechnet|menge }}</td>
+  {% if a.status in 'BESTAETIGT TEILGELIEFERT' %}<td>{% if p.offen_liefern > 0 %}<input name="menge_{{ p.pk }}" class="form-control form-control-sm text-end" placeholder="{{ p.offen_liefern|menge }}">{% endif %}</td>{% endif %}</tr>{% endfor %}</tbody></table></div>
+{% if a.status in 'BESTAETIGT TEILGELIEFERT' %}<div class="card-footer bg-white small text-muted">Leere Mengenfelder = komplette offene Menge. Teillieferung durch Eingabe kleinerer Mengen.</div>{% endif %}
+</div></form>
+{% if verfuegbarkeit %}<div class="card mb-3"><div class="card-header bg-white fw-semibold">Verfügbarkeitsprüfung</div>
+<table class="table table-sm mb-0 align-middle"><thead class="table-light"><tr><th>Pos.</th><th>Artikel</th><th class="text-end">Offen</th><th class="text-end">Bestand frei</th><th class="text-end">Reserviert (ältere Aufträge)</th><th class="text-end">Fehlmenge</th><th>Hinweis</th></tr></thead>
+<tbody>{% for z in verfuegbarkeit %}<tr><td>{{ z.position.position }}</td><td>{{ z.position.artikel.artikelnummer }}</td><td class="text-end">{{ z.offen|menge }}</td><td class="text-end">{{ z.frei|menge }}</td><td class="text-end">{{ z.reserviert|menge }}</td>
+  <td class="text-end {% if not z.ok %}text-danger fw-semibold{% endif %}">{{ z.fehlmenge|menge }}</td>
+  <td>{% if z.ok %}<span class="text-success"><i class="bi bi-check-circle"></i> lieferbar</span>{% elif z.fa %}<a href="{% url 'produktion:detail' z.fa.pk %}">{{ z.fa }}</a>{% elif z.eigenfertigung %}<span class="text-warning">Fertigungsbedarf</span>
+    {% if darf_fa %}<form method="post" action="{% url 'vertrieb:auftrag_aktion' a.pk 'fa' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="position" value="{{ z.position.pk }}"><button class="btn btn-sm btn-outline-warning py-0">FA anlegen</button></form>{% endif %}
+  {% else %}<span class="text-warning">Beschaffung nötig</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<div class="row g-3">
+<div class="col-lg-7"><div class="card h-100"><div class="card-header bg-white fw-semibold">Lieferscheine</div>
+<table class="table table-sm mb-0"><thead class="table-light"><tr><th>Lieferschein</th><th>Datum</th><th>Status</th><th>Rechnung</th></tr></thead>
+<tbody>{% for lf in lieferungen %}<tr><td><a href="{% url 'vertrieb:lieferschein' lf.pk %}">{{ lf.nummer }}</a></td><td>{{ lf.lieferdatum|date:"d.m.Y" }}</td><td>{% include "vertrieb/_status.html" with status=lf.status text=lf.get_status_display %}</td><td>{% if lf.rechnung %}<a href="{% url 'vertrieb:rechnung' lf.rechnung.pk %}">{{ lf.rechnung.nummer }}</a>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="4" class="text-muted text-center">Noch keine Lieferungen.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="col-lg-5"><div class="card h-100"><div class="card-header bg-white fw-semibold">EDI-Nachrichten</div>
+<table class="table table-sm mb-0"><tbody>{% for n in edi %}<tr><td>{{ n.get_richtung_display }} {{ n.typ }}</td><td>{{ n.kontrollnummer }}</td><td>{% include "vertrieb/_status.html" with status=n.status text=n.get_status_display %}</td></tr>
+{% empty %}<tr><td class="text-muted text-center">Keine.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+{% endblock %}

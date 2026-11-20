@@ -1,0 +1,35 @@
+{% load erp %}<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<style>
+  @page { size: A4 landscape; margin: 14mm 12mm 16mm 12mm;
+    @bottom-left { content: "{{ mandant.name }} · Tour {{ t.nummer }} · erstellt {{ erstellt|date:'d.m.Y H:i' }}"; font-family: "DejaVu Sans", sans-serif; font-size: 7pt; color: #555; }
+    @bottom-right { content: "Seite " counter(page) " von " counter(pages); font-family: "DejaVu Sans", sans-serif; font-size: 7pt; color: #555; } }
+  body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 8.5pt; color: #111; }
+  h1 { font-size: 14pt; margin: 0 0 2mm; } h2 { font-size: 11pt; margin: 6mm 0 2mm; }
+  .kopf { display: flex; justify-content: space-between; border-bottom: 1pt solid #111; padding-bottom: 2mm; margin-bottom: 3mm; }
+  .kopf div { width: 32%; } .muted { color: #555; }
+  table { width: 100%; border-collapse: collapse; }
+  th { border-bottom: .8pt solid #111; text-align: left; font-size: 8pt; padding: 1mm; }
+  td { border-bottom: .3pt solid #bbb; padding: 1.2mm 1mm; vertical-align: top; }
+  .r { text-align: right; white-space: nowrap; } .warn { color: #b00; font-weight: bold; }
+  .feld { display: inline-block; width: 28mm; border-bottom: .5pt solid #111; height: 5mm; }
+  .neu { page-break-before: always; }
+</style></head><body>
+<h1>Tourenliste {{ t.nummer }}</h1>
+<div class="kopf">
+  <div><span class="muted">Lieferdatum:</span> {{ t.datum|date:"l, d.m.Y" }}<br><span class="muted">Region:</span> {{ t.region.code }} – {{ t.region.name }}<br><span class="muted">Status:</span> {{ t.get_status_display }}</div>
+  <div><span class="muted">Fahrzeug:</span> {% if t.fahrzeug %}{{ t.fahrzeug.kennzeichen }} ({{ t.fahrzeug.bezeichnung }}){% else %}–{% endif %}<br><span class="muted">Fahrer:</span> {{ t.fahrer|default:"–" }}<br><span class="muted">Abfahrt:</span> {{ mandant.strasse }}, {{ mandant.plz }} {{ mandant.ort }}</div>
+  <div><span class="muted">Beladung:</span> {{ a.kg|zahl }} kg / {{ a.paletten|zahl }} Pal. / {{ a.packstuecke }} Packst.<br>{% if t.fahrzeug %}<span class="muted">Kapazität:</span> {{ t.fahrzeug.max_kg|zahl }} kg / {{ t.fahrzeug.max_paletten|zahl }} Pal.<br><span class="muted">Auslastung:</span> {{ a.prozent }} %{% endif %}
+    {% for m in a.meldungen %}<br><span class="warn">{{ m }}</span>{% endfor %}</div>
+</div>
+<table><thead><tr><th>#</th><th>Lieferschein</th><th>Empfänger</th><th>Anschrift</th><th class="r">km</th><th class="r">kg</th><th class="r">Pal.</th><th class="r">Packst.</th><th>Auftrag / Bestell-Nr.</th><th>Ankunft</th><th>Unterschrift Empfänger</th></tr></thead>
+<tbody>{% for s in stopps %}{% with lf=s.lieferung %}<tr><td>{{ forloop.counter }}</td><td>{{ lf.nummer }}</td><td>{{ lf.name }}</td><td>{{ lf.strasse }}<br>{{ lf.plz }} {{ lf.ort }}</td><td class="r">{{ s.entfernung_km|default_if_none:"" }}</td><td class="r">{{ lf.gewicht|zahl }}</td><td class="r">{{ lf.paletten|zahl }}</td><td class="r">{{ lf.packstuecke }}</td><td>{{ lf.auftrag.nummer }}{% if lf.auftrag.ihre_referenz %}<br><span class="muted">{{ lf.auftrag.ihre_referenz }}</span>{% endif %}</td><td><span class="feld" style="width:14mm"></span></td><td><span class="feld" style="width:40mm"></span></td></tr>{% endwith %}
+{% empty %}<tr><td colspan="11">Keine Stopps.</td></tr>{% endfor %}</tbody></table>
+
+<h2 class="neu">Ladeliste {{ t.nummer }} <span class="muted" style="font-size:8pt;font-weight:normal">(Ladereihenfolge: letzter Stopp zuerst laden)</span></h2>
+<table><thead><tr><th>Artikel</th><th>Bezeichnung</th><th class="r">Gesamtmenge</th><th>Einheit</th><th>Aufteilung (Stopp: Lieferschein – Menge – Charge – Packstück)</th><th>geladen</th></tr></thead>
+<tbody>{% for k, zeilen, summe in ladeliste %}<tr><td>{{ k.0 }}</td><td>{{ k.1 }}</td><td class="r">{{ summe|menge }}</td><td>{{ k.2 }}</td>
+  <td>{% for s, lp in zeilen %}{{ s.reihenfolge }}: {{ s.lieferung.nummer }} – {{ lp.menge|menge }}{% if lp.charge %} – Ch. {{ lp.charge.chargennummer }}{% endif %}{% if lp.packstueck %} – {{ lp.packstueck }}{% endif %}<br>{% endfor %}</td><td>☐</td></tr>
+{% empty %}<tr><td colspan="6">Keine Positionen.</td></tr>{% endfor %}</tbody></table>
+<p style="margin-top:8mm">Verladen durch: <span class="feld" style="width:50mm"></span> &nbsp; Fahrer: <span class="feld" style="width:50mm"></span> &nbsp; Uhrzeit: <span class="feld" style="width:20mm"></span></p>
+</body></html>

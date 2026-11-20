@@ -1,0 +1,14 @@
+{% hat_recht "edi" as nav_edi %}{% hat_recht "shopapi" as nav_shop %}
+<ul class="nav nav-tabs small mb-3">
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'index' %}active{% endif %}" href="{% url 'vertrieb:index' %}">Übersicht</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'leads' %}active{% endif %}" href="{% url 'vertrieb:leads_liste' %}">Leads</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'aktivitaeten' %}active{% endif %}" href="{% url 'vertrieb:aktivitaeten_liste' %}">Aktivitäten</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'pipeline' %}active{% endif %}" href="{% url 'vertrieb:pipeline' %}">Pipeline</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'angebote' %}active{% endif %}" href="{% url 'vertrieb:angebote' %}">Angebote</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'auftraege' %}active{% endif %}" href="{% url 'vertrieb:auftraege' %}">Aufträge</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'lieferscheine' %}active{% endif %}" href="{% url 'vertrieb:lieferscheine' %}">Lieferscheine</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'rechnungen' %}active{% endif %}" href="{% url 'vertrieb:rechnungen' %}">Rechnungen</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'kundenpreise' %}active{% endif %}" href="{% url 'vertrieb:kundenpreise_liste' %}">Kundenpreise</a></li>
+  {% if nav_edi %}<li class="nav-item"><a class="nav-link {% if aktiv == 'edi' %}active{% endif %}" href="{% url 'vertrieb:edi' %}">EDI</a></li>{% endif %}
+  {% if nav_shop %}<li class="nav-item"><a class="nav-link {% if aktiv == 'shops' %}active{% endif %}" href="{% url 'vertrieb:shops' %}">Onlineshops</a></li>{% endif %}
+</ul>

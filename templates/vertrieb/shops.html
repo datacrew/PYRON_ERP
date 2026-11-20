@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Onlineshops{% endblock %}
+{% block content %}
+{% hat_recht "shopapi" "aendern" as darf %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Onlineshops (Shop-REST-API)</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="/api/v1/docs/" target="_blank"><i class="bi bi-book"></i> API-Dokumentation (OpenAPI)</a></div>
+{% include "vertrieb/_nav.html" with aktiv="shops" %}
+{% if neues_token %}<div class="alert alert-warning"><div class="fw-semibold">Neues API-Token für „{{ neues_token.0.name }}“ – wird nur jetzt angezeigt:</div><code class="fs-6 user-select-all">{{ neues_token.1 }}</code>
+  <div class="small mt-1">Header: <code>Authorization: Shop &lt;Token&gt;</code> oder <code>X-Shop-Token: &lt;Token&gt;</code>. Gespeichert wird nur ein SHA-256-Hash; das alte Token ist ab sofort ungültig.</div></div>{% endif %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-7"><div class="card h-100"><div class="card-header bg-white fw-semibold">Shops</div>
+    <table class="table table-sm mb-0 align-middle"><thead class="table-light"><tr><th>Name</th><th>Aktiv</th><th>Token</th><th>Auto-AB</th><th></th></tr></thead>
+    <tbody>{% for s in shops %}<tr><td>{% if darf %}<a href="{% url 'vertrieb:shop_bearbeiten' s.pk %}">{{ s.name }}</a>{% else %}{{ s.name }}{% endif %}</td><td>{% if s.aktiv %}<i class="bi bi-check-circle-fill text-success"></i>{% endif %}</td><td><code>{% if s.token_anfang %}{{ s.token_anfang }}…{% else %}–{% endif %}</code></td><td>{% if s.auto_bestaetigen %}ja{% endif %}</td>
+      <td class="text-end">{% if darf %}<form method="post" onsubmit="return confirm('Neues Token erzeugen? Das bisherige wird ungültig.')">{% csrf_token %}<input type="hidden" name="token_fuer" value="{{ s.pk }}"><button class="btn btn-sm btn-outline-warning py-0"><i class="bi bi-key"></i> Neues Token</button></form>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="5" class="text-muted text-center">Noch keine Shops.</td></tr>{% endfor %}</tbody></table></div></div>
+  {% if darf %}<div class="col-lg-5"><div class="card h-100"><div class="card-header bg-white fw-semibold">Shop anlegen</div><div class="card-body">
+    <form method="post">{% csrf_token %}{% include "generic/_formfelder.html" with form=form %}<button class="btn btn-sm btn-primary">Anlegen &amp; Token erzeugen</button></form></div></div></div>{% endif %}
+</div>
+<div class="card mb-3"><div class="card-header bg-white fw-semibold">Endpunkte</div><div class="card-body small"><code>{{ basis }}</code>
+  <ul class="mb-0 mt-1"><li><code>GET artikel/</code>, <code>GET artikel/&lt;artikelnummer&gt;/</code> – Artikel, Preise, verfügbarer Bestand</li><li><code>GET bestaende/</code> – Bestandsabgleich</li>
+  <li><code>POST bestellungen/</code> – Bestellung → Kundenauftrag (idempotent über <code>externe_nummer</code>: 201 neu, 200 bereits vorhanden)</li><li><code>GET bestellungen/&lt;externe_nummer&gt;/</code> – Status, Lieferungen, Tour, Rechnung</li></ul></div></div>
+<div class="card"><div class="card-header bg-white fw-semibold">Letzte Shop-Bestellungen</div>
+<table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Eingang</th><th>Shop</th><th>Externe Nr.</th><th>Auftrag</th><th>Kunde</th><th>Status</th></tr></thead>
+<tbody>{% for sb in bestellungen %}<tr><td>{{ sb.eingegangen_am|date:"d.m.Y H:i" }}</td><td>{{ sb.shop }}</td><td>{{ sb.externe_nummer }}</td><td><a href="{% url 'vertrieb:auftrag' sb.auftrag.pk %}">{{ sb.auftrag.nummer }}</a></td><td>{{ sb.auftrag.partner.name|truncatechars:30 }}</td><td>{% include "vertrieb/_status.html" with status=sb.auftrag.status text=sb.auftrag.get_status_display %}</td></tr>
+{% empty %}<tr><td colspan="6" class="text-muted text-center">Keine Bestellungen.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -42,6 +42,9 @@ NUMMERNKREISE = [
     # Phase 4 – Finanzbuchhaltung
     ("FIBU_BUCHUNG", "Buchungen (Journal)", "FB-", True, 6), ("FIBU_ER", "Eingangsrechnungen", "ER-", True, 5),
     ("FIBU_BANKIMPORT", "Bankimporte", "BI-", True, 4), ("FIBU_MAHNLAUF", "Mahnläufe", "ML-", True, 4),
+    # Phase 5 – Vertrieb und Versand
+    ("VK_AUFTRAG", "Kundenaufträge", "VA-", True, 5), ("TOUR", "Versandtouren", "TO-", True, 5),
+    ("EDI", "EDIFACT-Übertragungsnummern (UNB)", "", False, 8),
 ]
 
 L, A, AE, F, D = AKTION_CODES  # lesen, anlegen, aendern, freigeben, loeschen
@@ -53,7 +56,7 @@ ROLLEN = {
                  "belege": [L, A, AE, F], "reporting": [L]}),
     "Vertrieb": ("Kundenbetreuung, Angebote, Aufträge, Rechnungen",
                  {"stammdaten": [L, A, AE], "vertrieb": ALLE, "belege": [L, A, AE, F, D], "versand": [L],
-                  "reporting": [L]}),
+                  "edi": ALLE, "shopapi": [L, A, AE], "lager": [L], "produktion": [L, A], "reporting": [L]}),
     "Produktion": ("Fertigungsaufträge, Rückmeldungen, Stücklisten, Arbeitspläne, Stempel-Terminal",
                    {"stammdaten": [L, A, AE], "produktion": ALLE, "bde": [L, A], "wareneingang": [L],
                     "lager": [L, A]}),
@@ -63,7 +66,7 @@ ROLLEN = {
     "Terminal": ("Nur Stempel-Terminal (Kiosk-Benutzer an der Fertigungsstation)", {"bde": [L, A]}),
     "Lager": ("Lagerbestand, Wareneingang inkl. Qualitätsprüfung und Versand",
               {"stammdaten": [L], "lager": ALLE, "wareneingang": ALLE, "versand": ALLE, "einkauf": [L],
-               "belege": [L]}),
+               "belege": [L], "vertrieb": [L]}),
     "Buchhaltung": ("Finanzbuchhaltung, Belegprüfung und Festschreibung",
                     {"stammdaten": [L, AE], "fibu": ALLE, "fibu_bank": ALLE, "fibu_mahnwesen": ALLE,
                      "fibu_abschluss": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
@@ -117,6 +120,9 @@ class Command(BaseCommand):
         if not BelegVorlage.objects.exists():
             html = (settings.BASE_DIR / "templates/belege/pdf/standard.html").read_text(encoding="utf-8")
             BelegVorlage.objects.create(name="Standard DIN 5008", belegart="", html=html)
+        if not BelegVorlage.objects.filter(belegart="LIEFERSCHEIN").exists():
+            html = (settings.BASE_DIR / "templates/belege/pdf/lieferschein.html").read_text(encoding="utf-8")
+            BelegVorlage.objects.create(name="Lieferschein ohne Preise", belegart="LIEFERSCHEIN", html=html)
         self.stdout.write(self.style.SUCCESS(
             f"Grunddaten bereit: {Modul.objects.count()} Module, {Konto.objects.count()} Konten, "
             f"{Nummernkreis.objects.count()} Nummernkreise, {Rolle.objects.count()} Rollen."))

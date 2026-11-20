@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ titel }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">{{ titel }}</h1>
+<form method="post">{% csrf_token %}
+  <div class="card mb-3"><div class="card-body">{% include "generic/_formfelder.html" with form=form %}</div></div>
+  <div class="card mb-3"><div class="card-header bg-white fw-semibold">Positionen</div><div class="card-body">
+    {% include "generic/_formset.html" with formset=formset %}
+    <div class="form-text">Einzelpreis leer = Preisfindung (Kundenpreis/Staffel/Listenpreis).</div></div></div>
+  <button class="btn btn-primary">Speichern</button> <a class="btn btn-link" href="javascript:history.back()">Abbrechen</a>
+</form>
+{% endblock %}

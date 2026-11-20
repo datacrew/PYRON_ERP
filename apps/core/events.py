@@ -36,6 +36,14 @@ EREIGNISSE = {
     "produktion.fertiggemeldet": "Fertigmeldung mit Lagerzugang zu Herstellkosten (auftrag, fertigmeldung, wert, "
                                  "benutzer)",
     "wareneingang.qs_entschieden": "QS-Entscheid zu einer WE-Position (position, entscheid, ruecksendung, benutzer)",
+    "vertrieb.lead_umgewandelt": "Lead in Kunde umgewandelt (lead, partner, benutzer)",
+    "vertrieb.auftrag_angelegt": "Kundenauftrag angelegt (auftrag, benutzer)",
+    "vertrieb.auftrag_bestaetigt": "Auftragsbestätigung festgeschrieben (auftrag, benutzer)",
+    "vertrieb.lieferung_gebucht": "Lieferschein: Lagerabgang gebucht und festgeschrieben (lieferung, benutzer)",
+    "vertrieb.rechnung_erstellt": "Rechnung/Sammelrechnung aus Lieferscheinen erstellt (rechnung, lieferungen, benutzer)",
+    "versand.tour_verladen": "Tour verladen, Lieferscheine unterwegs (tour, benutzer)",
+    "versand.zugestellt": "Lieferschein zugestellt (lieferung, benutzer)",
+    "versand.lvs_rueckmeldung": "Kommissionier-Rückmeldung aus dem LVS verarbeitet (lieferung, benutzer)",
 }
 
 

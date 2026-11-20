@@ -18,5 +18,7 @@ urlpatterns = [
     path("produktion/", include("apps.produktion.urls")),
     path("wareneingang/", include("apps.wareneingang.urls")),
     path("fibu/", include("apps.fibu.urls")),
+    path("vertrieb/", include("apps.vertrieb.urls")),
+    path("versand/", include("apps.versand.urls")),
     path("", include("apps.core.urls")),
 ]

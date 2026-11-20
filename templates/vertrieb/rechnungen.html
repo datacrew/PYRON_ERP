@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Rechnungen{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Ausgangsrechnungen &amp; Gutschriften</h1>
+  <form class="ms-auto" method="get"><input class="form-control form-control-sm" name="q" value="{{ request.GET.q }}" placeholder="Nummer / Kunde"></form></div>
+{% include "vertrieb/_nav.html" with aktiv="rechnungen" %}
+<div class="card"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Nummer</th><th>Art</th><th>Datum</th><th>Kunde</th><th class="text-end">Netto</th><th class="text-end">Brutto</th><th>Status</th><th>E-Rechnung</th></tr></thead>
+<tbody>{% for b in seite %}<tr><td><a href="{% url 'vertrieb:rechnung' b.pk %}">{{ b.nummer|default:"(Entwurf)" }}</a></td><td>{{ b.get_belegart_display }}</td><td>{{ b.belegdatum|date:"d.m.Y" }}</td><td>{{ b.partner.name|truncatechars:30 }}</td><td class="text-end">{{ b.summe_netto|euro }}</td><td class="text-end">{{ b.summe_brutto|euro }}</td>
+  <td>{% include "vertrieb/_status.html" with status=b.status text=b.get_status_display %}</td>
+  <td>{% if b.nummer %}<a href="{% url 'vertrieb:rechnung_datei' b.pk 'zugferd' %}" title="ZUGFeRD-PDF"><i class="bi bi-file-pdf"></i></a> <a href="{% url 'vertrieb:rechnung_datei' b.pk 'xrechnung' %}" title="XRechnung"><i class="bi bi-filetype-xml"></i></a>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="8" class="text-muted text-center py-3">Keine Rechnungen.</td></tr>{% endfor %}</tbody></table></div>
+{% include "vertrieb/_seiten.html" %}
+{% endblock %}

@@ -1,4 +1,5 @@
 """REST-API des Lagers: Bestände und Bewegungen (lesend), manuelle Buchung per POST, Lagerorte, Chargen."""
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.response import Response
 
@@ -54,6 +55,7 @@ class LagerbewegungSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+@extend_schema_serializer(component_name="LagerBuchung")
 class BuchungSerializer(serializers.Serializer):
     """Eingabe für manuelle Buchungen (Zugang/Abgang/Umbuchung)."""
 

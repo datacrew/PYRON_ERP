@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Touren{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Touren</h1>
+  <form class="ms-auto d-flex gap-2 align-items-center" method="get"><span class="small text-muted">ab</span><input type="date" name="von" value="{{ von|date:'Y-m-d' }}" class="form-control form-control-sm" onchange="this.form.submit()">
+  <select name="status" class="form-select form-select-sm" onchange="this.form.submit()"><option value="">alle Status</option>{% for c, l in stati %}<option value="{{ c }}" {% if request.GET.status == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></form></div>
+{% include "versand/_nav.html" with aktiv="touren" %}
+<div class="card">{% include "versand/_tourtabelle.html" with liste=zeilen %}</div>
+{% endblock %}

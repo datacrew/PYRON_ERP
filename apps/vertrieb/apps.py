@@ -2,7 +2,7 @@ from django.apps import AppConfig
 
 
 class VertriebConfig(AppConfig):
-    """Gerüst – fachliche Umsetzung folgt laut docs/ROADMAP.md."""
+    """Phase 5 – Vertrieb und Versand."""
 
     name = "apps.vertrieb"
     label = "vertrieb"
@@ -11,9 +11,9 @@ class VertriebConfig(AppConfig):
     erp_modul = {
         "code": "vertrieb",
         "name": "Vertrieb",
-        "beschreibung": "CRM, Angebote, Aufträge, EDI/EDIFACT, Onlineshop-Schnittstelle, ZUGFeRD-Rechnung",
+        "beschreibung": "CRM (Leads, Aktivitäten, Pipeline), Angebot → Auftrag → Lieferschein → Rechnung, Kundenpreise, ZUGFeRD/XRechnung",
         "icon": "bi-graph-up-arrow",
         "reihenfolge": 60,
-        "url_name": "",
-        "geplant": ['CRM: Leads, Kontakthistorie, Wiedervorlagen', 'Auftragsabwicklung Angebot → Auftrag → Lieferschein → Rechnung', 'EDIFACT ORDERS/DESADV/INVOIC', 'REST-API für Onlineshops (Basis vorhanden)', 'E-Rechnung ZUGFeRD 2.x / XRechnung'],
+        "url_name": "vertrieb:index",
+        "geplant": [],
     }

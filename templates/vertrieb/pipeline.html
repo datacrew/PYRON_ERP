@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Pipeline{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0">Verkaufschancen – Pipeline</h1>
+  <a class="btn btn-sm btn-primary ms-auto" href="{% url 'vertrieb:chancen_neu' %}"><i class="bi bi-plus"></i> Verkaufschance</a></div>
+{% include "vertrieb/_nav.html" with aktiv="pipeline" %}
+<div class="row g-2 flex-nowrap overflow-auto pb-2">
+{% for p, chancen in spalten %}
+  <div class="col" style="min-width:230px"><div class="card h-100"><div class="card-header bg-white">
+    <div class="fw-semibold">{{ p.label }} <span class="badge text-bg-light">{{ p.anzahl }}</span></div>
+    <div class="small text-muted">{{ p.wert|euro }} · gewichtet {{ p.gewichtet|euro }}</div></div>
+    <div class="card-body p-2">{% for c in chancen %}
+      <a class="d-block border rounded p-2 mb-2 text-decoration-none text-reset" href="{% url 'vertrieb:chancen_bearbeiten' c.pk %}">
+        <div class="fw-semibold small">{{ c.titel }}</div>
+        <div class="small text-muted">{% if c.partner %}{{ c.partner.name }}{% elif c.lead %}{{ c.lead.firma }} (Lead){% endif %}</div>
+        <div class="small">{{ c.wert|euro }} · {{ c.wahrscheinlichkeit }} %{% if c.abschluss_erwartet %} · {{ c.abschluss_erwartet|date:"d.m.Y" }}{% endif %}</div>
+        {% if c.zustaendig %}<div class="small text-muted"><i class="bi bi-person"></i> {{ c.zustaendig }}</div>{% endif %}</a>
+    {% empty %}<div class="small text-muted text-center">–</div>{% endfor %}</div></div></div>
+{% endfor %}
+</div>
+{% endblock %}

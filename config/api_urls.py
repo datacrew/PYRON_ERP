@@ -15,7 +15,11 @@ from apps.stammdaten.api import (
     SteuersatzViewSet,
     StuecklisteViewSet,
 )
+from apps.versand.api import LvsViewSet, TourViewSet
+from apps.vertrieb.api import (AuftragViewSet, EdiNachrichtViewSet, LeadViewSet, ShopArtikelViewSet,
+                               ShopBestaendeView, ShopBestellungViewSet)
 from apps.wareneingang.api import WareneingangViewSet
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 router = DefaultRouter()
 router.register("artikel", ArtikelViewSet, basename="artikel")
@@ -37,8 +41,20 @@ router.register("fibu/konten", SachkontoViewSet, basename="fibu-konto")
 router.register("buchungen", BuchungViewSet, basename="buchung")
 router.register("offene-posten", OPViewSet, basename="offener-posten")
 router.register("bankumsaetze", BankumsatzViewSet, basename="bankumsatz")
+router.register("vertrieb/auftraege", AuftragViewSet, basename="vk-auftrag")
+router.register("vertrieb/leads", LeadViewSet, basename="lead")
+router.register("edi/nachrichten", EdiNachrichtViewSet, basename="edi-nachricht")
+router.register("versand/touren", TourViewSet, basename="tour")
+router.register("versand/lvs", LvsViewSet, basename="lvs")
+# Shop-API: Authentifizierung per Shop-Token (Header „Authorization: Shop <token>“)
+router.register("shop/artikel", ShopArtikelViewSet, basename="shop-artikel")
+router.register("shop/bestellungen", ShopBestellungViewSet, basename="shop-bestellung")
 
 urlpatterns = [
     path("token/", obtain_auth_token, name="api-token"),
+    path("shop/bestaende/", ShopBestaendeView.as_view(), name="shop-bestaende"),
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="api-docs"),
+    path("redoc/", SpectacularRedocView.as_view(url_name="schema"), name="api-redoc"),
     path("", include(router.urls)),
 ]

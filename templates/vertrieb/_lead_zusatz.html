@@ -1,0 +1,6 @@
+{% if object.pk %}{% hat_recht "vertrieb" "anlegen" as darf %}
+<div class="card mt-3"><div class="card-body d-flex align-items-center gap-3">
+  {% if object.partner %}<div><i class="bi bi-check-circle text-success"></i> Umgewandelt in Kunde <strong>{{ object.partner.nummer }} {{ object.partner.name }}</strong></div>
+  {% else %}<div class="small text-muted">Lead in einen Kunden (Geschäftspartner) umwandeln. Status wird auf „gewonnen“ gesetzt, Aktivitäten und Chancen werden übertragen.</div>
+  {% if darf %}<form method="post" action="{% url 'vertrieb:lead_umwandeln' object.pk %}" class="ms-auto">{% csrf_token %}<button class="btn btn-sm btn-success"><i class="bi bi-person-check"></i> In Kunde umwandeln</button></form>{% endif %}{% endif %}
+</div></div>{% endif %}

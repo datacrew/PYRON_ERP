@@ -93,7 +93,12 @@ Phase 3 ergänzt 18 Tests für Bedarfsermittlung, Fehlteile und Unteraufträge, 
 (keine Überlappung, Unterbrechung, Gehen beendet laufende Stempelung, DB-Constraint), Terminal-Buchung,
 Korrektur mit Audit-Log, Akkordberechnung (Leistungsgrad, Verdienst, Mindestlohngarantie, Zeitlohn, CSV),
 chargengenaue Materialentnahme, Fertigmeldung zu Herstellkosten inkl. Teilmeldung und Nachkalkulation, Events,
-Seiten/PDF, Web-Ablauf, Rechte und REST-API (Stand: **66 Tests, alle grün**).
+Seiten/PDF, Web-Ablauf, Rechte und REST-API (Stand nach Phase 3: 66 Tests).
+Phase 4 ergänzt 20 Tests für die Finanzbuchhaltung (gesamt 86). Phase 5 ergänzt 21 Tests für Vertrieb und
+Versand (Kernfluss Angebot → Auftrag → Lieferschein → Rechnung mit Lagerabgang, Fibu-Buchung und OP,
+Teillieferung, Gutschrift, ZUGFeRD-/XRechnung-XML inkl. XSD und Summen, PDF/A-3-Einbettung, Shop-API mit Token
+und Idempotenz, EDIFACT-Parser/-Generator, Tourenbildung, Kapazitätsprüfung, LVS-Export/-Rückmeldung, Rechte).
+**Aktueller Stand: 107 Tests, alle grün** (gezählt mit `python manage.py test apps`).
 
 ---
 
@@ -499,6 +504,115 @@ Inhalt:
 
 ---
 
+## Phase 5: Vertrieb und Versand
+
+Neue Module (Registry `erp_modul`, Rechte getrennt): **vertrieb** (CRM, Angebote, Aufträge, Lieferscheine,
+Rechnungen), **edi** (EDIFACT), **shopapi** (Onlineshop-Schnittstelle), **versand** (Touren, Fahrzeuge, LVS).
+
+### Funktionen
+- **CRM** (Menü **Vertrieb**): Leads mit Status Neu → Qualifiziert → Angebot → Gewonnen/Verloren, Zuständiger,
+  Umwandlung in Kunde (Geschäftspartner mit Kundennummer aus dem Nummernkreis), Aktivitäten (Anruf, Besuch,
+  E-Mail, Notiz) mit Wiedervorlage, Verkaufschancen mit Wert und Wahrscheinlichkeit, Pipeline-Übersicht.
+- **Verkaufsprozess:** Angebot (Beleg) → Auftrag mit Auftragsbestätigung (AB-Beleg, festgeschrieben) →
+  Lieferschein(e) mit **Teillieferungen** → Rechnung je Lieferschein oder **Sammelrechnung** → Gutschrift/Storno.
+  Rechnungen sind normale Belege: Festschreibung, GoBD-Hash und die Fibu-Automatikbuchung inkl. OP laufen
+  unverändert über das Event `beleg.festgeschrieben`.
+- **Kundenpreise:** kundenspezifische Preise und einfache Mengenstaffeln (Preis oder Rabatt %), je Kunde oder
+  für alle Kunden; Liefertermine je Position.
+- **Verfügbarkeitsprüfung** gegen freien Lagerbestand mit Hinweis auf Fertigungsbedarf; optional
+  Fertigungsauftrag direkt aus der Auftragsposition.
+- **Lieferschein buchen** erzeugt den Lagerabgang chargengenau (FIFO-Vorschlag oder Charge aus LVS-Rückmeldung)
+  über das bestehende Lagerjournal.
+- **E-Rechnung:** ZUGFeRD 2.x / Factur-X Profil EN 16931 (PDF/A-3b mit eingebettetem `factur-x.xml`) und
+  **XRechnung** (UBL 2.1 bzw. CII, Leitweg-ID aus dem Partnerstamm). Prüfung gegen die offiziellen XSD und
+  eigene Summenregeln (BR-CO-10/13/14/15). Download auf der Rechnungsseite.
+- **Shop-API** (`/api/v1/shop/…`): Artikel und Bestände lesen, Bestellung anlegen (Kunde wird per E-Mail/Name
+  gefunden oder angelegt), Statusabfrage mit Versandinformation; Auth per Token je Shop
+  (`Authorization: Shop <token>`), **Idempotenz** über die externe Bestellnummer (201 neu, 200 Wiederholung).
+- **EDIFACT D.96A:** Import ORDERS → Kundenauftrag; Export ORDRSP (aus AB), DESADV (aus Lieferschein) und
+  INVOIC (aus Rechnung). Partner mit GLN/ILN und Kundenartikelnummern-Zuordnung, Nachrichten-Eingang/-Ausgang
+  mit Status und Fehlerprotokoll (Menü **Vertrieb → EDI**).
+- **Versand** (Menü **Versand**): Regionen (PLZ-Bereiche, Liefertage, Sortierung nach PLZ oder Entfernung über
+  hinterlegte Geokoordinaten – kein externer Dienst), Fahrzeuge mit Gewichts-/Palettenkapazität,
+  automatische **Tourenbildung** aus gebuchten Lieferscheinen mit Auslastungsprüfung, Stopp-Reihenfolge,
+  Versandstatus (Geplant → Freigegeben → Unterwegs → Zugestellt), **Tourenliste/Ladeliste als PDF**.
+- **LVS-Schnittstelle** (Adapter): Export von Kommissionieraufträgen als CSV/JSON, Import von Rückmeldungen
+  (kommissionierte Mengen, Chargen, Packstücke) per Datei oder REST, Protokoll je Import.
+- **Dashboards:** Vertrieb (Pipeline, offene Aufträge, Lieferrückstand, Umsatz Monat), Versand (Touren heute/
+  morgen, Auslastung); Kacheln auf der Startseite.
+
+### Rechte (Standardrollen)
+| Rolle | vertrieb | edi | shopapi | versand |
+|---|---|---|---|---|
+| Vertrieb | alle | alle | lesen/anlegen/ändern | lesen |
+| Lager | lesen | – | – | alle |
+| Gast | lesen | lesen | lesen | lesen |
+| Admin | alle | alle | alle | alle |
+
+### Demodaten (`python manage.py erp_demodaten`)
+5 Leads in allen Status inkl. Aktivitäten/Wiedervorlagen und Verkaufschancen; Kundenpreise; Aufträge
+VA-…-1 (aus Angebot, geliefert und berechnet), VA-…-2 (Müller, Teillieferung + Restlieferschein in der
+Kommissionierung beim LVS), VA-…-3 (Fertigungsbedarf), VA-…-4 (aus der **Shop-API**, Neukunde „Werkstatt
+Keller“), VA-…-5 (aus **EDIFACT** `docs/beispiele/orders_demo.edi`, Autoteile Weber AG, mit ORDRSP, DESADV,
+INVOIC); drei Fahrzeuge, drei Regionen (Stuttgart, Neckar, Bayern) und Touren in mehreren Status;
+festgeschriebene Rechnungen RE-2026-00006 bis -00008 mit OP in der Fibu.
+
+### Demo-Ablauf (Login `vertrieb` / `Demo!2026`, Versand mit `lager` / `Demo!2026`)
+1. **Vertrieb → Pipeline:** Lead „Kunststofftechnik Rems GmbH“ öffnen, Aktivität erfassen, qualifizieren, in Kunde umwandeln.
+2. **Angebote → Neu** für den neuen Kunden, Positionen erfassen (Kundenpreise werden vorgeschlagen), Angebot
+   übernehmen → Auftrag; im Auftrag **Verfügbarkeit** prüfen und **bestätigen** (AB-PDF).
+3. **Lieferschein erzeugen** (Teilmenge möglich) → **buchen** (Lagerabgang chargengenau).
+4. **Versand → Touren bilden** für das Lieferdatum → Tour freigeben, Ladeliste als PDF.
+5. **Rechnung erzeugen** (oder Sammelrechnung über mehrere Lieferscheine) → **festschreiben** → ZUGFeRD-PDF und
+   XRechnung herunterladen; in **Fibu → Offene Posten** erscheint der Debitoren-OP.
+6. **Vertrieb → EDI:** `docs/beispiele/orders_demo.edi` hochladen → Auftrag entsteht; INVOIC aus einer Rechnung
+   erzeugen und herunterladen.
+
+Beispiel-PDFs (frisch aus den Demodaten erzeugt): `docs/beispiel_pdfs/` – `rechnung_zugferd.pdf`,
+`lieferschein.pdf`, `tourenliste.pdf`, `mahnung.pdf`.
+
+### API-Beispiele (curl)
+```bash
+# Shop-API – Demo-Token (nur für die Demo! In Produktion je Shop einen eigenen Token hinterlegen, Vertrieb → Shops)
+SHOP="Authorization: Shop shop_demo_musterwerk_2026"
+curl -H "$SHOP" localhost:3000/api/v1/shop/artikel/
+curl -H "$SHOP" localhost:3000/api/v1/shop/bestaende/
+curl -X POST -H "$SHOP" -H "Content-Type: application/json" localhost:3000/api/v1/shop/bestellungen/ -d '{
+  "externe_nummer": "WEB-100777",
+  "kunde": {"name": "Metallbau Beispiel GmbH", "strasse": "Hauptstr. 1", "plz": "70173", "ort": "Stuttgart",
+            "email": "einkauf@metallbau-beispiel.de"},
+  "positionen": [{"artikelnummer": "F-5000", "menge": "10"}]
+}'   # 201 = angelegt; gleicher Aufruf erneut → 200 mit demselben Auftrag (idempotent)
+curl -H "$SHOP" localhost:3000/api/v1/shop/bestellungen/WEB-100777/   # Status + Versandinformation
+
+# Interne API (Token wie oben unter „REST-API“)
+curl -H "Authorization: Token $TOKEN" localhost:3000/api/v1/vertrieb/auftraege/
+curl -H "Authorization: Token $TOKEN" localhost:3000/api/v1/vertrieb/auftraege/1/verfuegbarkeit/
+curl -X POST -H "Authorization: Token $TOKEN" -F datei=@docs/beispiele/orders_demo.edi \
+     localhost:3000/api/v1/edi/nachrichten/orders/
+curl -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
+     localhost:3000/api/v1/versand/touren/bilden/ -d '{"datum": "2026-11-24"}'
+curl -H "Authorization: Token $TOKEN" "localhost:3000/api/v1/versand/lvs/kommissionierauftraege/?format=CSV"
+curl -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
+     localhost:3000/api/v1/versand/lvs/rueckmeldungen/ -d '{"buchen": false, "rueckmeldungen": [
+  {"referenz": "<Kommissionier-Referenz>", "positionen": [{"position_id": 1, "menge": "20",
+   "charge": "FC-…", "packstueck": "PAL-1"}]}]}'
+```
+OpenAPI-Schema: `/api/v1/schema/`, Swagger-UI: `/api/v1/docs/`, ReDoc: `/api/v1/redoc/`.
+
+### EDI-Hinweise
+- Unterstützt: EDIFACT **D.96A**, UNA/UNB-Syntax UNOC, Segmente u. a. BGM, DTM, NAD (GLN), LIN (EAN), PIA
+  (Kundenartikelnummer), QTY, PRI. Zuordnung des Kunden über die GLN aus NAD+BY im **EDI-Partner** (Demo:
+  Autoteile Weber AG, GLN `4298765000007`), Artikel über EAN oder Kundenartikelnummer (Demo: `WEB-LB200`,
+  `WEB-AE1`).
+- Fehlerhafte Nachrichten (unbekannter Partner/Artikel, Syntaxfehler) werden mit Status **Fehler** und
+  Fehlerprotokoll gespeichert, es entsteht kein Auftrag. Doppelte Bestellnummern werden abgewiesen.
+- Ausgehende Nachrichten (ORDRSP/DESADV/INVOIC) haben Status **Erzeugt** und werden heruntergeladen; „als
+  übertragen markieren“ setzt **Übertragen**. Eine echte Übertragungsstrecke (AS2, X.400, SFTP, Clearingstelle)
+  ist **nicht** enthalten – dafür gibt es eine Adapter-Klasse als Einstiegspunkt.
+
+---
+
 ## REST-API
 
 Basis: `/api/v1/` – Authentifizierung per Session, Basic-Auth oder Token. Alle Endpunkte prüfen die
@@ -553,8 +667,12 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 - [docs/DATENMODELL.md](docs/DATENMODELL.md) – Datenmodell als Mermaid-ERD
 - [docs/ROADMAP.md](docs/ROADMAP.md) – Phasen 2–6 mit groben Aufwänden
 
-## Bekannte Grenzen (Stand Phase 4)
-- Fachmodule Vertrieb, Versand und Reporting sind nur als Gerüst mit Platzhalterseite vorhanden.
+## Bekannte Grenzen (Stand Phase 5)
+- Das Modul Reporting ist nur als Gerüst mit Platzhalterseite vorhanden.
+- E-Rechnung: Prüfung nur per XSD (Factur-X EN 16931 / CII D16B, UBL 2.1) und eigenen Summenregeln; kein
+  Schematron/KoSIT-Validator, keine veraPDF-Prüfung des PDF/A-3. Kein Empfang von E-Rechnungen im Einkauf.
+- EDIFACT/LVS: nur Datei-Upload/-Download und REST, keine Übertragungsstrecke (AS2/X.400/SFTP), Adapter vorbereitet.
+- Tourenplanung ohne Routenoptimierung/Kartendienst (Sortierung nach PLZ bzw. Luftlinie), keine Versanddienstleister-Etiketten.
 - Fibu: keine Steuerberater-Abnahme, kein ELSTER-Versand, keine Anlagenbuchhaltung/AfA, keine Kostenrechnung,
   Bilanz/GuV in vereinfachter Gliederung, nur Euro, Mahnwesen ohne Serienversand per E-Mail.
 - Produktion: keine Kapazitätsplanung/Plantafel, keine Materialreservierung (Verfügbarkeit gegen freien Bestand
@@ -565,5 +683,4 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 - Bestandsbewertung nur gleitender Durchschnitt (kein FIFO/Niederstwert).
 - Ein Mandant (Firma) pro Installation.
 - Kontenrahmen SKR03/SKR04 als erweiterter Grundbestand (kein vollständiger DATEV-Kontenrahmen).
-- Keine E-Rechnung (ZUGFeRD/XRechnung) – geplant mit dem Vertrieb (siehe Roadmap).
 - Docker-Compose-Setup ungetestet (siehe oben).

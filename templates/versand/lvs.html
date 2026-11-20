@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}LVS-Schnittstelle{% endblock %}
+{% block content %}
+{% hat_recht "versand" "anlegen" as darf %}
+<h1 class="h4 mb-3">LVS-Schnittstelle (Lagerverwaltungssoftware)</h1>
+{% include "versand/_nav.html" with aktiv="lvs" %}
+<div class="row g-3 mb-3">
+{% if darf %}
+<div class="col-lg-7"><form method="post">{% csrf_token %}<input type="hidden" name="aktion" value="export">
+<div class="card h-100"><div class="card-header bg-white fw-semibold d-flex align-items-center">Kommissionieraufträge exportieren
+  <div class="ms-auto d-flex gap-2"><select name="format" class="form-select form-select-sm"><option>JSON</option><option>CSV</option></select><button class="btn btn-sm btn-primary text-nowrap"><i class="bi bi-download"></i> Export</button></div></div>
+<table class="table table-sm mb-0"><thead class="table-light"><tr><th></th><th>Referenz</th><th>Lieferschein</th><th>Kunde</th><th>Datum</th><th>Status</th></tr></thead>
+<tbody>{% for lf in offen %}<tr><td>{% if lf.status != 'KOMMISSIONIERT' %}<input class="form-check-input" type="checkbox" name="lieferung" value="{{ lf.pk }}">{% endif %}</td><td><code>{{ lf.kommissionier_referenz }}</code></td><td><a href="{% url 'vertrieb:lieferschein' lf.pk %}">{{ lf.nummer }}</a></td><td>{{ lf.auftrag.partner.name|truncatechars:25 }}</td><td>{{ lf.lieferdatum|date:"d.m.Y" }}</td><td>{% include "vertrieb/_status.html" with status=lf.status text=lf.get_status_display %}</td></tr>
+{% empty %}<tr><td colspan="6" class="text-muted text-center">Keine offenen Kommissionieraufträge.</td></tr>{% endfor %}</tbody></table>
+<div class="card-footer bg-white small text-muted">Keine Auswahl = alle Lieferscheine „Erfasst“/„An LVS übergeben“. Exportierte Lieferscheine erhalten den Status „An LVS übergeben“.</div></div></form></div>
+<div class="col-lg-5"><div class="card h-100"><div class="card-header bg-white fw-semibold">Rückmeldungen importieren</div><div class="card-body">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="aktion" value="import">
+    <input type="file" name="datei" class="form-control form-control-sm mb-2" accept=".json,.csv">
+    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="buchen" id="buchen" checked><label class="form-check-label small" for="buchen">Warenausgang direkt buchen (Lieferschein festschreiben)</label></div>
+    <button class="btn btn-sm btn-primary"><i class="bi bi-upload"></i> Importieren</button></form>
+  <div class="small text-muted mt-2">JSON: <code>{"rueckmeldungen": [{"referenz": "KOM-12", "packstuecke": 2, "gewicht_kg": 85, "paletten": 1, "positionen": [{"position_id": 5, "menge": 4, "charge": "FC-…", "packstueck": "NVE…"}]}]}</code></div>
+  <div class="small text-muted mt-1">CSV (Trennzeichen „;“): <code>{{ csv_import }}</code></div>
+  <div class="small text-muted mt-1">REST: <code>GET /api/v1/versand/lvs/kommissionierauftraege/</code>, <code>POST /api/v1/versand/lvs/rueckmeldungen/</code></div></div></div></div>
+{% endif %}
+</div>
+<div class="card"><div class="card-header bg-white fw-semibold">Protokoll</div>
+<table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Zeitpunkt</th><th>Richtung</th><th>Format</th><th class="text-end">Anzahl</th><th>Ergebnis</th><th>Benutzer</th></tr></thead>
+<tbody>{% for p in protokoll %}<tr><td><a href="{% url 'versand:lvs_protokoll' p.pk %}">{{ p.zeitpunkt|date:"d.m.Y H:i" }}</a></td><td>{{ p.get_richtung_display }}</td><td>{{ p.format }}</td><td class="text-end">{{ p.anzahl }}</td><td>{% if p.erfolgreich %}<span class="text-success">ok</span>{% else %}<span class="text-danger">Fehler</span>{% endif %}</td><td>{{ p.benutzer|default:"API/System" }}</td></tr>
+{% empty %}<tr><td colspan="6" class="text-muted text-center">Noch keine Übertragungen.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

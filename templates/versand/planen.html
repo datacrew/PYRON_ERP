@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Touren bilden{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Touren bilden</h1>
+{% include "versand/_nav.html" with aktiv="planen" %}
+<div class="card mb-3"><div class="card-body">
+<form method="post" class="row g-2 align-items-end">{% csrf_token %}
+  <div class="col-auto"><label class="form-label small">Lieferdatum</label><input type="date" name="datum" value="{{ datum|date:'Y-m-d' }}" class="form-control form-control-sm"></div>
+  <div class="col"><label class="form-label small">Regionen (keine Auswahl = alle)</label><div class="d-flex flex-wrap gap-3">{% for r in regionen %}<div class="form-check"><input class="form-check-input" type="checkbox" name="region" value="{{ r.pk }}" id="r{{ r.pk }}"><label class="form-check-label small" for="r{{ r.pk }}">{{ r.code }} ({{ r.liefertage_text }})</label></div>{% endfor %}</div></div>
+  <div class="col-auto"><button class="btn btn-sm btn-primary"><i class="bi bi-diagram-3"></i> Touren bilden</button></div>
+</form>
+<div class="form-text">Offene Lieferscheine (Lieferdatum bis zum gewählten Tag, noch keiner Tour zugeordnet) werden über die PLZ einer Region zugeordnet. Nur Regionen mit Liefertag am gewählten Datum werden verplant; die Fahrzeugkapazität (kg/Paletten) wird eingehalten, bei Bedarf wird eine weitere Tour mit einem freien Fahrzeug angelegt.</div></div></div>
+{% if ergebnis %}<div class="card mb-3"><div class="card-header bg-white fw-semibold">Ergebnis</div><div class="card-body small">
+  {% for t in ergebnis.touren %}<div><a href="{% url 'versand:tour' t.pk %}">{{ t.nummer }}</a> {{ t.region.name }} – {{ t.fahrzeug|default:"ohne Fahrzeug" }} – {{ t.stopps.count }} Stopp(s)</div>{% empty %}<div class="text-muted">Keine Touren gebildet.</div>{% endfor %}
+  {% for lf, grund in ergebnis.nicht_zugeordnet %}<div class="text-warning">{{ lf.nummer }}: {{ grund }}</div>{% endfor %}</div></div>{% endif %}
+<div class="card"><div class="card-header bg-white fw-semibold">Vorschau: offene Lieferscheine bis {{ datum|date:"d.m.Y" }}</div>
+<table class="table table-sm mb-0"><thead class="table-light"><tr><th>Lieferschein</th><th>Kunde</th><th>PLZ/Ort</th><th>Region</th><th>Liefertag passt</th><th class="text-end">kg</th><th class="text-end">Pal.</th></tr></thead>
+<tbody>{% for lf, r, passt in vorschau %}<tr><td><a href="{% url 'vertrieb:lieferschein' lf.pk %}">{{ lf.nummer }}</a></td><td>{{ lf.auftrag.partner.name|truncatechars:30 }}</td><td>{{ lf.plz }} {{ lf.ort }}</td><td>{% if r %}{{ r.code }}{% else %}<span class="text-danger">keine</span>{% endif %}</td><td>{% if passt %}<i class="bi bi-check-circle text-success"></i>{% else %}<i class="bi bi-x-circle text-muted"></i>{% endif %}</td><td class="text-end">{{ lf.gewicht|zahl }}</td><td class="text-end">{{ lf.paletten|zahl }}</td></tr>
+{% empty %}<tr><td colspan="7" class="text-muted text-center">Keine offenen Lieferscheine.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

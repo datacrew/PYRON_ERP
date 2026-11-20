@@ -27,6 +27,8 @@ BENUTZER = [
 ]
 ADMIN_PASSWORT = "Admin!2026"
 DEMO_PASSWORT = "Demo!2026"
+# Fester Demo-Token für den Shop „Musterwerk B2B-Shop“ (im Echtbetrieb im Admin/UI neu erzeugen!)
+DEMO_SHOP_TOKEN = "shop_demo_musterwerk_2026"
 
 ARTIKEL = [
     # Nr, Bezeichnung, Art, Einheit, Charge, EK, VK
@@ -66,6 +68,7 @@ class Command(BaseCommand):
         self._einkauf(artikel, partner)
         self._produktion(artikel)
         self._fibu_nach(partner)
+        self._vertrieb(artikel, partner)
         self.stdout.write(self.style.SUCCESS(
             f"Demodaten bereit. Logins: admin / {ADMIN_PASSWORT}; einkauf, vertrieb, produktion, meister, terminal, lager, "
             f"buchhaltung, gast / {DEMO_PASSWORT}"))
@@ -539,3 +542,181 @@ class Command(BaseCommand):
             fs.kommen(mitarbeiter["P1002"], beginn - timedelta(minutes=20))
             fs.stempel_start(mitarbeiter["P1002"], ag(fa2, 30), zeit=beginn)
             fs.kommen(mitarbeiter["P1004"], beginn - timedelta(minutes=10))
+
+    # ------------------------------------------------------------------ Phase 5: Vertrieb und Versand
+    def _vertrieb(self, a, p):
+        """CRM, Angebote, Aufträge (manuell, Shop-API, EDIFACT), Lieferscheine, Touren, ZUGFeRD-Rechnungen."""
+        from datetime import timedelta
+        from pathlib import Path
+
+        from django.conf import settings
+        from django.utils import timezone
+
+        from apps.stammdaten.models import Zahlungsbedingung
+        from apps.lager.models import Lagerort
+        from apps.versand import services as VS
+        from apps.versand.models import Fahrzeug, PlzKoordinate, Region, Tour
+        from apps.vertrieb import api as shop_api, edifact as ED, services as S
+        from apps.vertrieb.models import (Aktivitaet, EdiArtikelZuordnung, EdiPartner, Kundenpreis, Lead, Shop,
+                                          Verkaufschance)
+
+        if Lead.objects.exists():
+            return
+        User = get_user_model()
+        vt, lg = User.objects.get(username="vertrieb"), User.objects.get(username="lager")
+        heute = timezone.localdate()
+        jetzt = timezone.now()
+
+        with transaction.atomic():
+            # Versandgewichte (für Tourenplanung/Auslastung)
+            a["F-5000"].gewicht_kg, a["F-5010"].gewicht_kg = Decimal("2.4"), Decimal("11.5")
+            for nr in ("F-5000", "F-5010"):
+                a[nr].save(update_fields=["gewicht_kg"])
+            # Fahrzeuge, Regionen, lokale PLZ-Koordinaten (Ortsmittelpunkte, ohne Online-Dienst)
+            sprinter = Fahrzeug.objects.create(kennzeichen="S-MW 102", bezeichnung="Sprinter (3,5 t)", max_kg=1100,
+                                               max_paletten=4, fahrer="Tim Kurier")
+            lkw75 = Fahrzeug.objects.create(kennzeichen="S-MW 101", bezeichnung="LKW 7,5 t mit Ladebordwand",
+                                            max_kg=2800, max_paletten=15, fahrer="Jürgen Fahrer")
+            lkw12 = Fahrzeug.objects.create(kennzeichen="S-MW 103", bezeichnung="LKW 12 t", max_kg=5000,
+                                            max_paletten=18, fahrer="Olga Fernverkehr")
+            Region.objects.create(code="STGT", name="Großraum Stuttgart", plz_bereiche="70-71",
+                                  liefertage="1,2,3,4,5", sortierung="ENTFERNUNG", standard_fahrzeug=sprinter)
+            Region.objects.create(code="NECKAR", name="Neckar / Alb / Rems", plz_bereiche="72-74",
+                                  liefertage="2,4", sortierung="PLZ", standard_fahrzeug=lkw75)
+            Region.objects.create(code="BAYERN", name="Bayern Süd", plz_bereiche="80-87",
+                                  liefertage="1,3,5", sortierung="ENTFERNUNG", standard_fahrzeug=lkw12)
+            for plz, ort, br, la in [
+                    ("70565", "Stuttgart-Vaihingen", "48.7270", "9.1060"), ("70469", "Stuttgart-Feuerbach", "48.8150", "9.1600"),
+                    ("70499", "Stuttgart-Weilimdorf", "48.8130", "9.1080"), ("71634", "Ludwigsburg", "48.8950", "9.1920"),
+                    ("73728", "Esslingen am Neckar", "48.7406", "9.3108"), ("73614", "Schorndorf", "48.8050", "9.5270"),
+                    ("72764", "Reutlingen", "48.4914", "9.2043"), ("80804", "München", "48.1700", "11.5770"),
+                    ("85049", "Ingolstadt", "48.7650", "11.4250"), ("86150", "Augsburg", "48.3668", "10.8986")]:
+                PlzKoordinate.objects.create(plz=plz, ort=ort, breite=Decimal(br), laenge=Decimal(la))
+            # Kundenpreise / Staffeln
+            mueller, weber = p["Müller Maschinenbau GmbH"], p["Autoteile Weber AG"]
+            Kundenpreis.objects.create(partner=mueller, artikel=a["F-5000"], ab_menge=1, preis=Decimal("46.00"))
+            Kundenpreis.objects.create(partner=mueller, artikel=a["F-5000"], ab_menge=100, preis=Decimal("44.50"))
+            Kundenpreis.objects.create(artikel=a["F-5010"], ab_menge=10, rabatt_prozent=Decimal("5"))
+            Kundenpreis.objects.create(partner=weber, artikel=a["F-5000"], ab_menge=1, preis=Decimal("46.90"))
+
+            # CRM: Leads in allen Status, Aktivitäten mit Wiedervorlage, Chancen
+            def lead(firma, person, plz, ort, strasse, quelle, status=Lead.Status.NEU):
+                return Lead.objects.create(firma=firma, ansprechpartner=person, plz=plz, ort=ort, strasse=strasse,
+                                           quelle=quelle, status=status, zustaendig=vt,
+                                           email=f"einkauf@{firma.split()[0].lower()}.example", telefon="+49 711 000000")
+
+            def akt(art, betreff, l=None, partner=None, tage=0, wv=None, notiz=""):
+                return Aktivitaet.objects.create(art=art, betreff=betreff, lead=l, partner=partner, notiz=notiz,
+                                                 zeitpunkt=jetzt - timedelta(days=tage), zustaendig=vt,
+                                                 wiedervorlage=(heute + timedelta(days=wv)) if wv is not None else None)
+
+            l_rems = lead("Kunststofftechnik Rems GmbH", "Jonas Rems", "73614", "Schorndorf", "Gmünder Str. 8", "Messe AMB")
+            akt("NOTIZ", "Messekontakt AMB – Interesse an Lagerböcken", l_rems, tage=6)
+            akt("ANRUF", "Erstgespräch vereinbaren", l_rems, tage=1, wv=0, notiz="Rückruf zugesagt")
+            l_alb = lead("Feinmechanik Albrecht KG", "Petra Albrecht", "72764", "Reutlingen", "Lederstraße 31",
+                         "Website", Lead.Status.QUALIFIZIERT)
+            akt("BESUCH", "Werksbesichtigung und Bedarfsanalyse", l_alb, tage=4, wv=5,
+                notiz="Jahresbedarf ca. 250 Antriebseinheiten, Muster gewünscht")
+            Verkaufschance.objects.create(titel="Rahmenvertrag Antriebseinheiten 2027", lead=l_alb,
+                                          phase="VERHANDLUNG", wert=Decimal("42000"), wahrscheinlichkeit=50,
+                                          abschluss_erwartet=heute + timedelta(days=40), zustaendig=vt)
+            l_huber = lead("Metallbau Huber", "Franz Huber", "86150", "Augsburg", "Haunstetter Str. 2", "Kaltakquise",
+                           Lead.Status.VERLOREN)
+            akt("EMAIL", "Absage: Preis zu hoch, bleibt beim Bestandslieferanten", l_huber, tage=12)
+            Verkaufschance.objects.create(titel="Lagerböcke Hallenausbau", lead=l_huber, phase="VERLOREN",
+                                          wert=Decimal("6500"), wahrscheinlichkeit=0, zustaendig=vt)
+            # Lead mit offenem Angebot
+            l_sommer = lead("Präzisionsteile Sommer GmbH", "Lisa Sommer", "71634", "Ludwigsburg", "Solitudeallee 50",
+                            "Empfehlung", Lead.Status.QUALIFIZIERT)
+            sommer = S.lead_umwandeln(l_sommer, vt)
+            sommer.zahlungsbedingung = Zahlungsbedingung.objects.get(code="30N")
+            sommer.save()
+            an_sommer = S.angebot_anlegen(sommer, [(a["F-5010"], 12)], vt, "Angebot Antriebseinheiten AE-1",
+                                          freigeben=True)
+            Verkaufschance.objects.create(titel="Erstauftrag AE-1", lead=l_sommer, partner=sommer, phase="ANGEBOT",
+                                          wert=an_sommer.summe_netto, wahrscheinlichkeit=60, angebot=an_sommer,
+                                          abschluss_erwartet=heute + timedelta(days=14), zustaendig=vt)
+            akt("ANRUF", "Nachfassen zum Angebot " + an_sommer.nummer, partner=sommer, wv=3)
+            # Lead → Kunde → Angebot → Auftrag (wird unten geliefert, auf Tour gesetzt und berechnet)
+            l_hyd = lead("Hydraulik Neckar GmbH", "Stefan Brandt", "70469", "Stuttgart", "Borsigstraße 14",
+                         "Website", Lead.Status.QUALIFIZIERT)
+            akt("BESUCH", "Vorstellung Produktprogramm", l_hyd, tage=20)
+            hyd = S.lead_umwandeln(l_hyd, vt)
+            hyd.zahlungsbedingung, hyd.ust_id = Zahlungsbedingung.objects.get(code="30N"), "DE287654321"
+            hyd.save()
+            an_hyd = S.angebot_anlegen(hyd, [(a["F-5000"], 20), (a["F-5010"], 2)], vt, "Angebot Erstbestellung",
+                                       freigeben=True)
+            Verkaufschance.objects.create(titel="Erstbestellung Hydraulik Neckar", lead=l_hyd, partner=hyd,
+                                          phase="ANGEBOT", wert=an_hyd.summe_netto, wahrscheinlichkeit=80,
+                                          angebot=an_hyd, zustaendig=vt)
+            akt("ANRUF", "Bestandskunde: Jahresgespräch planen", partner=mueller, tage=2, wv=-1)
+
+        fl = Lagerort.objects.get(code="FL")
+        lieferungen = []
+
+        def liefern(auftrag, mengen=None, paletten="1", packstuecke=2, buchen=True):
+            lf = S.lieferung_anlegen(auftrag, mengen, lg, lieferdatum=heute)
+            lf.paletten, lf.packstuecke = Decimal(paletten), packstuecke
+            lf.save(update_fields=["paletten", "packstuecke"])
+            if buchen:
+                lf = S.warenausgang_buchen(lf, lg)
+            lieferungen.append(lf)
+            return lf
+
+        # 1) Hydraulik: aus Angebot übernommen, komplett geliefert, berechnet
+        a_hyd = S.auftrag_bestaetigen(S.auftrag_aus_angebot(an_hyd, vt, "HN-4711"), vt)
+        lf_hyd = liefern(a_hyd, paletten="1", packstuecke=3)
+        # 2) Müller: manueller Auftrag mit Teillieferung, Rest über LVS in Kommissionierung (Rückstand)
+        a_mue = S.auftrag_anlegen(mueller, [
+            {"artikel": a["F-5000"], "menge": 120, "liefertermin": heute - timedelta(days=3)},
+            {"artikel": a["F-5010"], "menge": 4, "liefertermin": heute - timedelta(days=3)}],
+            vt, ihre_referenz="MM-2026-0815", liefertermin=heute - timedelta(days=3))
+        a_mue = S.auftrag_bestaetigen(a_mue, vt)
+        pos = {x.artikel.artikelnummer: x for x in a_mue.positionen.all()}
+        lf_mue = liefern(a_mue, {pos["F-5000"].pk: 80, pos["F-5010"].pk: 4}, paletten="2", packstuecke=5)
+        lf_mue_rest = liefern(a_mue, paletten="1", packstuecke=2, buchen=False)
+        VS.lvs_export([lf_mue_rest], "JSON", lg)
+        # 3) Müller: neuer Auftrag mit Fertigungsbedarf (nur erfasst)
+        S.auftrag_anlegen(mueller, [{"artikel": a["F-5010"], "menge": 30}], vt, ihre_referenz="MM-2026-0902",
+                          liefertermin=heute + timedelta(days=21), bemerkung="Verfügbarkeit prüfen – Fertigungsbedarf")
+        # 4) Shop-Bestellung über die REST-API-Logik (Neukunde wird angelegt, Auftrag automatisch bestätigt)
+        shop = Shop.objects.create(name="Musterwerk B2B-Shop", lagerort=fl, auto_bestaetigen=True,
+                                   zahlungsbedingung=Zahlungsbedingung.objects.get(code="14N"))
+        shop.token_hash, shop.token_anfang = shop_api.token_hash(DEMO_SHOP_TOKEN), DEMO_SHOP_TOKEN[:8]
+        shop.save(update_fields=["token_hash", "token_anfang"])
+        daten = {"externe_nummer": "B2B-100045", "liefertermin": heute,
+                 "kunde": {"name": "Werkstatt Keller e.K.", "strasse": "Solitudestraße 220", "plz": "70499",
+                           "ort": "Stuttgart", "land": "DE", "email": "bestellung@keller-werkstatt.example"},
+                 "positionen": [{"artikelnummer": "F-5000", "menge": Decimal("10")},
+                                {"artikelnummer": "F-5010", "menge": Decimal("1")}]}
+        sb, _ = shop_api.bestellung_anlegen(shop, daten, {"quelle": "Demodaten", "externe_nummer": "B2B-100045"})
+        liefern(sb.auftrag, paletten="0.5", packstuecke=1)
+        # 5) EDIFACT ORDERS von Autoteile Weber (docs/beispiele/orders_demo.edi)
+        ep = EdiPartner.objects.create(partner=weber, gln="4298765000007")
+        EdiArtikelZuordnung.objects.create(edi_partner=ep, kundenartikelnummer="WEB-LB200", artikel=a["F-5000"])
+        EdiArtikelZuordnung.objects.create(edi_partner=ep, kundenartikelnummer="WEB-AE1", artikel=a["F-5010"])
+        datei = Path(settings.BASE_DIR) / "docs" / "beispiele" / "orders_demo.edi"
+        n = ED.orders_importieren(datei.read_text(encoding="utf-8"), datei.name, vt, preise_uebernehmen=True)
+        if n.auftrag_id:
+            a_web = S.auftrag_bestaetigen(n.auftrag, vt)
+            ED.ordrsp_erzeugen(a_web)
+            lf_web = liefern(a_web, paletten="1", packstuecke=2)
+            ED.desadv_erzeugen(lf_web)
+        else:
+            self.stdout.write(self.style.WARNING(f"EDIFACT-Demo-Import fehlgeschlagen: {n.fehler}"))
+            lf_web = None
+
+        # Touren je Region zum nächsten Liefertag bilden; Bayern-Tour verladen, Stuttgart freigegeben
+        for region in Region.objects.all():
+            VS.touren_bilden(VS.naechster_liefertag(region, heute), lg, regionen=[region])
+        for tour in Tour.objects.select_related("region"):
+            if tour.region.code == "BAYERN":
+                VS.tour_verladen(tour, lg)
+            elif tour.region.code == "STGT":
+                VS.tour_freigeben(tour, lg)
+
+        # Rechnungen festschreiben (→ ZUGFeRD-PDF, Fibu-Buchung, OP) und INVOIC für Weber
+        S.rechnung_erstellen([lf_hyd], vt)
+        S.rechnung_erstellen([lf_mue], vt)
+        if lf_web:
+            ED.invoic_erzeugen(S.rechnung_erstellen([lf_web], vt))

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}LVS-Protokoll{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">LVS {{ p.get_richtung_display }} vom {{ p.zeitpunkt|date:"d.m.Y H:i" }}</h1>
+{% include "versand/_nav.html" with aktiv="lvs" %}
+{% if p.meldungen %}<div class="alert alert-danger"><pre class="mb-0 small" style="white-space:pre-wrap">{{ p.meldungen }}</pre></div>{% endif %}
+<div class="card"><div class="card-header bg-white">{{ p.format }} · {{ p.anzahl }} Auftrag/Aufträge · {{ p.benutzer|default:"API/System" }}</div><pre class="card-body small mb-0" style="white-space:pre-wrap">{{ p.inhalt }}</pre></div>
+{% endblock %}

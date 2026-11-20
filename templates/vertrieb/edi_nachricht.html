@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}EDI-Nachricht{% endblock %}
+{% block content %}
+{% hat_recht "edi" "anlegen" as darf %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">{{ n.get_typ_display }} – {{ n.get_richtung_display }}</h1>{% include "vertrieb/_status.html" with status=n.status text=n.get_status_display %}
+  <div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="?download=1"><i class="bi bi-download"></i> Datei</a>
+  {% if darf and n.status == 'ERZEUGT' %}<form method="post" action="{% url 'vertrieb:edi_uebertragen' n.pk %}">{% csrf_token %}<button class="btn btn-sm btn-primary">Als übertragen markieren</button></form>{% endif %}</div></div>
+{% include "vertrieb/_nav.html" with aktiv="edi" %}
+<div class="card mb-3"><div class="card-body small row">
+  <div class="col-md-4"><span class="text-muted">Partner:</span> {{ n.edi_partner|default:"nicht zugeordnet" }}</div>
+  <div class="col-md-4"><span class="text-muted">Referenz:</span> {{ n.referenz }}</div>
+  <div class="col-md-4"><span class="text-muted">UNB-Kontrollnummer:</span> {{ n.kontrollnummer }}</div>
+  <div class="col-md-4"><span class="text-muted">Datei:</span> {{ n.dateiname }}</div>
+  <div class="col-md-4"><span class="text-muted">Erstellt:</span> {{ n.erstellt_am|date:"d.m.Y H:i" }}</div>
+  <div class="col-md-4"><span class="text-muted">Auftrag:</span> {% if n.auftrag %}<a href="{% url 'vertrieb:auftrag' n.auftrag.pk %}">{{ n.auftrag.nummer }}</a>{% else %}–{% endif %}{% if n.beleg %} · Beleg <a href="{% url 'belege:detail' n.beleg.pk %}">{{ n.beleg.nummer }}</a>{% endif %}</div></div></div>
+{% if n.fehler %}<div class="alert alert-danger"><div class="fw-semibold">Fehlerprotokoll</div><pre class="mb-0 small" style="white-space:pre-wrap">{{ n.fehler }}</pre></div>{% endif %}
+<div class="card"><div class="card-header bg-white fw-semibold">Inhalt</div><pre class="card-body small mb-0" style="white-space:pre-wrap">{{ n.inhalt }}</pre></div>
+{% endblock %}

@@ -596,3 +596,24 @@ Regeln:
 - `Bankumsatz.dubletten_schluessel`: SHA-256 über IBAN, Datum, Betrag, Referenz, Zweck und Name.
 - `Konto`: zusätzlich `kontoart`, `bilanz_position`, `guv_position`, `steuerschluessel` (Automatikkonto), `automatik`
   (Code) und `partner` (Personenkonten). `Geschaeftspartner`: `iban`, `mahnsperre`, `debitorenkonto`, `kreditorenkonto`.
+
+## Phase 5 – Vertrieb und Versand (`apps/vertrieb`, `apps/versand`)
+
+| Modell | Zweck / wichtige Felder |
+|---|---|
+| Lead | Interessent: Firma, Kontakt, Status (NEU/QUALIFIZIERT/ANGEBOT/GEWONNEN/VERLOREN), Zuständiger, → Geschäftspartner nach Umwandlung |
+| Aktivitaet | Anruf/Besuch/E-Mail/Notiz zu Lead oder Kunde, Wiedervorlage-Datum, erledigt |
+| Verkaufschance | Lead/Kunde, Wert, Wahrscheinlichkeit %, erwarteter Abschluss |
+| Kundenpreis | Artikel, Kunde (leer = alle), ab Menge, Preis oder Rabatt %, gültig von/bis |
+| Auftrag / AuftragPosition | Kundenauftrag (Nummernkreis), Quelle MANUELL/ANGEBOT/SHOP/EDI, Status, AB-Beleg; Positionen mit Menge, geliefert, berechnet, Liefertermin, optional Fertigungsauftrag |
+| Lieferung / LieferPosition | Lieferschein (Beleg) mit Status, Kommissionier-Referenz (LVS), Gewicht/Paletten; Positionen mit Menge, Charge, Packstück |
+| Shop / ShopBestellung | Shop mit Token-Hash; Bestellung mit externer Nummer (eindeutig je Shop → Idempotenz) → Auftrag |
+| EdiPartner / EdiArtikelZuordnung | GLN je Kunde, Kundenartikelnummer ↔ Artikel |
+| EdiNachricht | Richtung EIN/AUS, Typ ORDERS/ORDRSP/DESADV/INVOIC, Status, Inhalt, Fehlerprotokoll, Bezug Auftrag/Lieferung/Beleg |
+| Region / PlzKoordinate | PLZ-Bereiche, Liefertage, Sortierung PLZ/ENTFERNUNG, Standardfahrzeug; Geokoordinaten je PLZ (offline) |
+| Fahrzeug | Kennzeichen, max. Gewicht, max. Paletten |
+| Tour / TourStopp | Tour (Nummernkreis) je Datum/Region/Fahrzeug mit Status; Stopps = Lieferscheine mit Reihenfolge |
+| LvsProtokoll | Export/Import zum Lagerverwaltungssystem (Format, Inhalt, Ergebnis, Fehler) |
+
+Rechnungen, Gutschriften, Angebote und Auftragsbestätigungen bleiben Belege (`apps/belege`) – GoBD-Festschreibung,
+Hash-Kette und Fibu-Automatikbuchung gelten unverändert; Lagerabgänge laufen über das Lagerjournal.

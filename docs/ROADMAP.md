@@ -69,7 +69,7 @@ Offen / bewusst verschoben:
 - Hinweis: Zeiterfassung und Akkord sind mitbestimmungspflichtig (Betriebsrat, Betriebsvereinbarung) und
   datenschutzrelevant.
 
-## Phase 4 – Finanzbuchhaltung (**erledigt**, siehe README „Phase 4: Finanzbuchhaltung“)
+## Phase 4 – Finanzbuchhaltung (**erledigt**, siehe README „Phase 4: Finanzbuchhaltung“, 20 neue Tests, gesamt 86)
 Offen/Ausbau: Anlagenbuchhaltung, Kostenrechnung, ELSTER, E-Mail-Mahnversand, Steuerberater-Abnahme.
 
 Ursprünglicher Umfang:
@@ -89,7 +89,10 @@ Ursprünglicher Umfang:
   DATEV-Export (Buchungsstapel)
 - GoBD: Verfahrensdokumentation (Vorlage), Datenexport für Betriebsprüfung (GDPdU/IDEA-Beschreibungsstandard)
 
-## Phase 5 – Vertrieb, CRM, E-Rechnung, EDIFACT, Versand (40–55 PT)
+## Phase 5 – Vertrieb, CRM, E-Rechnung, EDIFACT, Versand (**erledigt**, siehe README „Phase 5: Vertrieb und Versand“, 21 neue Tests, gesamt 107)
+Offen/Ausbau: KoSIT-/Schematron- und veraPDF-Validierung, E-Rechnungs-Empfang im Einkauf, EDI-Übertragung (AS2/Clearingstelle), Routenoptimierung/Kartenansicht, Versanddienstleister-Etiketten.
+
+Ursprünglicher Umfang:
 - CRM: Kontakthistorie, Aktivitäten/Wiedervorlagen, Verkaufschancen
 - Belegfluss Angebot → Auftrag → Lieferschein → Rechnung (Übernahme von Positionen, Teilmengen),
   Preislisten, Kundenrabatte, Verfügbarkeitsprüfung
@@ -104,7 +107,7 @@ Ursprünglicher Umfang:
 - **LVS-Schnittstelle** (Lagerverwaltungssystem): Auftrags- und Rückmeldeschnittstelle (Datei/REST),
   Spezifikation abhängig vom eingesetzten LVS
 
-## Phase 6 – Reporting, Betrieb, Härtung (20–30 PT)
+## Phase 6 – Reporting, Betrieb, Härtung, Feinschliff (20–30 PT) – **als Nächstes**
 - Reporting-Modul: Kennzahlen-Dashboard (Umsatz, Deckungsbeitrag, Bestände, OP, Produktivität),
   Listen mit Filtern und Excel/CSV-Export, geplante Berichte per E-Mail
 - Mehrmandantenfähigkeit (falls benötigt), Feld-/Datensatzrechte, Zwei-Faktor-Anmeldung, Passwortrichtlinie

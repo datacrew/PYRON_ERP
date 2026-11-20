@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Tour {{ t.nummer }}{% endblock %}
+{% block content %}
+{% hat_recht "versand" "anlegen" as darf %}{% hat_recht "versand" "freigeben" as darf_frei %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Tour {{ t.nummer }}</h1>{% include "vertrieb/_status.html" with status=t.status text=t.get_status_display %}
+  <div class="ms-auto d-flex gap-2">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'versand:tour_pdf' t.pk %}" target="_blank"><i class="bi bi-file-pdf"></i> Touren-/Ladeliste</a>
+  {% if darf and t.status in 'GEPLANT FREIGEGEBEN' %}<form method="post" action="{% url 'versand:tour_aktion' t.pk 'sortieren' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary"><i class="bi bi-sort-numeric-down"></i> Sortieren ({{ t.region.get_sortierung_display }})</button></form>{% endif %}
+  {% if darf_frei and t.status == 'GEPLANT' %}<form method="post" action="{% url 'versand:tour_aktion' t.pk 'freigeben' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-primary">Freigeben</button></form>{% endif %}
+  {% if darf_frei and t.status in 'GEPLANT FREIGEGEBEN' %}<form method="post" action="{% url 'versand:tour_aktion' t.pk 'verladen' %}">{% csrf_token %}<button class="btn btn-sm btn-primary"><i class="bi bi-truck"></i> Verladen</button></form>{% endif %}
+  </div></div>
+{% include "versand/_nav.html" with aktiv="touren" %}
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="card h-100"><div class="card-body small"><div><span class="text-muted">Datum:</span> {{ t.datum|date:"l, d.m.Y" }}</div><div><span class="text-muted">Region:</span> {{ t.region.code }} – {{ t.region.name }}</div><div><span class="text-muted">Liefertage:</span> {{ t.region.liefertage_text }}</div></div></div></div>
+  <div class="col-md-4"><div class="card h-100"><div class="card-body small"><div><span class="text-muted">Fahrzeug:</span> {{ t.fahrzeug|default:"–" }}</div><div><span class="text-muted">Fahrer:</span> {{ t.fahrer|default:"–" }}</div>{% if t.fahrzeug %}<div><span class="text-muted">Kapazität:</span> {{ t.fahrzeug.max_kg|zahl }} kg / {{ t.fahrzeug.max_paletten|zahl }} Pal.</div>{% endif %}</div></div></div>
+  <div class="col-md-4"><div class="card h-100"><div class="card-body small"><div class="mb-1"><span class="text-muted">Beladung:</span> {{ a.kg|zahl }} kg · {{ a.paletten|zahl }} Pal. · {{ a.packstuecke }} Packst.</div>{% include "versand/_auslastung.html" %}
+    {% for m in a.meldungen %}<div class="text-danger mt-1"><i class="bi bi-exclamation-triangle"></i> {{ m }}</div>{% endfor %}</div></div></div>
+</div>
+<div class="card mb-3"><table class="table table-sm mb-0 align-middle"><thead class="table-light"><tr><th>#</th><th>Lieferschein</th><th>Kunde / Empfänger</th><th>Adresse</th><th class="text-end">km</th><th class="text-end">kg</th><th class="text-end">Pal.</th><th>Status</th><th></th></tr></thead>
+<tbody>{% for s in stopps %}{% with lf=s.lieferung %}<tr><td>{{ forloop.counter }}</td><td><a href="{% url 'vertrieb:lieferschein' lf.pk %}">{{ lf.nummer }}</a></td><td>{{ lf.name|truncatechars:30 }}</td><td>{{ lf.strasse }}, {{ lf.plz }} {{ lf.ort }}</td><td class="text-end">{{ s.entfernung_km|default_if_none:"" }}</td><td class="text-end">{{ lf.gewicht|zahl }}</td><td class="text-end">{{ lf.paletten|zahl }}</td>
+  <td>{% include "vertrieb/_status.html" with status=lf.status text=lf.get_status_display %}</td>
+  <td class="text-end">{% if darf and t.status in 'GEPLANT FREIGEGEBEN' %}<form method="post" action="{% url 'versand:tour_aktion' t.pk 'entfernen' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="stopp" value="{{ s.pk }}"><button class="btn btn-sm btn-outline-danger py-0" title="entfernen"><i class="bi bi-x"></i></button></form>{% endif %}
+    {% if darf_frei and lf.status == 'VERLADEN' %}<form method="post" action="{% url 'versand:tour_aktion' t.pk 'zugestellt' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="lieferung" value="{{ lf.pk }}"><button class="btn btn-sm btn-outline-success py-0">zugestellt</button></form>{% endif %}</td></tr>{% endwith %}
+{% empty %}<tr><td colspan="9" class="text-muted text-center">Keine Stopps.</td></tr>{% endfor %}</tbody></table></div>
+{% if darf and kandidaten %}<div class="card"><div class="card-header bg-white fw-semibold">Lieferschein hinzufügen</div><div class="card-body">
+  <form method="post" action="{% url 'versand:tour_aktion' t.pk 'hinzufuegen' %}" class="d-flex gap-2 align-items-center">{% csrf_token %}
+    <select name="lieferung" class="form-select form-select-sm">{% for lf in kandidaten %}<option value="{{ lf.pk }}">{{ lf.nummer }} – {{ lf.plz }} {{ lf.ort }} – {{ lf.auftrag.partner.name }} ({{ lf.gewicht|zahl }} kg)</option>{% endfor %}</select>
+    <div class="form-check text-nowrap"><input class="form-check-input" type="checkbox" name="erzwingen" id="erz"><label class="form-check-label small" for="erz">trotz Überladung</label></div>
+    <button class="btn btn-sm btn-primary text-nowrap">Hinzufügen</button></form></div></div>{% endif %}
+{% endblock %}

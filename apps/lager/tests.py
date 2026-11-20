@@ -108,7 +108,12 @@ class LagerTests(TestCase):
         antwort = self.client.post("/api/v1/lagerbewegungen/", {}, content_type="application/json")
         self.assertEqual(antwort.status_code, 403)
         self.client.force_login(User.objects.get(username="vertrieb"))
-        self.assertEqual(self.client.get("/api/v1/bestaende/").status_code, 403)
+        # Seit Phase 5 darf der Vertrieb Bestände lesen (Verfügbarkeitsprüfung), aber nicht buchen
+        self.assertEqual(self.client.get("/api/v1/bestaende/").status_code, 200)
+        antwort = self.client.post("/api/v1/lagerbewegungen/", {}, content_type="application/json")
+        self.assertEqual(antwort.status_code, 403)
+        self.client.force_login(User.objects.get(username="einkauf"))
+        self.assertEqual(self.client.get("/lager/umbuchen/").status_code, 403)
         self.client.force_login(User.objects.get(username="lager"))
         self.assertEqual(self.client.get("/lager/umbuchen/").status_code, 200)
         self.assertEqual(self.client.get(f"/api/v1/bestaende/?artikel={self.artikel.pk}").status_code, 200)

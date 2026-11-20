@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}EDI / EDIFACT{% endblock %}
+{% block content %}
+{% hat_recht "edi" "anlegen" as darf %}{% hat_recht "edi" "aendern" as darf_partner %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">EDI / EDIFACT</h1>
+  {% if darf_partner %}<a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'vertrieb:edipartner_liste' %}"><i class="bi bi-gear"></i> EDI-Partner</a>{% endif %}</div>
+{% include "vertrieb/_nav.html" with aktiv="edi" %}
+<div class="row g-3 mb-3">
+  {% if darf %}<div class="col-lg-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">ORDERS (D.96A) importieren</div><div class="card-body">
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}{% include "generic/_formfelder.html" with form=form %}<button class="btn btn-sm btn-primary"><i class="bi bi-upload"></i> Importieren</button></form>
+    <div class="form-text">Der Absender wird über die GLN (NAD+BY bzw. UNB) einem EDI-Partner zugeordnet, Artikel über Kundenartikelnummer, EAN oder Artikelnummer. Doppelte Bestellnummern werden abgewiesen.</div></div></div></div>{% endif %}
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Partner &amp; Übertragung</div><div class="card-body small">
+    {% for p in partner %}<div>{{ p.partner.nummer }} {{ p.partner.name }} – GLN {{ p.gln }} {% if p.testbetrieb %}<span class="badge text-bg-warning">Test</span>{% endif %}{% if not p.aktiv %}<span class="badge text-bg-secondary">inaktiv</span>{% endif %}</div>{% empty %}<div class="text-muted">Noch keine EDI-Partner.</div>{% endfor %}
+    <div class="mt-2 text-muted">Übertragungs-Adapter: <strong>{{ adapter }}</strong>. Ausgehende Nachrichten werden erzeugt und als Datei bereitgestellt; eine echte Übertragungsstrecke (AS2, X.400, OFTP2, SFTP) ist als Adapterklasse vorbereitet.</div></div></div></div>
+</div>
+<form class="d-flex gap-2 mb-2" method="get">
+  <select name="richtung" class="form-select form-select-sm w-auto" onchange="this.form.submit()"><option value="">Ein- und Ausgang</option><option value="EIN" {% if request.GET.richtung == 'EIN' %}selected{% endif %}>Eingang</option><option value="AUS" {% if request.GET.richtung == 'AUS' %}selected{% endif %}>Ausgang</option></select>
+  <select name="typ" class="form-select form-select-sm w-auto" onchange="this.form.submit()"><option value="">alle Typen</option>{% for c, l in typen %}<option value="{{ c }}" {% if request.GET.typ == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+  <select name="status" class="form-select form-select-sm w-auto" onchange="this.form.submit()"><option value="">alle Status</option>{% for c, l in stati %}<option value="{{ c }}" {% if request.GET.status == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></form>
+<div class="card"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Zeitpunkt</th><th>Richtung</th><th>Typ</th><th>Partner</th><th>Referenz</th><th>UNB-Nr.</th><th>Auftrag</th><th>Status</th><th></th></tr></thead>
+<tbody>{% for n in seite %}<tr><td><a href="{% url 'vertrieb:edi_nachricht' n.pk %}">{{ n.erstellt_am|date:"d.m.Y H:i" }}</a></td><td>{{ n.get_richtung_display }}</td><td>{{ n.typ }}</td><td>{{ n.edi_partner.partner.name|default:"?"|truncatechars:25 }}</td><td>{{ n.referenz }}</td><td>{{ n.kontrollnummer }}</td>
+  <td>{% if n.auftrag %}<a href="{% url 'vertrieb:auftrag' n.auftrag.pk %}">{{ n.auftrag.nummer }}</a>{% endif %}</td><td>{% include "vertrieb/_status.html" with status=n.status text=n.get_status_display %}</td>
+  <td><a href="{% url 'vertrieb:edi_nachricht' n.pk %}?download=1" title="Datei herunterladen"><i class="bi bi-download"></i></a></td></tr>
+{% empty %}<tr><td colspan="9" class="text-muted text-center py-3">Keine Nachrichten.</td></tr>{% endfor %}</tbody></table></div>
+{% include "vertrieb/_seiten.html" %}
+{% endblock %}

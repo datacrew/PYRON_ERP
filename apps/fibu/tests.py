@@ -179,7 +179,7 @@ class DemoFibuTests(TestCase):
         return OffenerPosten.objects.get(belegnr=nr)
 
     def test_demodaten_konsistent(self):
-        self.assertEqual(Buchung.objects.filter(quelle="beleg").count(), 5)
+        self.assertEqual(Buchung.objects.filter(quelle="beleg").count(), 8)  # 5 aus Phase 4 + 3 Vertriebsrechnungen (Phase 5)
         self.assertEqual(self.op("RE-2026-00001").offen, 0)
         self.assertEqual(self.op("RE-2026-00004").offen, D("3581.10"))  # Teilzahlung
         self.assertEqual(Bankumsatz.objects.filter(status="OFFEN").count(), 0)
@@ -309,7 +309,12 @@ class DemoFibuTests(TestCase):
         self.assertEqual(bil["ergebnis"], guv["ergebnis"])
         self.assertNotEqual(guv["ergebnis"], 0)
         u = A.ustva_daten(date(2026, 11, 1), date(2026, 11, 30))
-        self.assertEqual(u["bemessung"]["81"], D("7710.00"))
+        # 7.710,00 aus Phase 4 + Netto der drei November-Rechnungen aus dem Vertrieb (Phase 5)
+        from apps.belege.models import Beleg
+        netto_vertrieb = sum(b.summe_netto for b in Beleg.objects.filter(
+            nummer__in=["RE-2026-00006", "RE-2026-00007", "RE-2026-00008"]))
+        self.assertEqual(u["bemessung"]["81"], D("7710.00") + netto_vertrieb)
+        self.assertEqual(u["bemessung"]["81"], D("15620.00"))
         self.assertEqual(u["zahllast"], u["summe_ust"] - u["summe_vst"])
 
     def test_datev_export(self):
