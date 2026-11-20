@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ b }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+  <h1 class="h4 m-0">{{ b }}</h1>{% include "einkauf/_status.html" with s=b.status text=b.get_status_display %}
+  <div class="ms-auto d-flex gap-2 flex-wrap">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'einkauf:pdf' b.pk %}" target="_blank"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+    {% if darf_aendern %}<a class="btn btn-sm btn-outline-primary" href="{% url 'einkauf:bearbeiten' b.pk %}"><i class="bi bi-pencil"></i> Bearbeiten</a>{% endif %}
+    {% if darf_freigeben and b.status == "ENTWURF" %}
+      <form method="post" action="{% url 'einkauf:aktion' b.pk 'freigeben' %}" onsubmit="return confirm('Freigeben? Danach wird eine Nummer vergeben und der Inhalt gesperrt.')">{% csrf_token %}
+        <button class="btn btn-sm btn-primary"><i class="bi bi-send-check"></i> {% if b.typ == "ANFRAGE" %}Anfrage freigeben{% else %}Bestellen (freigeben){% endif %}</button></form>{% endif %}
+    {% if darf_anlegen and b.typ == "ANFRAGE" and b.status == "ANGEFRAGT" %}
+      <form method="post" action="{% url 'einkauf:aktion' b.pk 'bestellung' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-right-circle"></i> In Bestellung übernehmen</button></form>{% endif %}
+    {% if darf_we %}<a class="btn btn-sm btn-success" href="{% url 'wareneingang:buchen' b.pk %}"><i class="bi bi-box-arrow-in-down"></i> Wareneingang buchen</a>{% endif %}
+    {% if darf_freigeben and b.status != "STORNIERT" and b.status != "GELIEFERT" %}
+      <button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#storno"><i class="bi bi-x-octagon"></i> Stornieren</button>{% endif %}
+    {% if darf_loeschen %}<form method="post" action="{% url 'einkauf:loeschen' b.pk %}" onsubmit="return confirm('Entwurf löschen?')">{% csrf_token %}
+      <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>{% endif %}
+  </div>
+</div>
+<div class="collapse mb-3" id="storno"><div class="card card-body border-danger">
+  <form method="post" action="{% url 'einkauf:aktion' b.pk 'stornieren' %}">{% csrf_token %}{{ storno_form.grund.label_tag }} {{ storno_form.grund }}
+    <button class="btn btn-sm btn-danger mt-2">Storno ausführen</button></form></div></div>
+{% if b.status == "STORNIERT" %}<div class="alert alert-danger">Storniert am {{ b.storniert_am|date:"d.m.Y H:i" }}: {{ b.storno_grund }}</div>{% endif %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-6"><div class="card h-100"><div class="card-body"><dl class="row mb-0 small">
+    <dt class="col-5">Lieferant</dt><dd class="col-7">{{ b.lieferant }}</dd>
+    <dt class="col-5">Datum</dt><dd class="col-7">{{ b.datum|date:"d.m.Y" }}</dd>
+    <dt class="col-5">Liefertermin</dt><dd class="col-7">{{ b.liefertermin|date:"d.m.Y"|default:"–" }}</dd>
+    <dt class="col-5">Lieferung an</dt><dd class="col-7">{{ b.lieferort|default:"–" }}</dd>
+    <dt class="col-5">Zahlung / Lieferung</dt><dd class="col-7">{{ b.zahlungsbedingung|default:"–" }} · {{ b.lieferbedingung|default:"–" }}</dd>
+    <dt class="col-5">Referenz</dt><dd class="col-7">{{ b.ihre_referenz|default:"–" }}</dd>
+    {% if b.anfrage %}<dt class="col-5">Aus Anfrage</dt><dd class="col-7"><a href="{% url 'einkauf:detail' b.anfrage.pk %}">{{ b.anfrage.nummer }}</a></dd>{% endif %}
+  </dl></div></div></div>
+  <div class="col-lg-6"><div class="card h-100"><div class="card-body"><dl class="row mb-0 small">
+    <dt class="col-5">Erstellt</dt><dd class="col-7">{{ b.erstellt_am|date:"d.m.Y H:i" }} · {{ b.erstellt_von|default:"–" }}</dd>
+    <dt class="col-5">Freigegeben</dt><dd class="col-7">{% if b.freigegeben_am %}{{ b.freigegeben_am|date:"d.m.Y H:i" }} · {{ b.freigegeben_von }}{% else %}–{% endif %}</dd>
+    {% if wareneingaenge %}<dt class="col-5">Wareneingänge</dt><dd class="col-7">{% for w in wareneingaenge %}<a href="{% url 'wareneingang:detail' w.pk %}">{{ w.nummer }}</a> ({{ w.datum|date:"d.m.Y" }}){% if not forloop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+  </dl></div></div></div>
+</div>
+<div class="card"><div class="table-responsive"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Pos.</th><th>Artikel</th><th>Bezeichnung</th><th class="text-end">Menge</th><th class="text-end">Geliefert</th><th class="text-end">Offen</th><th class="text-end">Einzelpreis</th><th class="text-end">Rabatt</th><th>Termin</th><th class="text-end">Netto</th><th></th></tr></thead>
+  <tbody>{% for p in positionen %}
+    <tr class="{% if p.ueberfaellig %}table-danger{% endif %}"><td>{{ p.position }}</td><td>{{ p.artikel.artikelnummer }}</td><td>{{ p.bezeichnung }}{% if p.lieferanten_artikelnummer %}<br><small class="text-muted">Lief.-Nr. {{ p.lieferanten_artikelnummer }}</small>{% endif %}</td>
+      <td class="text-end">{{ p.menge|menge }} {{ p.einheit }}</td><td class="text-end">{{ p.geliefert_menge|menge }}</td>
+      <td class="text-end">{% if p.erledigt %}<span class="badge bg-secondary" title="Restmenge abgeschlossen">erledigt</span>{% else %}{{ p.offen_menge|menge }}{% endif %}</td>
+      <td class="text-end">{{ p.einzelpreis|zahl:4 }}</td><td class="text-end">{% if p.rabatt_prozent %}{{ p.rabatt_prozent|zahl }} %{% endif %}</td>
+      <td>{{ p.termin|date:"d.m.Y" }}</td><td class="text-end">{{ p.betrag_netto|euro }}</td>
+      <td>{% if darf_freigeben and b.ist_offen and p.geliefert_menge and p.offen_menge %}
+        <form method="post" action="{% url 'einkauf:aktion' b.pk 'abschliessen' %}" onsubmit="return confirm('Unterlieferung akzeptieren und Restmenge abschließen?')">{% csrf_token %}<input type="hidden" name="position" value="{{ p.pk }}">
+        <button class="btn btn-sm btn-outline-secondary py-0" title="Restmenge abschließen"><i class="bi bi-check2-square"></i></button></form>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="11" class="text-muted text-center">Noch keine Positionen.</td></tr>{% endfor %}</tbody>
+  <tfoot><tr><td colspan="9" class="text-end">Summe netto</td><td class="text-end">{{ b.summe_netto|euro }}</td><td></td></tr>
+    {% for satz, werte in steuer %}<tr><td colspan="9" class="text-end">zzgl. {{ satz|zahl:0 }} % USt auf {{ werte.0|euro }}</td><td class="text-end">{{ werte.1|euro }}</td><td></td></tr>{% endfor %}
+    <tr class="fw-bold"><td colspan="9" class="text-end">Gesamtbetrag</td><td class="text-end">{{ b.summe_brutto|euro }}</td><td></td></tr></tfoot>
+</table></div></div>
+{% endblock %}

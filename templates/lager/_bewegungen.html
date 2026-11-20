@@ -1,0 +1,11 @@
+<table class="table table-sm table-hover mb-0">
+  <thead class="table-light"><tr><th>#</th><th>Datum</th><th>Art</th>{% if mit_artikel %}<th>Artikel</th>{% endif %}<th>Charge</th><th class="text-end">Menge</th><th>Von</th><th>Nach</th>
+    <th class="text-end">Preis</th><th class="text-end">Wert</th><th class="text-end">Bestand danach</th><th>Beleg</th><th>Grund</th><th>Benutzer</th></tr></thead>
+  <tbody>{% for b in bewegungen %}
+    <tr><td class="text-muted">{{ b.pk }}</td><td>{{ b.buchungsdatum|date:"d.m.Y" }}</td><td><span class="badge bg-secondary">{{ b.get_art_display }}</span></td>
+      {% if mit_artikel %}<td><a href="{% url 'lager:artikel' b.artikel_id %}">{{ b.artikel.artikelnummer }}</a></td>{% endif %}
+      <td>{{ b.charge.chargennummer|default:"" }}</td><td class="text-end">{{ b.menge|menge }}</td><td>{{ b.von_text }}</td><td>{{ b.nach_text }}</td>
+      <td class="text-end">{{ b.bewertungspreis|zahl:4 }}</td><td class="text-end">{{ b.wert|euro }}</td><td class="text-end">{{ b.bestand_neu|menge }}</td>
+      <td>{{ b.beleg_nummer }}</td><td class="small">{{ b.grund }}</td><td class="small">{{ b.benutzer|default:"" }}</td></tr>
+  {% empty %}<tr><td colspan="14" class="text-center text-muted">Keine Bewegungen.</td></tr>{% endfor %}</tbody>
+</table>

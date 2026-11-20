@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}{{ titel }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0">{{ titel }}</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'lager:uebersicht' %}"><i class="bi bi-arrow-left"></i> Zurück</a></div>
+<form method="post" class="card"><div class="card-body">{% csrf_token %}{% include "generic/_formfelder.html" %}
+  <button class="btn btn-primary mt-2"><i class="bi bi-check2"></i> Buchen</button></div></form>
+{% endblock %}

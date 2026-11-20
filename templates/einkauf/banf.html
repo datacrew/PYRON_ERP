@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Bestellanforderungen{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-card-checklist"></i> Bestellanforderungen</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'einkauf:index' %}"><i class="bi bi-arrow-left"></i> Einkauf</a></div>
+{% if form %}<div class="card mb-3"><div class="card-header bg-white fw-semibold">Neue Anforderung</div><div class="card-body">
+  <form method="post">{% csrf_token %}{% include "generic/_formfelder.html" %}<button class="btn btn-sm btn-primary mt-2"><i class="bi bi-plus"></i> Anfordern</button></form></div></div>{% endif %}
+<form method="post">{% csrf_token %}
+<div class="card mb-3"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th></th><th>Nr.</th><th>Artikel</th><th class="text-end">Menge</th><th>Bedarf bis</th><th>Begründung</th><th>Von</th><th>Status</th></tr></thead>
+  <tbody>{% for x in banfs %}<tr><td>{% if x.status == "OFFEN" and uebernahme_form %}<input class="form-check-input" type="checkbox" name="banf" value="{{ x.pk }}">{% endif %}</td>
+    <td>{{ x.nummer }}</td><td>{{ x.artikel.artikelnummer }} {{ x.artikel.bezeichnung }}</td><td class="text-end">{{ x.menge|menge }} {{ x.artikel.einheit.code }}</td>
+    <td>{{ x.bedarfstermin|date:"d.m.Y" }}</td><td class="small">{{ x.begruendung }}</td><td class="small">{{ x.angefordert_von|default:"" }}</td>
+    <td>{{ x.get_status_display }}{% if x.bestellposition %} – <a href="{% url 'einkauf:detail' x.bestellposition.bestellung_id %}">{{ x.bestellposition.bestellung }}</a>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="8" class="text-center text-muted">Keine Anforderungen.</td></tr>{% endfor %}</tbody></table></div>
+{% if uebernahme_form %}<div class="row g-2 align-items-end"><div class="col-auto">{{ uebernahme_form.lieferant.label_tag }}{{ uebernahme_form.lieferant }}</div>
+  <div class="col-auto"><button class="btn btn-outline-primary" name="uebernehmen"><i class="bi bi-cart-plus"></i> Ausgewählte in Bestellentwurf übernehmen</button></div></div>{% endif %}
+</form>
+{% endblock %}

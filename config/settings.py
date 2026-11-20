@@ -28,6 +28,7 @@ ERP_APPS = [
     "apps.core",
     "apps.stammdaten",
     "apps.belege",
+    "apps.lager",
     "apps.einkauf",
     "apps.wareneingang",
     "apps.produktion",

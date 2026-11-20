@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ inventur }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">{{ inventur }} · {{ inventur.lagerort }}</h1>
+  <span class="badge {% if offen %}bg-secondary{% else %}bg-success{% endif %}">{{ inventur.get_status_display }}</span>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'lager:inventur_liste' %}"><i class="bi bi-arrow-left"></i> Zurück</a></div>
+<p class="small text-muted">Stichtag {{ inventur.stichtag|date:"d.m.Y" }} · {{ inventur.bezeichnung }} · Beim Buchen wird die Differenz zwischen Zählmenge und <em>aktuellem</em> Buchbestand als Inventurkorrektur gebucht. Leere Zählmengen werden nicht gebucht.</p>
+<form method="post">{% csrf_token %}{{ formset.management_form }}
+<div class="card mb-3"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Artikel</th><th>Bezeichnung</th><th>Platz</th><th>Charge</th><th>Bestandsart</th><th class="text-end">Buchbestand</th><th style="width:160px">Gezählt</th><th class="text-end">{% if offen %}Abweichung{% else %}Gebuchte Differenz{% endif %}</th></tr></thead>
+  <tbody>{% for f in formset %}{% with p=f.instance %}
+    <tr><td>{{ p.artikel.artikelnummer }}{{ f.id }}</td><td>{{ p.artikel.bezeichnung }}</td><td>{{ p.lagerplatz.code|default:"" }}</td><td>{{ p.charge.chargennummer|default:"" }}</td>
+      <td>{{ p.get_bestandsart_display }}</td><td class="text-end">{{ p.sollmenge|menge }} {{ p.artikel.einheit.code }}</td>
+      <td>{% if offen and darf_zaehlen %}{{ f.istmenge }}{% for e in f.istmenge.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}{% else %}{{ p.istmenge|menge }}{% endif %}</td>
+      <td class="text-end">{% if offen %}{{ p.abweichung|menge }}{% else %}{{ p.differenz|menge }}{% endif %}</td></tr>
+  {% endwith %}{% empty %}<tr><td colspan="8" class="text-center text-muted">Keine Positionen (Lagerort ohne Bestand).</td></tr>{% endfor %}</tbody></table></div>
+{% if offen %}<div class="d-flex gap-2">
+  {% if darf_zaehlen %}<button class="btn btn-outline-primary" name="speichern"><i class="bi bi-save"></i> Zählung speichern</button>{% endif %}
+  {% if darf_buchen %}<button class="btn btn-success" name="buchen" onclick="return confirm('Inventur buchen? Differenzen werden als Inventurkorrektur ins Journal gebucht.')"><i class="bi bi-check2-all"></i> Inventur buchen</button>{% endif %}
+</div>{% endif %}
+</form>
+{% endblock %}

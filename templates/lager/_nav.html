@@ -1,0 +1,13 @@
+{% hat_recht "lager" "anlegen" as darf_buchen %}
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'lager:uebersicht' %}"><i class="bi bi-boxes"></i> Bestände</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'lager:journal' %}"><i class="bi bi-journal-text"></i> Bewegungsjournal</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'lager:inventur_liste' %}"><i class="bi bi-clipboard-check"></i> Inventur</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'lager:lagerort_liste' %}"><i class="bi bi-building"></i> Lagerorte</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'lager:dispo_liste' %}"><i class="bi bi-sliders"></i> Dispositionsdaten</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'lager:charge_liste' %}"><i class="bi bi-upc"></i> Chargen</a>
+  {% if darf_buchen %}<span class="ms-auto"></span>
+  <a class="btn btn-sm btn-success" href="{% url 'lager:buchung' 'zugang' %}{% if artikel_pk %}?artikel={{ artikel_pk }}{% endif %}"><i class="bi bi-plus-circle"></i> Zugang</a>
+  <a class="btn btn-sm btn-warning" href="{% url 'lager:buchung' 'abgang' %}{% if artikel_pk %}?artikel={{ artikel_pk }}{% endif %}"><i class="bi bi-dash-circle"></i> Abgang</a>
+  <a class="btn btn-sm btn-primary" href="{% url 'lager:umbuchung' %}{% if artikel_pk %}?artikel={{ artikel_pk }}{% endif %}"><i class="bi bi-arrow-left-right"></i> Umbuchung</a>{% endif %}
+</div>

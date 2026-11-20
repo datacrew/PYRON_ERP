@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Bewegungsjournal{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3"><i class="bi bi-journal-text"></i> Bewegungsjournal</h1>
+{% include "lager/_nav.html" %}
+<form class="row g-2 mb-3" method="get">
+  <div class="col-auto"><input class="form-control form-control-sm" name="q" value="{{ f.q }}" placeholder="Artikel, Charge, Beleg …"></div>
+  <div class="col-auto"><select class="form-select form-select-sm" name="art"><option value="">alle Arten</option>{% for k, v in arten %}<option value="{{ k }}" {% if f.art == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><input type="date" class="form-control form-control-sm" name="von" value="{{ f.von }}"></div>
+  <div class="col-auto"><input type="date" class="form-control form-control-sm" name="bis" value="{{ f.bis }}"></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Filtern</button></div>
+</form>
+<div class="alert alert-light border small py-2"><i class="bi bi-shield-lock"></i> Das Journal ist unveränderlich (Datenbank-Trigger). Korrekturen erfolgen ausschließlich über Gegenbuchungen.</div>
+<div class="card"><div class="table-responsive">{% include "lager/_bewegungen.html" with bewegungen=page_obj mit_artikel=True %}</div></div>
+<div class="mt-2">{% include "generic/_seiten.html" %}</div>
+{% endblock %}

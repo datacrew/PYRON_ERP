@@ -22,6 +22,15 @@ EREIGNISSE = {
     "beleg.freigegeben": "Beleg wurde freigegeben und hat seine Nummer erhalten",
     "beleg.festgeschrieben": "Beleg wurde GoBD-konform festgeschrieben und archiviert",
     "beleg.storniert": "Beleg wurde storniert",
+    "lager.bewegung": "Lagerbewegung gebucht (bewegung, benutzer)",
+    "bestand.unterschritten": "Frei verfügbarer Bestand unter Meldebestand (artikel, verfuegbar, meldebestand)",
+    "inventur.gebucht": "Inventur gebucht (inventur, benutzer)",
+    "bestellung.freigegeben": "Einkaufsbestellung/Anfrage freigegeben, Nummer vergeben (bestellung, benutzer)",
+    "bestellung.storniert": "Einkaufsbestellung storniert (bestellung, benutzer)",
+    "bestellung.status": "Lieferstatus einer Bestellung geändert (bestellung, status)",
+    "wareneingang.gebucht": "Wareneingang gebucht – Grundlage für spätere Rechnungsprüfung / WE-RE-Verrechnung "
+                            "(wareneingang, bestellung, wert, benutzer)",
+    "wareneingang.qs_entschieden": "QS-Entscheid zu einer WE-Position (position, entscheid, ruecksendung, benutzer)",
 }
 
 

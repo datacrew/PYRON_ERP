@@ -38,8 +38,46 @@ def dashboard(request):
         kennzahlen["Belege im Entwurf"] = Beleg.objects.filter(status=Beleg.Status.ENTWURF).count()
         kennzahlen["Festgeschriebene Belege"] = Beleg.objects.filter(status=Beleg.Status.FESTGESCHRIEBEN).count()
         letzte_belege = Beleg.objects.select_related("partner").order_by("-pk")[:8]
-    return render(request, "core/dashboard.html",
-                  {"kacheln": kacheln, "kennzahlen": kennzahlen, "letzte_belege": letzte_belege})
+    kennzahlen.update(_warenfluss_kennzahlen(request.user))
+    return render(request, "core/dashboard.html", {"kacheln": kacheln, "kennzahlen": kennzahlen,
+                                                   "letzte_belege": letzte_belege,
+                                                   "hinweise": _modul_hinweise(request, kacheln)})
+
+
+def _modul_hinweise(request, kacheln):
+    """Sammelt Hinweise der Module (AppConfig.erp_modul["dashboard"] = Pfad zu einer Funktion(request))."""
+    from django.apps import apps
+    from django.utils.module_loading import import_string
+
+    erlaubt = {k["modul"].code for k in kacheln}
+    hinweise = []
+    for cfg in apps.get_app_configs():
+        info = getattr(cfg, "erp_modul", None) or {}
+        if info.get("dashboard") and info["code"] in erlaubt:
+            for h in import_string(info["dashboard"])(request)[:8]:
+                hinweise.append({**h, "modul": info["name"]})
+    return hinweise
+
+
+def _warenfluss_kennzahlen(user):
+    werte = {}
+    if hat_recht(user, "einkauf"):
+        from apps.einkauf.models import Bestellung
+
+        werte["Offene Bestellungen"] = Bestellung.objects.filter(
+            typ=Bestellung.Typ.BESTELLUNG, status__in=Bestellung.OFFENE_STATI).count()
+    if hat_recht(user, "wareneingang"):
+        from apps.wareneingang.models import WEPosition
+
+        werte["Offene QS-Prüfungen"] = WEPosition.objects.filter(qs_status=WEPosition.QS.OFFEN).count()
+    if hat_recht(user, "lager"):
+        from django.db.models import F, Sum
+
+        from apps.lager.models import ArtikelLager
+
+        wert = ArtikelLager.objects.aggregate(s=Sum(F("bestand_gesamt") * F("durchschnittspreis")))["s"] or 0
+        werte["Lagerwert"] = f"{wert:,.2f} €".replace(",", "§").replace(".", ",").replace("§", ".")
+    return werte
 
 
 @login_required

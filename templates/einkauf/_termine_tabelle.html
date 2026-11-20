@@ -1,0 +1,10 @@
+<table class="table table-sm table-hover mb-0">
+  <thead class="table-light"><tr><th>Termin</th><th>Bestellung</th><th>Lieferant</th><th>Pos.</th><th>Artikel</th><th class="text-end">Bestellt</th><th class="text-end">Geliefert</th><th class="text-end">Offen</th><th></th></tr></thead>
+  <tbody>{% for p in positionen %}
+    <tr class="{% if p.ueberfaellig %}table-danger{% endif %}"><td>{{ p.termin|date:"d.m.Y"|default:"–" }}</td>
+      <td><a href="{% url 'einkauf:detail' p.bestellung_id %}">{{ p.bestellung.nummer }}</a></td><td>{{ p.bestellung.lieferant.name }}</td><td>{{ p.position }}</td>
+      <td>{{ p.artikel.artikelnummer }} {{ p.bezeichnung }}</td><td class="text-end">{{ p.menge|menge }} {{ p.einheit }}</td>
+      <td class="text-end">{{ p.geliefert_menge|menge }}</td><td class="text-end fw-semibold">{{ p.offen_menge|menge }}</td>
+      <td>{% if p.ueberfaellig %}<span class="badge bg-danger">überfällig</span>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="9" class="text-center text-muted">Keine offenen Bestellpositionen.</td></tr>{% endfor %}</tbody>
+</table>

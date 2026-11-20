@@ -2,8 +2,6 @@ from django.apps import AppConfig
 
 
 class EinkaufConfig(AppConfig):
-    """Gerüst – fachliche Umsetzung folgt laut docs/ROADMAP.md."""
-
     name = "apps.einkauf"
     label = "einkauf"
     verbose_name = "Einkauf"
@@ -11,9 +9,10 @@ class EinkaufConfig(AppConfig):
     erp_modul = {
         "code": "einkauf",
         "name": "Einkauf",
-        "beschreibung": "Anfragen, Bestellungen und Lieferantenmanagement für Rohstoffe, Betriebsmittel und Handelsware",
+        "beschreibung": "Bestellanforderungen, Anfragen und Bestellungen an Lieferanten, Liefertermine, "
+                        "Bestellvorschläge aus Meldebeständen",
         "icon": "bi-cart",
         "reihenfolge": 30,
-        "url_name": "",
-        "geplant": ['Bestellvorschläge aus Mindestbeständen und Bedarfen', 'Anfragen und Preisvergleich', 'Bestellungen mit Freigabestufen', 'Lieferantenbewertung', 'Rahmenverträge'],
+        "url_name": "einkauf:index",
+        "geplant": [],
     }

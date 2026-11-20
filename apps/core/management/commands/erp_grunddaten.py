@@ -100,6 +100,10 @@ NUMMERNKREISE = [
     ("BELEG_LIEFERSCHEIN", "Lieferscheine", "LS-", True, 5), ("BELEG_RECHNUNG", "Rechnungen", "RE-", True, 5),
     ("BELEG_GUTSCHRIFT", "Gutschriften", "GS-", True, 5), ("BELEG_ANFRAGE", "Anfragen", "AF-", True, 5),
     ("BELEG_BESTELLUNG", "Bestellungen", "BE-", True, 5), ("BELEG_WARENEINGANG", "Wareneingänge", "WE-", True, 5),
+    # Phase 2 – Warenfluss (eigene Tabellen, daher eigene Kreise)
+    ("EK_BANF", "Bestellanforderungen", "BA-", True, 5), ("EK_ANFRAGE", "Einkaufsanfragen", "EA-", True, 5),
+    ("EK_BESTELLUNG", "Einkaufsbestellungen", "EK-", True, 5),
+    ("WARENEINGANG", "Wareneingangsbuchungen", "WEB-", True, 5), ("INVENTUR", "Inventuren", "INV-", True, 4),
 ]
 
 L, A, AE, F, D = AKTION_CODES  # lesen, anlegen, aendern, freigeben, loeschen
@@ -107,17 +111,19 @@ ALLE = AKTION_CODES
 ROLLEN = {
     "Administrator": ("Vollzugriff auf alle Module inkl. Verwaltung", {"*": ALLE}),
     "Einkauf": ("Einkauf, Lieferanten- und Artikelpflege, Bestellungen",
-                {"stammdaten": [L, A, AE], "einkauf": ALLE, "wareneingang": [L], "belege": [L, A, AE, F],
-                 "reporting": [L]}),
+                {"stammdaten": [L, A, AE], "einkauf": ALLE, "wareneingang": [L, A], "lager": [L],
+                 "belege": [L, A, AE, F], "reporting": [L]}),
     "Vertrieb": ("Kundenbetreuung, Angebote, Aufträge, Rechnungen",
                  {"stammdaten": [L, A, AE], "vertrieb": ALLE, "belege": [L, A, AE, F, D], "versand": [L],
                   "reporting": [L]}),
     "Produktion": ("Fertigungsaufträge, Stücklisten, Arbeitspläne, Zeiterfassung",
-                   {"stammdaten": [L, A, AE], "produktion": ALLE, "wareneingang": [L]}),
-    "Lager": ("Wareneingang und Versand", {"stammdaten": [L], "wareneingang": ALLE, "versand": ALLE,
-                                           "belege": [L]}),
+                   {"stammdaten": [L, A, AE], "produktion": ALLE, "wareneingang": [L], "lager": [L, A]}),
+    "Lager": ("Lagerbestand, Wareneingang inkl. Qualitätsprüfung und Versand",
+              {"stammdaten": [L], "lager": ALLE, "wareneingang": ALLE, "versand": ALLE, "einkauf": [L],
+               "belege": [L]}),
     "Buchhaltung": ("Finanzbuchhaltung, Belegprüfung und Festschreibung",
-                    {"stammdaten": [L, AE], "fibu": ALLE, "belege": [L, F], "reporting": [L]}),
+                    {"stammdaten": [L, AE], "fibu": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
+                     "einkauf": [L], "wareneingang": [L]}),
     "Nur Lesen": ("Lesezugriff auf alle Fachmodule", {"*-verwaltung": [L]}),
 }
 
@@ -154,14 +160,15 @@ class Command(BaseCommand):
         module = {m.code: m for m in Modul.objects.all()}
         for name, (beschreibung, rechte) in ROLLEN.items():
             rolle, angelegt = Rolle.objects.get_or_create(name=name, defaults={"beschreibung": beschreibung})
-            if not angelegt:
-                continue
             if "*" in rechte:
                 rechte = {code: rechte["*"] for code in module}
             elif "*-verwaltung" in rechte:
                 rechte = {code: rechte["*-verwaltung"] for code in module if code != "verwaltung"}
+            # Neue Rollen erhalten alle Rechte; bestehende nur Einträge für neu hinzugekommene Module –
+            # vom Administrator angepasste Rechte bleiben unangetastet.
+            vorhanden = set() if angelegt else set(rolle.rechte.values_list("modul__code", flat=True))
             for code, aktionen in rechte.items():
-                if code in module:
+                if code in module and code not in vorhanden:
                     Recht.objects.create(rolle=rolle, modul=module[code], **{a: a in aktionen for a in ALLE})
         if not BelegVorlage.objects.exists():
             html = (settings.BASE_DIR / "templates/belege/pdf/standard.html").read_text(encoding="utf-8")

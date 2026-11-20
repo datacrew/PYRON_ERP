@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Bestellungen{% endblock %}
+{% block content %}
+{% hat_recht "einkauf" "anlegen" as darf_anlegen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-cart-check"></i> Bestellungen &amp; Anfragen</h1>
+  <div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="{% url 'einkauf:index' %}"><i class="bi bi-arrow-left"></i> Einkauf</a>
+  {% if darf_anlegen %}<a class="btn btn-sm btn-primary" href="{% url 'einkauf:neu' %}"><i class="bi bi-plus"></i> Neue Bestellung</a>{% endif %}</div></div>
+<form class="row g-2 mb-3" method="get">
+  <div class="col-auto"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Nummer, Lieferant …"></div>
+  <div class="col-auto"><select class="form-select form-select-sm" name="typ"><option value="">alle Typen</option>{% for k, v in typen %}<option value="{{ k }}" {% if request.GET.typ == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><select class="form-select form-select-sm" name="status"><option value="">alle Status</option>{% for k, v in stati %}<option value="{{ k }}" {% if request.GET.status == k %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Filtern</button></div>
+</form>
+<div class="card"><table class="table table-sm table-hover mb-0">
+  <thead class="table-light"><tr><th>Nummer</th><th>Typ</th><th>Lieferant</th><th>Datum</th><th>Liefertermin</th><th>Status</th><th class="text-end">Netto</th></tr></thead>
+  <tbody>{% for b in page_obj %}<tr><td><a href="{% url 'einkauf:detail' b.pk %}">{{ b.nummer|default:"(Entwurf)" }}</a></td><td>{{ b.get_typ_display }}</td><td>{{ b.lieferant.name }}</td>
+    <td>{{ b.datum|date:"d.m.Y" }}</td><td>{{ b.liefertermin|date:"d.m.Y" }}</td><td>{% include "einkauf/_status.html" with s=b.status text=b.get_status_display %}</td><td class="text-end">{{ b.summe_netto|euro }}</td></tr>
+  {% empty %}<tr><td colspan="7" class="text-center text-muted">Keine Einträge.</td></tr>{% endfor %}</tbody></table></div>
+<div class="mt-2">{% include "generic/_seiten.html" %}</div>
+{% endblock %}

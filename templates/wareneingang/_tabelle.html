@@ -1,0 +1,4 @@
+<table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>WE-Nr.</th><th>Datum</th><th>Lieferant</th><th>Bestellung</th><th>Lieferschein</th><th>Hinweise</th></tr></thead>
+<tbody>{% for w in eingaenge %}<tr><td><a href="{% url 'wareneingang:detail' w.pk %}">{{ w.nummer }}</a></td><td>{{ w.datum|date:"d.m.Y" }}</td><td>{{ w.lieferant.name }}</td>
+  <td>{{ w.bestellung.nummer }}</td><td>{{ w.lieferschein_nr }}</td><td class="small">{% if w.hinweise %}<i class="bi bi-exclamation-triangle text-warning"></i> {{ w.hinweise|truncatechars:80 }}{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6" class="text-center text-muted">Noch keine Wareneingänge.</td></tr>{% endfor %}</tbody></table>

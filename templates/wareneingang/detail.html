@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ we }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center flex-wrap gap-2 mb-3"><h1 class="h4 m-0">{{ we }}</h1>
+  {% if we.qs_offen %}<span class="badge bg-warning text-dark">{{ we.qs_offen }} Prüfung(en) offen</span>{% endif %}
+  <div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="{% url 'wareneingang:pdf' we.pk %}" target="_blank"><i class="bi bi-file-earmark-pdf"></i> WE-Beleg (PDF)</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'wareneingang:index' %}"><i class="bi bi-arrow-left"></i> Wareneingang</a></div></div>
+<div class="card mb-3"><div class="card-body"><dl class="row mb-0 small">
+  <dt class="col-sm-2">Lieferant</dt><dd class="col-sm-4">{{ we.lieferant }}</dd>
+  <dt class="col-sm-2">Bestellung</dt><dd class="col-sm-4"><a href="{% url 'einkauf:detail' we.bestellung_id %}">{{ we.bestellung.nummer }}</a> ({{ we.bestellung.get_status_display }})</dd>
+  <dt class="col-sm-2">Lieferschein</dt><dd class="col-sm-4">{{ we.lieferschein_nr }}</dd>
+  <dt class="col-sm-2">Eingang / Lager</dt><dd class="col-sm-4">{{ we.datum|date:"d.m.Y" }} · {{ we.lagerort }}</dd>
+  <dt class="col-sm-2">Gebucht</dt><dd class="col-sm-4">{{ we.gebucht_am|date:"d.m.Y H:i" }} · {{ we.gebucht_von|default:"–" }}</dd>
+  {% if we.bemerkung %}<dt class="col-sm-2">Bemerkung</dt><dd class="col-sm-4">{{ we.bemerkung }}</dd>{% endif %}
+</dl></div></div>
+{% if we.hinweise %}<div class="alert alert-warning small"><strong><i class="bi bi-exclamation-triangle"></i> Differenzprotokoll</strong><br>{{ we.hinweise|linebreaksbr }}</div>{% endif %}
+<div class="card"><div class="table-responsive"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Pos.</th><th>Artikel</th><th class="text-end">Menge</th><th class="text-end">Offen vorher</th><th>Charge</th><th>Platz</th><th class="text-end">Preis</th><th class="text-end">Wert</th><th>Hinweis</th><th>Prüfstatus</th><th style="min-width:260px">QS-Entscheid</th></tr></thead>
+  <tbody>{% for p in positionen %}<tr>
+    <td>{{ p.bestellposition.position }}</td><td>{{ p.artikel.artikelnummer }} {{ p.artikel.bezeichnung }}</td>
+    <td class="text-end">{{ p.menge|menge }} {{ p.einheit }}</td><td class="text-end">{{ p.offen_vorher|menge }}</td>
+    <td>{% if p.charge %}{{ p.charge.chargennummer }}{% if p.charge.lieferantencharge %}<br><small class="text-muted">Lief.: {{ p.charge.lieferantencharge }}</small>{% endif %}{% if p.charge.mhd %}<br><small class="text-muted">MHD {{ p.charge.mhd|date:"d.m.Y" }}</small>{% endif %}{% endif %}</td>
+    <td>{{ p.lagerplatz.code|default:"" }}</td><td class="text-end">{{ p.lagerbewegung.bewertungspreis|zahl:4 }}</td><td class="text-end">{{ p.wert|euro }}</td>
+    <td class="small">{{ p.hinweis }}</td><td>{% include "wareneingang/_qs.html" %}{% if p.qs_bemerkung %}<div class="small text-muted">{{ p.qs_bemerkung }}{% if p.qs_von %} · {{ p.qs_von }}{% endif %}</div>{% endif %}</td>
+    <td>{% if darf_qs and p.qs_status != "FREIGEGEBEN" and not p.zuruckgesendet %}
+      <form method="post" class="d-flex flex-column gap-1">{% csrf_token %}{{ qs_form.bemerkung }}
+        <div class="form-check small"><input class="form-check-input" type="checkbox" name="ruecksenden" id="r{{ p.pk }}"><label class="form-check-label" for="r{{ p.pk }}">bei Sperre zurücksenden</label></div>
+        <div class="d-flex gap-1"><button class="btn btn-sm btn-success py-0" formaction="{% url 'wareneingang:qs' p.pk 'freigeben' %}"><i class="bi bi-check2"></i> Freigeben</button>
+        <button class="btn btn-sm btn-danger py-0" formaction="{% url 'wareneingang:qs' p.pk 'sperren' %}"><i class="bi bi-slash-circle"></i> Sperren/Reklamieren</button></div></form>{% endif %}</td></tr>
+  {% endfor %}</tbody></table></div></div>
+{% endblock %}

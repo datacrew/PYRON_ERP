@@ -78,7 +78,11 @@ class RechteTests(TestCase):
                      "core:module", "core:audit", "core:nummernkreis_liste", "core:mandant",
                      "stammdaten:index", "stammdaten:partner_liste", "stammdaten:konto_liste",
                      "stammdaten:stueckliste_liste", "stammdaten:arbeitsplan_liste", "belege:liste",
-                     "belege:neu", "belege:vorlage_liste", "belege:kette"]:
+                     "belege:neu", "belege:vorlage_liste", "belege:kette",
+                     "lager:uebersicht", "lager:journal", "lager:umbuchung", "lager:inventur_liste",
+                     "lager:lagerort_liste", "lager:dispo_liste", "lager:charge_liste",
+                     "einkauf:index", "einkauf:liste", "einkauf:neu", "einkauf:termine", "einkauf:vorschlag",
+                     "einkauf:banf_liste", "wareneingang:index", "wareneingang:liste"]:
             self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
         self.assertEqual(self.client.get(reverse("core:platzhalter", args=["produktion"])).status_code, 200)
 

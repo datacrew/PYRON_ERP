@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Wareneingang{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-box-arrow-in-down"></i> Wareneingang</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'wareneingang:liste' %}"><i class="bi bi-list-ul"></i> Alle Wareneingänge</a></div>
+<div class="row g-3">
+<div class="col-xl-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Offene Bestellungen – Wareneingang buchen</div>
+<table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Bestellung</th><th>Lieferant</th><th>Termin</th><th>Status</th><th></th></tr></thead>
+<tbody>{% for b in bestellungen %}<tr><td><a href="{% url 'einkauf:detail' b.pk %}">{{ b.nummer }}</a></td><td>{{ b.lieferant.name }}</td><td>{{ b.liefertermin|date:"d.m.Y" }}</td>
+  <td>{% include "einkauf/_status.html" with s=b.status text=b.get_status_display %}</td>
+  <td class="text-end">{% if darf_buchen %}<a class="btn btn-sm btn-success py-0" href="{% url 'wareneingang:buchen' b.pk %}"><i class="bi bi-box-arrow-in-down"></i> buchen</a>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5" class="text-center text-muted">Keine offenen Bestellungen.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="col-xl-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Offene Qualitätsprüfungen (Sperrbestand)</div>
+<table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>WE</th><th>Artikel</th><th>Charge</th><th class="text-end">Menge</th><th>Lieferant</th></tr></thead>
+<tbody>{% for p in pruefungen %}<tr><td><a href="{% url 'wareneingang:detail' p.wareneingang_id %}">{{ p.wareneingang.nummer }}</a></td><td>{{ p.artikel.artikelnummer }} {{ p.artikel.bezeichnung }}</td>
+  <td>{{ p.charge.chargennummer|default:"" }}</td><td class="text-end">{{ p.menge|menge }} {{ p.einheit }}</td><td>{{ p.wareneingang.lieferant.name }}</td></tr>
+{% empty %}<tr><td colspan="5" class="text-center text-muted">Keine offenen Prüfungen.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+<div class="card mt-3"><div class="card-header bg-white fw-semibold">Letzte Wareneingänge</div>{% include "wareneingang/_tabelle.html" with eingaenge=letzte %}</div>
+{% endblock %}

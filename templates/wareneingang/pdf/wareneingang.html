@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<style>
+  /* DIN-5008-nahes Layout (Form B): Anschriftfeld 45 mm von oben, 20 mm von links, 85 × 45 mm */
+  @page { size: A4; margin: 27mm 20mm 32mm 25mm;
+    @bottom-left { content: element(fuss); width: 147mm; }
+    @bottom-right { content: "Seite " counter(page) " von " counter(pages); width: 18mm; white-space: nowrap;
+      font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7.5pt; color: #555; text-align: right; } }
+  body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 9.5pt; color: #111; }
+  .absender-kopf { position: absolute; top: -17mm; right: 0; text-align: right; font-size: 14pt; font-weight: bold; }
+  .anschrift { position: absolute; top: 18mm; left: -5mm; width: 85mm; height: 45mm; }
+  .ruecksende { font-size: 7pt; border-bottom: .3pt solid #555; padding-bottom: 1mm; margin-bottom: 3mm; color: #444; }
+  .info { position: absolute; top: 23mm; right: 0; width: 70mm; font-size: 8.5pt; }
+  .info td { padding: .4mm 0; } .info td:first-child { color: #555; padding-right: 3mm; }
+  .inhalt { margin-top: 78mm; }
+  h1 { font-size: 13pt; margin: 0 0 4mm; }
+  table.pos { width: 100%; border-collapse: collapse; margin-top: 4mm; }
+  table.pos th { border-bottom: .8pt solid #111; text-align: left; font-size: 8.5pt; padding: 1.2mm 1mm; }
+  table.pos td { border-bottom: .3pt solid #bbb; padding: 1.2mm 1mm; vertical-align: top; }
+  .r { text-align: right; white-space: nowrap; }
+  table.summen { width: 80mm; margin-left: auto; margin-top: 3mm; border-collapse: collapse; }
+  table.summen td { padding: .8mm 1mm; } .gesamt td { border-top: .8pt solid #111; font-weight: bold; font-size: 10.5pt; }
+  .fuss { position: running(fuss); font-size: 6.5pt; color: #555; width: 147mm; }
+  .fuss td { vertical-align: top; padding-right: 2.5mm; white-space: nowrap; }
+  .wasserzeichen { position: fixed; top: 110mm; left: 10mm; font-size: 70pt; color: rgba(200,0,0,.12); transform: rotate(-30deg); }
+</style></head>
+<body>
+<div class="fuss"><table><tr>
+  <td>{{ mandant.name }}<br>{{ mandant.strasse }}<br>{{ mandant.plz }} {{ mandant.ort }}</td>
+  <td>{% if mandant.telefon %}Tel. {{ mandant.telefon }}<br>{% endif %}{{ mandant.email }}<br>{{ mandant.web }}</td>
+  <td>{% if mandant.geschaeftsfuehrer %}Geschäftsführung: {{ mandant.geschaeftsfuehrer }}<br>{% endif %}{{ mandant.handelsregister }}<br>{% if mandant.ust_id %}USt-IdNr.: {{ mandant.ust_id }}{% endif %}</td>
+  <td>{{ mandant.bank }}<br>{% if mandant.iban %}IBAN: {{ mandant.iban }}<br>BIC: {{ mandant.bic }}{% endif %}</td>
+</tr></table></div>
+
+<div class="absender-kopf">{{ mandant.name }}</div>
+<table class="info" style="top:0">
+  <tr><td>WE-Nr.</td><td><strong>{{ we.nummer }}</strong></td></tr>
+  <tr><td>Eingangsdatum</td><td>{{ we.datum|date:"d.m.Y" }}</td></tr>
+  <tr><td>Bestellung</td><td>{{ we.bestellung.nummer }}</td></tr>
+  <tr><td>Lieferschein</td><td>{{ we.lieferschein_nr }}</td></tr>
+  <tr><td>Lagerort</td><td>{{ we.lagerort }}</td></tr>
+  <tr><td>Gebucht von</td><td>{{ we.gebucht_von.get_full_name|default:we.gebucht_von.username|default:"–" }}</td></tr>
+</table>
+<div style="margin-top:2mm; width:90mm"><strong>Lieferant</strong><br>{{ we.lieferant.nummer }} {{ we.lieferant.name }}</div>
+<div style="margin-top:30mm">
+  <h1>Wareneingangsbeleg {{ we.nummer }}</h1>
+  <table class="pos">
+    <thead><tr><th>Pos.</th><th>Artikel</th><th class="r">Menge</th><th>Charge / MHD</th><th>Platz</th><th class="r">Preis</th><th class="r">Wert</th><th>QS</th></tr></thead>
+    <tbody>{% for p in positionen %}
+      <tr><td>{{ p.bestellposition.position }}</td><td>{{ p.artikel.artikelnummer }}<br><small>{{ p.artikel.bezeichnung }}</small></td>
+        <td class="r">{{ p.menge|menge }} {{ p.einheit }}<br><small>offen war {{ p.offen_vorher|menge }}</small></td>
+        <td>{{ p.charge.chargennummer|default:"–" }}{% if p.charge.lieferantencharge %}<br><small>Lief.: {{ p.charge.lieferantencharge }}</small>{% endif %}{% if p.charge.mhd %}<br><small>MHD {{ p.charge.mhd|date:"d.m.Y" }}</small>{% endif %}</td>
+        <td>{{ p.lagerplatz.code|default:"" }}</td><td class="r">{{ p.lagerbewegung.bewertungspreis|zahl:4 }}</td><td class="r">{{ p.wert|euro }}</td>
+        <td>{{ p.get_qs_status_display }}{% if p.qs_erforderlich %}<br><small>Prüfpflicht</small>{% endif %}</td></tr>
+      {% if p.hinweis %}<tr><td></td><td colspan="7"><small>&#9888; {{ p.hinweis }}</small></td></tr>{% endif %}
+    {% endfor %}</tbody>
+  </table>
+  <table class="summen"><tr class="gesamt"><td>Warenwert (Zugang)</td><td class="r">{{ we.wert|euro }}</td></tr></table>
+  {% if we.bemerkung %}<p>Bemerkung: {{ we.bemerkung|linebreaksbr }}</p>{% endif %}
+  <table style="width:100%; margin-top:18mm; font-size:8.5pt"><tr>
+    <td style="width:45%; border-top:.5pt solid #111; padding-top:1mm">Datum, Unterschrift Warenannahme</td><td></td>
+    <td style="width:45%; border-top:.5pt solid #111; padding-top:1mm">Datum, Unterschrift Qualitätsprüfung</td></tr></table>
+</div>
+</body></html>

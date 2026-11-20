@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Bestellvorschlag{% endblock %}
+{% block content %}
+{% hat_recht "einkauf" "anlegen" as darf_anlegen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-lightbulb"></i> Bestellvorschlag</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'einkauf:index' %}"><i class="bi bi-arrow-left"></i> Einkauf</a></div>
+<p class="small text-muted">Artikel, deren frei verfügbarer Bestand zuzüglich offener Bestellmengen (inkl. Entwürfe) unter dem Meldebestand liegt.
+  Vorschlagsmenge = max(Standard-Bestellmenge, Meldebestand − frei − offen). Je bevorzugtem Lieferanten entsteht ein Bestellentwurf.</p>
+<form method="post">{% csrf_token %}
+<div class="card mb-3"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th></th><th>Artikel</th><th class="text-end">Frei</th><th class="text-end">Offen bestellt</th><th class="text-end">Meldebestand</th><th class="text-end">Mindestbestand</th><th class="text-end">Vorschlag</th><th>Lieferant</th><th>Termin</th></tr></thead>
+  <tbody>{% for v in vorschlaege %}
+    <tr class="{% if v.kritisch %}table-danger{% endif %}"><td><input class="form-check-input" type="checkbox" name="artikel" value="{{ v.artikel.pk }}" {% if v.lieferant %}checked{% else %}disabled{% endif %}></td>
+      <td>{{ v.artikel.artikelnummer }} {{ v.artikel.bezeichnung }}</td><td class="text-end">{{ v.frei|menge }}</td><td class="text-end">{{ v.offen|menge }}</td>
+      <td class="text-end">{{ v.lagerdaten.meldebestand|menge }}</td><td class="text-end">{{ v.lagerdaten.mindestbestand|menge }}</td>
+      <td class="text-end fw-semibold">{{ v.menge|menge }} {{ v.artikel.einheit.code }}</td>
+      <td>{{ v.lieferant.name|default:"<span class='text-danger'>kein bevorzugter Lieferant</span>" }}</td><td>{{ v.termin|date:"d.m.Y" }}</td></tr>
+  {% empty %}<tr><td colspan="9" class="text-center text-muted">Kein Bestellbedarf – alle Meldebestände sind gedeckt.</td></tr>{% endfor %}</tbody></table></div>
+{% if vorschlaege and darf_anlegen %}<button class="btn btn-primary"><i class="bi bi-cart-plus"></i> Bestellentwürfe erzeugen</button>{% endif %}
+</form>
+{% endblock %}

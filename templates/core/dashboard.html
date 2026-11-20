@@ -11,6 +11,13 @@
   {% endfor %}
 </div>
 {% endif %}
+{% if hinweise %}
+<h2 class="h6 text-uppercase text-muted mb-2">Hinweise</h2>
+<div class="mb-4">{% for h in hinweise %}
+  <div class="alert alert-{{ h.stufe }} py-2 mb-2 small"><i class="bi bi-exclamation-triangle me-1"></i><strong>{{ h.modul }}:</strong>
+    {% if h.url %}<a href="{{ h.url }}" class="alert-link">{{ h.text }}</a>{% else %}{{ h.text }}{% endif %}</div>{% endfor %}
+</div>
+{% endif %}
 <h2 class="h6 text-uppercase text-muted mb-2">Module</h2>
 <div class="row g-3 mb-4">
   {% for k in kacheln %}

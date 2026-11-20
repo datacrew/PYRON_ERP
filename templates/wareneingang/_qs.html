@@ -1,0 +1,1 @@
+<span class="badge {% if p.qs_status == 'OFFEN' %}bg-warning text-dark{% elif p.qs_status == 'FREIGEGEBEN' %}bg-success{% else %}bg-danger{% endif %}">{{ p.get_qs_status_display }}</span>{% if p.zuruckgesendet %} <span class="badge bg-dark">zurückgesendet</span>{% endif %}

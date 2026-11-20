@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Bestellung{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0">{% if bestellung.pk %}{{ bestellung }} bearbeiten{% else %}Neue {{ bestellung.get_typ_display }}{% endif %}</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% if bestellung.pk %}{% url 'einkauf:detail' bestellung.pk %}{% else %}{% url 'einkauf:liste' %}{% endif %}"><i class="bi bi-arrow-left"></i> Zurück</a></div>
+<form method="post">{% csrf_token %}
+  <div class="card mb-3"><div class="card-header bg-white fw-semibold">Kopfdaten</div><div class="card-body">{% include "generic/_formfelder.html" %}</div></div>
+  <div class="card mb-3"><div class="card-header bg-white fw-semibold">Positionen</div><div class="card-body">
+    <div class="form-text mb-2">Leere Felder (Bezeichnung, Einheit, Einkaufspreis, USt) werden aus dem Artikelstamm übernommen. Ohne Positions-Liefertermin gilt der Termin aus dem Kopf.</div>
+    {% include "generic/_formset.html" %}</div></div>
+  <button class="btn btn-primary"><i class="bi bi-save"></i> Speichern</button>
+</form>
+{% endblock %}

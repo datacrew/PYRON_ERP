@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Wareneingang buchen{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0">Wareneingang zu {{ b.nummer }} · {{ b.lieferant.name }}</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'einkauf:detail' b.pk %}"><i class="bi bi-arrow-left"></i> Bestellung</a></div>
+<form method="post">{% csrf_token %}
+<div class="card mb-3"><div class="card-header bg-white fw-semibold">Lieferung</div><div class="card-body">{% include "generic/_formfelder.html" with form=kopf %}</div></div>
+<div class="card mb-3"><div class="card-header bg-white fw-semibold">Positionen</div><div class="card-body">
+  <div class="form-text mb-2">Liefermenge ist mit der offenen Menge vorbelegt – für Teillieferungen anpassen, 0 = nicht geliefert. Über-/Unterlieferungen und Preisabweichungen werden protokolliert.
+    Mit QS-Prüfung wird in den <strong>Sperrbestand</strong> gebucht (bei Artikeln mit Prüfpflicht immer).</div>
+  {{ formset.management_form }}{% if formset.non_form_errors %}<div class="alert alert-danger py-2">{{ formset.non_form_errors|join:" " }}</div>{% endif %}
+  <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+    <thead class="table-light"><tr><th>Pos.</th><th>Artikel</th><th class="text-end">Offen</th><th>Liefermenge</th><th>Charge</th><th>Lief.-Charge</th><th>MHD</th><th>Herstelldatum</th><th>Platz</th><th>Preis lt. LS<br><small class="text-muted">Bestellpreis</small></th><th>QS</th><th>Rest abschl.</th></tr></thead>
+    <tbody>{% for p, f in zeilen %}<tr>
+      <td>{{ p.position }}{{ f.bestellposition }}</td>
+      <td>{{ p.artikel.artikelnummer }} {{ p.bezeichnung }}{% if p.artikel.chargenpflicht %} <span class="badge bg-info text-dark">Charge</span>{% endif %}{% if f.qs_pflicht %} <span class="badge bg-warning text-dark">QS-Pflicht</span>{% endif %}</td>
+      <td class="text-end">{{ p.offen_menge|menge }} {{ p.einheit }}</td>
+      {% for feld in f.visible_fields %}{% if feld.name != "lieferpreis" and feld.name != "qs_pruefen" and feld.name != "restmenge_abschliessen" %}<td style="min-width:{% if feld.name == 'menge' %}100{% else %}110{% endif %}px">{{ feld }}{% for e in feld.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</td>{% endif %}{% endfor %}
+      <td style="min-width:110px">{{ f.lieferpreis }}<small class="text-muted">{{ p.nettopreis|zahl:4 }}</small></td>
+      <td>{{ f.qs_pruefen }}</td><td>{{ f.restmenge_abschliessen }}</td></tr>
+      {% if f.non_field_errors %}<tr><td colspan="12" class="text-danger small">{{ f.non_field_errors|join:" " }}</td></tr>{% endif %}
+    {% empty %}<tr><td colspan="12" class="text-center text-muted">Keine offenen Positionen.</td></tr>{% endfor %}</tbody></table></div>
+</div></div>
+<button class="btn btn-success"><i class="bi bi-box-arrow-in-down"></i> Wareneingang buchen</button>
+</form>
+{% endblock %}
