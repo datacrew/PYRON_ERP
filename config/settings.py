@@ -38,6 +38,9 @@ ERP_APPS = [
     "apps.vertrieb",
     "apps.versand",
     "apps.fibu",
+    "apps.fibu_bank",
+    "apps.fibu_mahnwesen",
+    "apps.fibu_abschluss",
     "apps.reporting",
 ]
 
@@ -157,3 +160,15 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "loggers": {"apps": {"handlers": ["console"], "level": os.environ.get("ERP_LOG_LEVEL", "INFO")}},
 }
+
+
+# ---------------------------------------------------------------- Phase 4: Finanzbuchhaltung
+# Verzugszinsen § 288 BGB: Basiszinssatz wird in der Fibu gepflegt (Tabelle Basiszinssätze);
+# Aufschlag in Prozentpunkten: Unternehmer 9 (§ 288 Abs. 2), Verbraucher 5 (§ 288 Abs. 1).
+ERP_VERZUGSZINS_AUFSCHLAG_B2B = 9
+ERP_VERZUGSZINS_AUFSCHLAG_B2C = 5
+# Rechnungsprüfung: zulässige Preisabweichung gegenüber Bestellung/Wareneingang in Prozent
+ERP_RECHNUNGSPRUEFUNG_TOLERANZ_PROZENT = 1
+# DATEV-Export (EXTF-Kopf): Berater- und Mandantennummer laut Steuerberater
+ERP_DATEV_BERATERNUMMER = os.environ.get("ERP_DATEV_BERATERNUMMER", "1001")
+ERP_DATEV_MANDANTENNUMMER = os.environ.get("ERP_DATEV_MANDANTENNUMMER", "1")

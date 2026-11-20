@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Eingangsrechnungen{% endblock %}
+{% block content %}
+{% hat_recht "fibu" "anlegen" as darf_buchen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-inbox"></i> Eingangsrechnungen</h1>
+  <div class="ms-auto">{% if darf_buchen %}<a class="btn btn-sm btn-primary" href="{% url 'fibu:er_neu' %}"><i class="bi bi-plus"></i> Eingangsrechnung erfassen</a>{% endif %}</div></div>
+{% include "fibu/_nav.html" with aktiv="er" %}
+<div class="btn-group btn-group-sm mb-3">
+  <a class="btn {% if not status %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?">alle</a>
+  <a class="btn {% if status == 'ERFASST' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?status=ERFASST">erfasst</a>
+  <a class="btn {% if status == 'GEBUCHT' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?status=GEBUCHT">gebucht</a>
+  <a class="btn {% if status == 'STORNIERT' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?status=STORNIERT">storniert</a></div>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th>Nummer</th><th>Lieferant</th><th>Rechnungsnr.</th><th>Datum</th><th>Bestellung</th><th class="text-end">Netto</th><th class="text-end">Brutto</th><th>Prüfung</th><th>Status</th></tr></thead>
+<tbody>{% for er in rechnungen %}<tr><td><a href="{% url 'fibu:er' er.pk %}">{{ er.nummer }}</a></td><td>{{ er.lieferant.name }}</td><td>{{ er.rechnungsnummer }}</td><td>{{ er.rechnungsdatum|date:"d.m.Y" }}</td><td>{{ er.bestellung.nummer|default:"–" }}</td>
+  <td class="text-end">{{ er.summe_netto|euro }}</td><td class="text-end">{{ er.summe_brutto|euro }}</td>
+  <td>{% if er.abweichung %}<span class="badge text-bg-{% if er.abweichung_akzeptiert %}secondary{% else %}danger{% endif %}">Abweichung{% if er.abweichung_akzeptiert %} freigegeben{% endif %}</span>{% elif er.pruefung %}<span class="badge text-bg-success">ok</span>{% endif %}</td>
+  <td>{{ er.get_status_display }}</td></tr>
+{% empty %}<tr><td colspan="9" class="text-muted text-center">Keine Eingangsrechnungen.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

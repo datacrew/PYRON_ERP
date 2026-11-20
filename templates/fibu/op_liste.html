@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Offene Posten{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-receipt"></i> Offene Posten {% if art == "K" %}Kreditoren{% else %}Debitoren{% endif %}</h1>
+  <div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="{% if art == 'K' %}{% url 'fibu:auswertung' 'op_kreditoren' %}{% else %}{% url 'fibu:auswertung' 'op_debitoren' %}{% endif %}">Fälligkeitsraster</a></div></div>
+{% include "fibu/_nav.html" with aktiv="op" %}
+<form class="row g-2 mb-3 align-items-center" method="get">
+  <div class="col-auto"><div class="btn-group btn-group-sm">
+    <a class="btn {% if art == 'D' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?art=D">Debitoren</a>
+    <a class="btn {% if art == 'K' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?art=K">Kreditoren</a></div></div>
+  <input type="hidden" name="art" value="{{ art }}">
+  <div class="col-auto"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Beleg, Partner"></div>
+  <div class="col-auto form-check"><input class="form-check-input" type="checkbox" name="ueberfaellig" value="1" id="ue" {% if request.GET.ueberfaellig %}checked{% endif %}><label class="form-check-label small" for="ue">nur überfällig</label></div>
+  <div class="col-auto form-check"><input class="form-check-input" type="checkbox" name="erledigt" value="1" id="er" {% if request.GET.erledigt %}checked{% endif %}><label class="form-check-label small" for="er">auch ausgeglichene</label></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Filtern</button></div>
+</form>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th>Beleg</th><th>Partner</th><th>Konto</th><th>Belegdatum</th><th>Fällig</th><th>Skonto bis</th><th class="text-end">Betrag</th><th class="text-end">Offen</th><th class="text-end">Mahnstufe</th><th></th></tr></thead>
+<tbody>{% for op in ops %}<tr class="{% if op.offen and op.faellig_am < heute %}table-danger{% endif %}"><td><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a>{% if op.fremdbelegnr %} <small class="text-muted">{{ op.fremdbelegnr }}</small>{% endif %}</td>
+  <td>{{ op.partner.name|truncatechars:30 }}</td><td>{{ op.konto.nummer }}</td><td>{{ op.belegdatum|date:"d.m.Y" }}</td><td>{{ op.faellig_am|date:"d.m.Y" }}</td><td>{{ op.skonto_bis|date:"d.m.Y"|default:"–" }}{% if op.skonto_prozent %} ({{ op.skonto_prozent|zahl }} %){% endif %}</td>
+  <td class="text-end">{{ op.betrag|euro }}</td><td class="text-end fw-semibold">{{ op.offen|euro }}</td><td class="text-end">{{ op.mahnstufe }}</td>
+  <td>{% if op.mahnsperre or op.partner.mahnsperre %}<i class="bi bi-slash-circle text-warning" title="Mahnsperre"></i>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="10" class="text-muted text-center">Keine offenen Posten.</td></tr>{% endfor %}
+<tr class="fw-semibold"><td colspan="7">Summe offen</td><td class="text-end">{{ summe|euro }}</td><td colspan="2"></td></tr></tbody></table></div></div>
+{% endblock %}

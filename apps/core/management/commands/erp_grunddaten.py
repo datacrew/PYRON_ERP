@@ -1,5 +1,5 @@
 """Grunddaten anlegen (idempotent): Module, Mandant, Einheiten, Steuersätze, Zahlungsbedingungen,
-Kontenrahmen SKR03/SKR04 (Grundbestand), Nummernkreise, Standardrollen und Belegvorlage."""
+Kontenrahmen SKR03/SKR04 inkl. Fibu-Grunddaten, Nummernkreise, Standardrollen und Belegvorlage."""
 from decimal import Decimal
 
 from django.conf import settings
@@ -24,75 +24,7 @@ ZAHLUNGSBEDINGUNGEN = [
     ("10S2_30N", "10 Tage 2 % Skonto, 30 Tage netto", 30, 10, "2"),
 ]
 
-# Grundbestand – vor Produktivbetrieb mit Steuerberatung / DATEV-Kontenrahmen abgleichen
-SKR03 = [
-    ("0200", "Technische Anlagen und Maschinen", "aktiv"), ("0320", "Pkw", "aktiv"),
-    ("0420", "Büroeinrichtung", "aktiv"), ("0480", "Geringwertige Wirtschaftsgüter", "aktiv"),
-    ("0800", "Gezeichnetes Kapital", "passiv"), ("0860", "Gewinnvortrag vor Verwendung", "passiv"),
-    ("0868", "Verlustvortrag vor Verwendung", "passiv"), ("0970", "Sonstige Rückstellungen", "passiv"),
-    ("1000", "Kasse", "aktiv"), ("1200", "Bank", "aktiv"), ("1360", "Geldtransit", "aktiv"),
-    ("1400", "Forderungen aus Lieferungen und Leistungen", "aktiv"),
-    ("1571", "Abziehbare Vorsteuer 7 %", "steuer"), ("1576", "Abziehbare Vorsteuer 19 %", "steuer"),
-    ("1590", "Durchlaufende Posten", "aktiv"),
-    ("1600", "Verbindlichkeiten aus Lieferungen und Leistungen", "passiv"),
-    ("1740", "Verbindlichkeiten aus Lohn und Gehalt", "passiv"),
-    ("1771", "Umsatzsteuer 7 %", "steuer"), ("1776", "Umsatzsteuer 19 %", "steuer"),
-    ("1780", "Umsatzsteuer-Vorauszahlungen", "steuer"), ("1790", "Umsatzsteuer Vorjahr", "steuer"),
-    ("2100", "Zinsen und ähnliche Aufwendungen", "aufwand"), ("2400", "Forderungsverluste", "aufwand"),
-    ("2650", "Sonstige Zinsen und ähnliche Erträge", "ertrag"),
-    ("3000", "Roh-, Hilfs- und Betriebsstoffe", "aufwand"), ("3300", "Wareneingang 7 % Vorsteuer", "aufwand"),
-    ("3400", "Wareneingang 19 % Vorsteuer", "aufwand"), ("3736", "Erhaltene Skonti 19 % Vorsteuer", "aufwand"),
-    ("3970", "Bestand Roh-, Hilfs- und Betriebsstoffe", "aktiv"), ("3980", "Bestand Waren", "aktiv"),
-    ("4110", "Löhne", "aufwand"), ("4120", "Gehälter", "aufwand"),
-    ("4130", "Gesetzliche soziale Aufwendungen", "aufwand"), ("4210", "Miete", "aufwand"),
-    ("4240", "Gas, Strom, Wasser", "aufwand"), ("4360", "Versicherungen", "aufwand"),
-    ("4500", "Fahrzeugkosten", "aufwand"), ("4600", "Werbekosten", "aufwand"),
-    ("4730", "Ausgangsfrachten", "aufwand"),
-    ("4800", "Reparaturen und Instandhaltung von technischen Anlagen und Maschinen", "aufwand"),
-    ("4830", "Abschreibungen auf Sachanlagen", "aufwand"), ("4910", "Porto", "aufwand"),
-    ("4920", "Telefon", "aufwand"), ("4930", "Bürobedarf", "aufwand"),
-    ("4950", "Rechts- und Beratungskosten", "aufwand"), ("4970", "Nebenkosten des Geldverkehrs", "aufwand"),
-    ("7000", "Unfertige Erzeugnisse", "aktiv"), ("7110", "Fertige Erzeugnisse", "aktiv"),
-    ("8120", "Steuerfreie Umsätze § 4 Nr. 1a UStG (Ausfuhr)", "ertrag"),
-    ("8125", "Steuerfreie innergemeinschaftliche Lieferungen § 4 Nr. 1b UStG", "ertrag"),
-    ("8300", "Erlöse 7 % USt", "ertrag"), ("8400", "Erlöse 19 % USt", "ertrag"),
-    ("8736", "Gewährte Skonti 19 % USt", "ertrag"),
-    ("9000", "Saldenvorträge Sachkonten", "neutral"),
-]
-SKR04 = [
-    ("0440", "Maschinen", "aktiv"), ("0520", "Pkw", "aktiv"), ("0650", "Büroeinrichtung", "aktiv"),
-    ("0670", "Geringwertige Wirtschaftsgüter", "aktiv"),
-    ("1000", "Roh-, Hilfs- und Betriebsstoffe (Bestand)", "aktiv"), ("1040", "Unfertige Erzeugnisse", "aktiv"),
-    ("1110", "Fertige Erzeugnisse", "aktiv"), ("1140", "Waren (Bestand)", "aktiv"),
-    ("1200", "Forderungen aus Lieferungen und Leistungen", "aktiv"),
-    ("1401", "Abziehbare Vorsteuer 7 %", "steuer"), ("1406", "Abziehbare Vorsteuer 19 %", "steuer"),
-    ("1460", "Geldtransit", "aktiv"), ("1600", "Kasse", "aktiv"), ("1800", "Bank", "aktiv"),
-    ("2900", "Gezeichnetes Kapital", "passiv"), ("2970", "Gewinnvortrag vor Verwendung", "passiv"),
-    ("2978", "Verlustvortrag vor Verwendung", "passiv"), ("3070", "Sonstige Rückstellungen", "passiv"),
-    ("3300", "Verbindlichkeiten aus Lieferungen und Leistungen", "passiv"),
-    ("3720", "Verbindlichkeiten aus Lohn und Gehalt", "passiv"),
-    ("3801", "Umsatzsteuer 7 %", "steuer"), ("3806", "Umsatzsteuer 19 %", "steuer"),
-    ("3820", "Umsatzsteuer-Vorauszahlungen", "steuer"), ("3840", "Umsatzsteuer Vorjahr", "steuer"),
-    ("4120", "Steuerfreie Umsätze § 4 Nr. 1a UStG (Ausfuhr)", "ertrag"),
-    ("4125", "Steuerfreie innergemeinschaftliche Lieferungen § 4 Nr. 1b UStG", "ertrag"),
-    ("4300", "Erlöse 7 % USt", "ertrag"), ("4400", "Erlöse 19 % USt", "ertrag"),
-    ("4736", "Gewährte Skonti 19 % USt", "ertrag"),
-    ("5000", "Aufwendungen für Roh-, Hilfs- und Betriebsstoffe", "aufwand"),
-    ("5300", "Wareneingang 7 % Vorsteuer", "aufwand"), ("5400", "Wareneingang 19 % Vorsteuer", "aufwand"),
-    ("5736", "Erhaltene Skonti 19 % Vorsteuer", "aufwand"),
-    ("6010", "Löhne", "aufwand"), ("6020", "Gehälter", "aufwand"),
-    ("6110", "Gesetzliche soziale Aufwendungen", "aufwand"),
-    ("6220", "Abschreibungen auf Sachanlagen", "aufwand"), ("6310", "Miete", "aufwand"),
-    ("6325", "Gas, Strom, Wasser", "aufwand"), ("6400", "Versicherungen", "aufwand"),
-    ("6460", "Reparaturen und Instandhaltung von technischen Anlagen und Maschinen", "aufwand"),
-    ("6500", "Fahrzeugkosten", "aufwand"), ("6600", "Werbekosten", "aufwand"),
-    ("6740", "Ausgangsfrachten", "aufwand"), ("6800", "Porto", "aufwand"), ("6805", "Telefon", "aufwand"),
-    ("6815", "Bürobedarf", "aufwand"), ("6825", "Rechts- und Beratungskosten", "aufwand"),
-    ("6855", "Nebenkosten des Geldverkehrs", "aufwand"), ("6930", "Forderungsverluste", "aufwand"),
-    ("7100", "Sonstige Zinsen und ähnliche Erträge", "ertrag"),
-    ("7300", "Zinsen und ähnliche Aufwendungen", "aufwand"),
-    ("9000", "Saldenvorträge Sachkonten", "neutral"),
-]
+# Kontenrahmen SKR03/SKR04 (erweiterter Grundbestand mit Bilanz-/GuV-Zuordnung) → apps/fibu/kontenrahmen.py
 
 NUMMERNKREISE = [
     ("PARTNER", "Geschäftspartner", "GP-", False, 5),
@@ -107,6 +39,9 @@ NUMMERNKREISE = [
     # Phase 3 – Fertigung
     ("FERTIGUNGSAUFTRAG", "Fertigungsaufträge", "FA-", True, 5),
     ("FERTIGUNGSCHARGE", "Fertigungschargen", "FC-", True, 5),
+    # Phase 4 – Finanzbuchhaltung
+    ("FIBU_BUCHUNG", "Buchungen (Journal)", "FB-", True, 6), ("FIBU_ER", "Eingangsrechnungen", "ER-", True, 5),
+    ("FIBU_BANKIMPORT", "Bankimporte", "BI-", True, 4), ("FIBU_MAHNLAUF", "Mahnläufe", "ML-", True, 4),
 ]
 
 L, A, AE, F, D = AKTION_CODES  # lesen, anlegen, aendern, freigeben, loeschen
@@ -130,7 +65,8 @@ ROLLEN = {
               {"stammdaten": [L], "lager": ALLE, "wareneingang": ALLE, "versand": ALLE, "einkauf": [L],
                "belege": [L]}),
     "Buchhaltung": ("Finanzbuchhaltung, Belegprüfung und Festschreibung",
-                    {"stammdaten": [L, AE], "fibu": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
+                    {"stammdaten": [L, AE], "fibu": ALLE, "fibu_bank": ALLE, "fibu_mahnwesen": ALLE,
+                     "fibu_abschluss": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
                      "einkauf": [L], "wareneingang": [L], "produktion": [L], "akkord": [L]}),
     "Nur Lesen": ("Lesezugriff auf alle Fachmodule (ohne Lohndaten)", {"*-verwaltung": [L]}),
 }
@@ -158,10 +94,9 @@ class Command(BaseCommand):
         for code, bez, netto, sk_tage, sk in ZAHLUNGSBEDINGUNGEN:
             Zahlungsbedingung.objects.get_or_create(code=code, defaults={
                 "bezeichnung": bez, "tage_netto": netto, "skonto_tage": sk_tage, "skonto_prozent": Decimal(sk)})
-        for rahmen, konten in (("SKR03", SKR03), ("SKR04", SKR04)):
-            for nr, bez, art in konten:
-                Konto.objects.get_or_create(kontenrahmen=rahmen, nummer=nr,
-                                            defaults={"bezeichnung": bez, "kontoart": art})
+        from apps.fibu.kontenrahmen import grunddaten_anlegen as fibu_grunddaten
+
+        fibu_grunddaten()
         for code, bez, praefix, jahr, stellen in NUMMERNKREISE:
             Nummernkreis.objects.get_or_create(code=code, defaults={
                 "bezeichnung": bez, "praefix": praefix, "jahresbezogen": jahr, "stellen": stellen})

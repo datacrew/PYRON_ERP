@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Finanzbuchhaltung{% endblock %}
+{% block content %}
+{% hat_recht "fibu" "anlegen" as darf_buchen %}{% hat_recht "fibu" "aendern" as darf_einstellungen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-bank"></i> Finanzbuchhaltung</h1>
+  <div class="ms-auto d-flex gap-2">
+    {% if darf_einstellungen %}<div class="dropdown"><button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-sliders"></i> Einstellungen</button>
+      <ul class="dropdown-menu dropdown-menu-end">
+        <li><a class="dropdown-item" href="{% url 'fibu:bankkonten_liste' %}">Bankkonten</a></li>
+        <li><a class="dropdown-item" href="{% url 'fibu:steuerschluessel_liste' %}">Steuerschlüssel</a></li>
+        <li><a class="dropdown-item" href="{% url 'fibu:kontierungsregeln_liste' %}">Kontierungsregeln</a></li>
+        <li><a class="dropdown-item" href="{% url 'fibu:mahnstufen_liste' %}">Mahnstufen</a></li>
+        <li><a class="dropdown-item" href="{% url 'fibu:basiszinssaetze_liste' %}">Basiszinssätze</a></li>
+      </ul></div>{% endif %}
+    {% if darf_buchen %}<a class="btn btn-sm btn-primary" href="{% url 'fibu:buchung_neu' %}"><i class="bi bi-plus"></i> Buchung erfassen</a>{% endif %}
+  </div></div>
+{% include "fibu/_nav.html" with aktiv="index" %}
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">Offene Forderungen ({{ k.debitoren_n }})</div><div class="fs-4 fw-semibold">{{ k.debitoren|euro }}</div>
+    <div class="small {% if k.deb_ueberfaellig_n %}text-danger{% else %}text-muted{% endif %}">davon überfällig {{ k.deb_ueberfaellig|euro }} ({{ k.deb_ueberfaellig_n }})</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">Offene Verbindlichkeiten ({{ k.kreditoren_n }})</div><div class="fs-4 fw-semibold">{{ k.kreditoren|euro }}</div>
+    <div class="small {% if k.kred_ueberfaellig_n %}text-danger{% else %}text-muted{% endif %}">davon überfällig {{ k.kred_ueberfaellig|euro }} ({{ k.kred_ueberfaellig_n }})</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">Liquidität (Bankstände lt. Buchhaltung)</div><div class="fs-4 fw-semibold">{{ k.liquiditaet|euro }}</div>
+    {% for b, s in k.banken %}<div class="small text-muted">{{ b.bezeichnung }}: {{ s|euro }}</div>{% endfor %}</div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="small text-muted">Bankumsätze</div><div class="fs-4 fw-semibold">{{ k.unzugeordnet }} <small class="fs-6 fw-normal">nicht zugeordnet</small></div>
+    <div class="small text-muted">{{ k.ungeklaert }} auf Verrechnungskonto (ungeklärt)</div></div></div></div>
+</div>
+<div class="row g-3 mb-4">
+  {% for titel, urlname, icon, text in kacheln %}{% url urlname as u %}{% include "core/_kachel.html" with url=u icon=icon titel=titel text=text %}{% endfor %}
+</div>
+{% if fehler %}<div class="card border-danger mb-3"><div class="card-header bg-white fw-semibold text-danger d-flex align-items-center">Fehlgeschlagene Automatikbuchungen
+  {% if darf_buchen %}<form method="post" action="{% url 'fibu:nachbuchen' %}" class="ms-auto">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-arrow-repeat"></i> Nachbuchen</button></form>{% endif %}</div>
+  <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Quelle</th><th>ID</th><th>Meldung</th><th>Zeitpunkt</th></tr></thead>
+  <tbody>{% for f in fehler %}<tr><td>{{ f.quelle }}</td><td>{{ f.quelle_id }}</td><td>{{ f.meldung }}</td><td>{{ f.zeitpunkt|date:"d.m.Y H:i" }}</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
+<div class="row g-3">
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Überfällige Forderungen</div>
+    <div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Beleg</th><th>Kunde</th><th>Fällig</th><th class="text-end">Offen</th><th class="text-end">Stufe</th></tr></thead>
+    <tbody>{% for op in ueberfaellig %}<tr><td><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a></td><td>{{ op.partner.name|truncatechars:28 }}</td><td class="text-danger">{{ op.faellig_am|date:"d.m.Y" }}</td><td class="text-end">{{ op.offen|euro }}</td><td class="text-end">{{ op.mahnstufe }}</td></tr>
+    {% empty %}<tr><td colspan="5" class="text-muted text-center">Keine überfälligen Forderungen.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Fällige Verbindlichkeiten</div>
+    <div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Beleg</th><th>Lieferant</th><th>Fällig</th><th class="text-end">Offen</th></tr></thead>
+    <tbody>{% for op in faellig_kred %}<tr><td><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a> <small class="text-muted">{{ op.fremdbelegnr }}</small></td><td>{{ op.partner.name|truncatechars:28 }}</td><td>{{ op.faellig_am|date:"d.m.Y" }}</td><td class="text-end">{{ op.offen|euro }}</td></tr>
+    {% empty %}<tr><td colspan="4" class="text-muted text-center">Keine offenen Verbindlichkeiten.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-12"><div class="card"><div class="card-header bg-white fw-semibold">Letzte Buchungen</div>
+    <div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Nummer</th><th>Belegdatum</th><th>Beleg</th><th>Text</th><th>Quelle</th><th>Status</th></tr></thead>
+    <tbody>{% for b in letzte %}<tr><td><a href="{% url 'fibu:buchung' b.pk %}">{{ b.nummer }}</a></td><td>{{ b.belegdatum|date:"d.m.Y" }}</td><td>{{ b.belegnr }}</td><td>{{ b.text|truncatechars:60 }}</td><td>{{ b.quelle|default:"manuell" }}</td><td>{% include "fibu/_status.html" %}</td></tr>
+    {% empty %}<tr><td colspan="6" class="text-muted text-center">Noch keine Buchungen.</td></tr>{% endfor %}</tbody></table></div></div></div>
+</div>
+{% endblock %}

@@ -69,3 +69,12 @@ def hat_recht(context, modul, aktion="lesen"):
 @register.filter
 def ist_bool(wert):
     return isinstance(wert, bool)
+
+
+@register.filter
+def get_item(mapping, schluessel):
+    """Dictionary-Zugriff im Template: {{ d|get_item:k }}."""
+    try:
+        return mapping.get(schluessel)
+    except AttributeError:
+        return None

@@ -1,0 +1,11 @@
+<ul class="nav nav-tabs small mb-3">
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'index' %}active{% endif %}" href="{% url 'fibu:index' %}">Übersicht</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'buchungen' %}active{% endif %}" href="{% url 'fibu:buchungen' %}">Journal</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'konten' %}active{% endif %}" href="{% url 'fibu:konten' %}">Konten</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'op' %}active{% endif %}" href="{% url 'fibu:op_liste' %}">Offene Posten</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'er' %}active{% endif %}" href="{% url 'fibu:er_liste' %}">Eingangsrechnungen</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'bank' %}active{% endif %}" href="{% url 'fibu:bank' %}">Bank</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'mahn' %}active{% endif %}" href="{% url 'fibu:mahnwesen' %}">Mahnwesen</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'auswertungen' %}active{% endif %}" href="{% url 'fibu:auswertungen' %}">Auswertungen</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'perioden' %}active{% endif %}" href="{% url 'fibu:perioden' %}">Perioden</a></li>
+</ul>

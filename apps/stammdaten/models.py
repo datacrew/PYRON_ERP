@@ -37,13 +37,25 @@ class Steuersatz(models.Model):
 class Konto(models.Model):
     KONTENRAHMEN = [("SKR03", "SKR03"), ("SKR04", "SKR04")]
     KONTOARTEN = [("aktiv", "Aktivkonto"), ("passiv", "Passivkonto"), ("aufwand", "Aufwandskonto"),
-                  ("ertrag", "Ertragskonto"), ("steuer", "Steuerkonto"), ("neutral", "Abschluss/Neutral")]
+                  ("ertrag", "Ertragskonto"), ("steuer", "Steuerkonto"), ("neutral", "Abschluss/Neutral"),
+                  ("debitor", "Debitor (Personenkonto)"), ("kreditor", "Kreditor (Personenkonto)")]
 
     kontenrahmen = models.CharField("Kontenrahmen", max_length=5, choices=KONTENRAHMEN)
     nummer = models.CharField("Kontonummer", max_length=10)
     bezeichnung = models.CharField("Bezeichnung", max_length=200)
     kontoart = models.CharField("Kontoart", max_length=10, choices=KONTOARTEN)
     aktiv = models.BooleanField("Aktiv", default=True)
+    # Phase 4 – Finanzbuchhaltung (Positionscodes siehe apps/fibu/gliederung.py)
+    bilanz_position = models.CharField("Bilanzposition (§ 266 HGB)", max_length=20, blank=True,
+                                       help_text="z. B. B.II.1; Wechselkonten „Aktiv|Passiv“, z. B. B.II.4|P.C.8")
+    guv_position = models.CharField("GuV-Position (§ 275 HGB, GKV)", max_length=10, blank=True)
+    automatik = models.CharField("Automatikfunktion", max_length=30, blank=True, db_index=True,
+                                 help_text="Rolle für automatische Buchungen, z. B. WERE, BANK_VERRECHNUNG")
+    steuer_automatik = models.CharField("Steuer-Automatik (Schlüssel)", max_length=10, blank=True,
+                                        help_text="Steuerschlüssel, der bei Buchung auf dieses Konto vorbelegt wird "
+                                                  "(DATEV-Automatikkonto – kein BU-Schlüssel im Export)")
+    partner = models.ForeignKey("Geschaeftspartner", null=True, blank=True, on_delete=models.PROTECT,
+                                related_name="personenkonten", verbose_name="Geschäftspartner (Personenkonto)")
 
     class Meta:
         verbose_name = "Sachkonto"
@@ -137,6 +149,8 @@ class Geschaeftspartner(models.Model):
     debitorenkonto = models.CharField("Debitorenkonto", max_length=10, blank=True)
     kreditorenkonto = models.CharField("Kreditorenkonto", max_length=10, blank=True)
     gln = models.CharField("GLN (EDI)", max_length=13, blank=True)
+    iban = models.CharField("IBAN (Zahlungsabgleich)", max_length=34, blank=True)
+    mahnsperre = models.BooleanField("Mahnsperre", default=False)
     aktiv = models.BooleanField("Aktiv", default=True)
 
     class Meta:

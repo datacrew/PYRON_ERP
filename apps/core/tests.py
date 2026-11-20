@@ -84,11 +84,16 @@ class RechteTests(TestCase):
                      "einkauf:index", "einkauf:liste", "einkauf:neu", "einkauf:termine", "einkauf:vorschlag",
                      "einkauf:banf_liste", "wareneingang:index", "wareneingang:liste",
                      "produktion:index", "produktion:liste", "produktion:terminal", "produktion:akkord",
-                     "stammdaten:arbeitsplatz_liste"]:
+                     "stammdaten:arbeitsplatz_liste",
+                     "fibu:index", "fibu:konten", "fibu:buchungen", "fibu:buchung_neu", "fibu:kette",
+                     "fibu:op_liste", "fibu:er_liste", "fibu:er_neu", "fibu:bank", "fibu:mahnwesen",
+                     "fibu:perioden", "fibu:auswertungen", "fibu:bankkonten_liste", "fibu:steuerschluessel_liste",
+                     "fibu:kontierungsregeln_liste", "fibu:mahnstufen_liste", "fibu:basiszinssaetze_liste"]:
             self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
         # umgesetzte Module leiten von der Platzhalterseite auf ihre Startseite weiter
         self.assertRedirects(self.client.get(reverse("core:platzhalter", args=["produktion"])),
                              reverse("produktion:index"))
+        self.assertRedirects(self.client.get(reverse("core:platzhalter", args=["fibu"])), reverse("fibu:index"))
 
 
 class NummernkreisTests(TestCase):

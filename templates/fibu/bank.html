@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Bank{% endblock %}
+{% block content %}
+{% hat_recht "fibu_bank" "anlegen" as darf_import %}{% hat_recht "fibu" "aendern" as darf_einstellungen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-bank2"></i> Bank – Kontoauszüge</h1>
+  <div class="ms-auto d-flex gap-2">{% if darf_einstellungen %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:bankkonten_liste' %}">Bankkonten</a>{% endif %}
+  {% if darf_import %}<form method="post" action="{% url 'fibu:bank_auto' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-primary"><i class="bi bi-magic"></i> Automatisch zuordnen</button></form>{% endif %}</div></div>
+{% include "fibu/_nav.html" with aktiv="bank" %}
+<div class="row g-3 mb-3">
+  {% if darf_import %}<div class="col-lg-6"><div class="card h-100"><div class="card-header bg-white fw-semibold"><span class="badge text-bg-primary me-1">1</span> Kontoauszug importieren</div><div class="card-body">
+    <form method="post" action="{% url 'fibu:bank_import' %}" enctype="multipart/form-data">{% csrf_token %}{% include "generic/_formfelder.html" with form=form %}
+    <button class="btn btn-sm btn-primary mt-3"><i class="bi bi-upload"></i> Importieren</button></form>
+    <div class="form-text">Formate: CAMT.053 (XML, ISO 20022) und MT940 (SWIFT). Das Bankkonto wird über die IBAN erkannt; bereits importierte Dateien und doppelte Umsätze werden übersprungen. Beispieldateien: <code>docs/beispiele/</code>.</div></div></div></div>{% endif %}
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Bankkonten (Saldo lt. Buchhaltung)</div>
+    <ul class="list-group list-group-flush">{% for b, s in banken %}<li class="list-group-item d-flex"><span>{{ b.bezeichnung }}<br><small class="text-muted">{{ b.iban }} · Konto {{ b.konto.nummer }}</small></span><span class="ms-auto fw-semibold">{{ s|euro }}</span></li>
+    {% empty %}<li class="list-group-item text-muted">Kein Bankkonto angelegt.</li>{% endfor %}</ul>
+    <div class="card-header bg-white fw-semibold border-top">Letzte Importe</div>
+    <ul class="list-group list-group-flush small">{% for i in importe %}<li class="list-group-item">{{ i.nummer }} · {{ i.get_format_display }} · {{ i.dateiname }} · {{ i.von|date:"d.m." }}–{{ i.bis|date:"d.m.Y" }} · {{ i.anzahl_neu }} neu, {{ i.anzahl_dubletten }} Dubletten{% if i.endsaldo is not None %} · Endsaldo {{ i.endsaldo|euro }}{% endif %}</li>
+    {% empty %}<li class="list-group-item text-muted">Noch keine Importe.</li>{% endfor %}</ul></div></div>
+</div>
+<div class="card"><div class="card-header bg-white fw-semibold d-flex align-items-center"><span class="badge text-bg-primary me-1">2</span> Umsätze zuordnen
+  <div class="ms-auto btn-group btn-group-sm">{% for wert, text in stati %}<a class="btn {% if status == wert %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?status={{ wert }}">{{ text }}</a>{% endfor %}
+    <a class="btn {% if status == 'alle' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?status=alle">alle</a></div></div>
+<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th>Datum</th><th>Auftraggeber/Empfänger</th><th>Verwendungszweck</th><th class="text-end">Betrag</th><th>Status</th><th></th></tr></thead>
+<tbody>{% for u in umsaetze %}<tr><td>{{ u.buchungsdatum|date:"d.m.Y" }}</td><td>{{ u.name|truncatechars:30 }}<br><small class="text-muted">{{ u.iban }}</small></td><td><small>{{ u.verwendungszweck|truncatechars:70 }}</small></td>
+  <td class="text-end fw-semibold {% if u.betrag < 0 %}text-danger{% else %}text-success{% endif %}">{{ u.betrag|euro }}</td>
+  <td><span class="badge text-bg-{% if u.status == 'GEBUCHT' %}success{% elif u.status == 'VERRECHNUNG' %}warning{% else %}secondary{% endif %}">{{ u.get_status_display }}</span></td>
+  <td><a class="btn btn-sm btn-outline-primary py-0" href="{% url 'fibu:bank_umsatz' u.pk %}">{% if u.status == 'GEBUCHT' %}Details{% else %}Zuordnen{% endif %}</a></td></tr>
+{% empty %}<tr><td colspan="6" class="text-muted text-center">Keine Umsätze in diesem Status.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

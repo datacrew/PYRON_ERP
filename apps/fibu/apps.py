@@ -2,7 +2,9 @@ from django.apps import AppConfig
 
 
 class FibuConfig(AppConfig):
-    """Gerüst – fachliche Umsetzung folgt laut docs/ROADMAP.md."""
+    """Finanzbuchhaltung (Phase 4): Hauptbuch, Nebenbücher, Bankimport, Mahnwesen, Auswertungen.
+
+Rechte: lesen = ansehen, anlegen = buchen, aendern = Fibu-Einstellungen, freigeben = festschreiben."""
 
     name = "apps.fibu"
     label = "fibu"
@@ -14,8 +16,9 @@ class FibuConfig(AppConfig):
         "beschreibung": "Doppelte Buchführung, Kontoauszüge, Mahnwesen, Bilanz",
         "icon": "bi-bank",
         "reihenfolge": 80,
-        "url_name": "",
-        "geplant": ['Journal und Hauptbuch (SKR03/SKR04)', 'Automatische Buchung festgeschriebener Belege (Ereignis vorhanden)', 'Import CAMT.053 / MT940 mit Zuordnungsregeln', 'Offene Posten und Mahnwesen', 'UStVA, Bilanz, GuV, DATEV-Export'],
+        "url_name": "fibu:index",
+        "dashboard": "apps.fibu.views.dashboard_hinweise",
+        "geplant": [],
     }
 
     def ready(self):

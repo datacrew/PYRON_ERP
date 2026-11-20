@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Buchung {{ b.nummer }}{% endblock %}
+{% block content %}
+{% hat_recht "fibu" "anlegen" as darf_buchen %}{% hat_recht "fibu" "freigeben" as darf_festschreiben %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-journal-check"></i> Buchung {{ b.nummer }} {% include "fibu/_status.html" %}</h1>
+  <div class="ms-auto d-flex gap-2">
+    {% if darf_festschreiben and not b.festgeschrieben %}<form method="post" action="{% url 'fibu:buchung_festschreiben' b.pk %}" onsubmit="return confirm('Buchung unwiderruflich festschreiben?')">{% csrf_token %}<button class="btn btn-sm btn-outline-success"><i class="bi bi-lock"></i> Festschreiben</button></form>{% endif %}
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:buchungen' %}">Journal</a></div></div>
+<div class="row g-3">
+  <div class="col-lg-4"><div class="card h-100"><div class="card-header bg-white fw-semibold">Kopfdaten</div><div class="card-body small">
+    <dl class="row mb-0">
+      <dt class="col-5">Belegdatum</dt><dd class="col-7">{{ b.belegdatum|date:"d.m.Y" }}</dd>
+      <dt class="col-5">Periode</dt><dd class="col-7">{{ b.periode }}</dd>
+      <dt class="col-5">Belegnummer</dt><dd class="col-7">{{ b.belegnr }}</dd>
+      <dt class="col-5">Text</dt><dd class="col-7">{{ b.text }}</dd>
+      <dt class="col-5">Quelle</dt><dd class="col-7">{{ b.quelle|default:"manuell" }} {{ b.quelle_id }}</dd>
+      <dt class="col-5">Erfasst</dt><dd class="col-7">{{ b.erfasst_am|date:"d.m.Y H:i" }} {{ b.erfasst_von|default:"" }}</dd>
+      {% if b.festgeschrieben %}<dt class="col-5">Festgeschrieben</dt><dd class="col-7">{{ b.festgeschrieben_am|date:"d.m.Y H:i" }} {{ b.festgeschrieben_von|default:"" }}</dd>
+      <dt class="col-5">Kettenindex</dt><dd class="col-7">{{ b.ketten_index }}</dd>
+      <dt class="col-5">Prüfsumme</dt><dd class="col-7"><code class="small text-break">{{ b.pruefsumme }}</code></dd>{% endif %}
+      {% if b.storno_von %}<dt class="col-5">Storno von</dt><dd class="col-7"><a href="{% url 'fibu:buchung' b.storno_von.pk %}">{{ b.storno_von.nummer }}</a></dd>{% endif %}
+      {% if storno %}<dt class="col-5">Storniert durch</dt><dd class="col-7"><a href="{% url 'fibu:buchung' storno.pk %}">{{ storno.nummer }}</a></dd>{% endif %}
+    </dl></div></div></div>
+  <div class="col-lg-8"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Buchungszeilen</div>
+    <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Pos.</th><th>Konto</th><th>Text</th><th>Steuer</th><th class="text-end">Soll</th><th class="text-end">Haben</th></tr></thead>
+    <tbody>{% for z in zeilen %}<tr class="{% if z.ist_steuer %}text-muted{% endif %}"><td>{{ z.position }}</td><td><a href="{% url 'fibu:kontoblatt' z.konto.pk %}">{{ z.konto.nummer }}</a> {{ z.konto.bezeichnung }}{% if z.partner %}<br><small>{{ z.partner.name }}</small>{% endif %}</td>
+      <td>{{ z.text }}</td><td>{{ z.steuerschluessel.code|default:"" }}</td><td class="text-end">{% if z.soll %}{{ z.soll|zahl }}{% endif %}</td><td class="text-end">{% if z.haben %}{{ z.haben|zahl }}{% endif %}</td></tr>{% endfor %}
+    <tr class="fw-semibold"><td colspan="4">Summe</td><td class="text-end">{{ summe_soll|zahl }}</td><td class="text-end">{{ summe_soll|zahl }}</td></tr></tbody></table></div></div>
+    {% if ops %}<div class="card mb-3"><div class="card-header bg-white fw-semibold">Offene Posten aus dieser Buchung</div>
+      <ul class="list-group list-group-flush">{% for op in ops %}<li class="list-group-item small"><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a> {{ op.partner.name }} – {{ op.betrag|euro }}, offen {{ op.offen|euro }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if darf_buchen and not b.storno_von_id and not storno %}<div class="card border-warning"><div class="card-header bg-white fw-semibold">Stornieren (Gegenbuchung)</div><div class="card-body">
+      <form method="post" action="{% url 'fibu:buchung_storno' b.pk %}" onsubmit="return confirm('Stornobuchung erzeugen?')">{% csrf_token %}{% include "generic/_formfelder.html" with form=storno_form %}
+      <button class="btn btn-sm btn-outline-danger mt-2"><i class="bi bi-arrow-counterclockwise"></i> Storno buchen</button></form>
+      <div class="form-text">GoBD: Buchungen werden nie gelöscht oder geändert – die Korrektur erfolgt durch eine Gegenbuchung.</div></div></div>{% endif %}
+  </div></div>
+{% endblock %}

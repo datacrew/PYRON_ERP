@@ -3,6 +3,7 @@
 Demo-Zugänge (Passwort für alle Fachbenutzer: Demo!2026, Administrator: Admin!2026):
 admin, einkauf, vertrieb, produktion, meister, terminal, lager, buchhaltung, gast
 """
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -59,10 +60,12 @@ class Command(BaseCommand):
             artikel = self._artikel()
             partner = self._partner()
             self._stuecklisten(artikel)
+        self._fibu(partner)
         self._belege(artikel, partner)
         self._lager(artikel, partner)
         self._einkauf(artikel, partner)
         self._produktion(artikel)
+        self._fibu_nach(partner)
         self.stdout.write(self.style.SUCCESS(
             f"Demodaten bereit. Logins: admin / {ADMIN_PASSWORT}; einkauf, vertrieb, produktion, meister, terminal, lager, "
             f"buchhaltung, gast / {DEMO_PASSWORT}"))
@@ -179,9 +182,10 @@ class Command(BaseCommand):
         admin = get_user_model().objects.get(username="admin")
         kunde = p["Müller Maschinenbau GmbH"]
 
-        def anlegen(art, partner, betreff, positionen):
+        def anlegen(art, partner, betreff, positionen, datum=None):
             b = Beleg.objects.create(belegart=art, partner=partner, betreff=betreff, erstellt_von=admin,
-                                     zahlungsbedingung=partner.zahlungsbedingung)
+                                     zahlungsbedingung=partner.zahlungsbedingung,
+                                     **({"belegdatum": datum} if datum else {}))
             for i, (nr, menge, preis) in enumerate(positionen, start=1):
                 art_obj = a[nr]
                 BelegPosition.objects.create(beleg=b, position=i * 10, artikel=art_obj, menge=Decimal(menge),
@@ -190,13 +194,122 @@ class Command(BaseCommand):
             b.save()
             return b
 
-        anlegen("ANGEBOT", p["Autoteile Weber AG"], "Rahmenangebot Antriebseinheiten",
+        def rechnung(partner, betreff, positionen, datum):
+            """Ausgangsrechnung freigeben und festschreiben → Fibu-Automatik bucht Debitor an Erlöse/USt."""
+            services.festschreiben(services.freigeben(anlegen("RECHNUNG", partner, betreff, positionen, datum),
+                                                      admin), admin)
+
+        weber = p["Autoteile Weber AG"]
+        anlegen("ANGEBOT", weber, "Rahmenangebot Antriebseinheiten",
                 [("F-5010", "250", None), ("F-5000", "500", "46.90")])
-        rechnung = anlegen("RECHNUNG", kunde, "Lieferung KW 46", [("F-5000", "120", None), ("F-5010", "10", None)])
-        rechnung = services.freigeben(rechnung, admin)
-        services.festschreiben(rechnung, admin)
+        # Ausgangsrechnungen 2026 (chronologisch, damit die Nummern zu den Demo-Kontoauszügen passen):
+        rechnung(weber, "Antriebseinheiten Juni", [("F-5010", "30", None)], date(2026, 6, 15))  # RE-2026-00001 bezahlt
+        rechnung(weber, "Antriebseinheiten August", [("F-5010", "40", None)], date(2026, 8, 14))  # 00002 überfällig
+        rechnung(kunde, "Lagerböcke September", [("F-5000", "200", None)], date(2026, 9, 10))  # 00003 Skonto bezahlt
+        rechnung(weber, "Lagerböcke Oktober", [("F-5000", "100", "46.90")], date(2026, 10, 2))  # 00004 Teilzahlung
+        rechnung(kunde, "Lieferung KW 46", [("F-5000", "120", None), ("F-5010", "10", None)],
+                 date(2026, 11, 16))  # RE-2026-00005 → Zahlung im CAMT-Demoauszug
         anlegen("BESTELLUNG", p["Stahlhandel Schmidt GmbH"], "Blechbestellung", [("R-1000", "2000", "1.15")])
 
+    # ------------------------------------------------------------ Phase 4: Finanzbuchhaltung
+
+    IBAN = {"Müller Maschinenbau GmbH": "DE89370400440532013000", "Autoteile Weber AG": "DE12500105170648489890",
+            "Stahlhandel Schmidt GmbH": "DE75512108001245126199", "Normteile Becker KG": "DE02100100100006820101"}
+
+    def _fibu(self, p):
+        """Geschäftsjahr(e), Hausbank, Partner-IBANs und Eröffnungsbilanz 01.01.2026 (idempotent)."""
+        from django.utils import timezone
+
+        from apps.fibu import services as S
+        from apps.fibu.models import Bankkonto
+
+        for jahr in sorted({2026, timezone.localdate().year}):
+            S.geschaeftsjahr_anlegen(jahr)
+        Bankkonto.objects.get_or_create(iban="DE02120300000000202051", defaults={
+            "bezeichnung": "Hausbank (Girokonto)", "bic": "BYLADEM1001", "konto": S.konto("1200")})
+        for name, iban in self.IBAN.items():
+            if name in p and not p[name].iban:
+                p[name].iban = iban
+                p[name].save(update_fields=["iban"])
+        admin = get_user_model().objects.get(username="admin")
+        # Eröffnungsbilanz (Werte passend zu den Lager-Anfangsbeständen); idempotent über quelle/quelle_id
+        S.buchen(date(2026, 1, 1), "EB2026", "Eröffnungsbilanz 01.01.2026", [
+            {"konto": "1200", "soll": "85000.00", "text": "Bank"},
+            {"konto": "0210", "soll": "120000.00", "text": "Maschinen"},
+            {"konto": "3970", "soll": "12933.00", "text": "Roh-, Hilfs- und Betriebsstoffe"},
+            {"konto": "7110", "soll": "9612.00", "text": "Fertige Erzeugnisse"},
+            {"konto": "0800", "haben": "50000.00", "text": "Gezeichnetes Kapital"},
+            {"konto": "0630", "haben": "80000.00", "text": "Bankdarlehen"},
+            {"konto": "0860", "haben": "97545.00", "text": "Gewinnvortrag"},
+        ], quelle="demo_eb", quelle_id="2026", benutzer=admin)
+
+    def _fibu_nach(self, p):
+        """Eingangsrechnungen, Mahnhistorie und MT940-Kontoauszug Juli–November (nur einmalig).
+
+        Der CAMT.053-Auszug docs/beispiele/camt053_demo.xml bleibt für den Demo-Ablauf in der Oberfläche übrig.
+        """
+        from pathlib import Path
+
+        from django.conf import settings
+
+        from apps.fibu import bank as B
+        from apps.fibu import mahnwesen as MW
+        from apps.fibu import services as S
+        from apps.fibu.models import Bankimport, Bankumsatz, Eingangsrechnung, OffenerPosten, Periode
+        from apps.wareneingang.models import Wareneingang
+
+        if Eingangsrechnung.objects.exists() or Bankimport.objects.exists():
+            return
+        admin = get_user_model().objects.get(username="buchhaltung")
+        schmidt, becker = p["Stahlhandel Schmidt GmbH"], p["Normteile Becker KG"]
+        with transaction.atomic():
+            # Wareneingangs-Events laufen per on_commit – hier sicherheitshalber idempotent nachbuchen
+            for we in Wareneingang.objects.all():
+                S.we_buchen(we, admin)
+
+            def er_ohne_bestellung(lieferant, rnr, datum, positionen):
+                er = Eingangsrechnung.objects.create(
+                    nummer=S.naechste_nummer("FIBU_ER", S.timezone.localdate()), lieferant=lieferant,
+                    rechnungsnummer=rnr, rechnungsdatum=datum, eingangsdatum=datum,
+                    zahlungsbedingung=lieferant.zahlungsbedingung, erfasst_von=admin)
+                for i, (bez, menge, preis) in enumerate(positionen, start=1):
+                    er.positionen.create(position=i * 10, bezeichnung=bez, menge=Decimal(menge),
+                                         einzelpreis=Decimal(preis), steuerschluessel=S.steuerschluessel("V19"))
+                S.er_buchen(er, admin)
+                return er
+
+            er_ohne_bestellung(becker, "NB-26-0912", date(2026, 9, 15),
+                               [("Normteile-Sortiment Instandhaltung", "1", "1250.00")])
+            er_ohne_bestellung(schmidt, "SH-RE-2026-3980", date(2026, 10, 20),
+                               [("Lohnzuschnitt Stahlbleche (Fremdbearbeitung)", "1", "6400.00")])
+            # Rechnung zum Wareneingang: erfasst, Prüfung/Buchung erfolgt im Demo-Ablauf
+            we = Wareneingang.objects.order_by("pk").first()
+            if we:
+                S.er_aus_wareneingang(we, "SH-RE-2026-4471", we.datum, admin)
+            # Kontoauszug Juli–November importieren und abarbeiten
+            datei = Path(settings.BASE_DIR) / "docs" / "beispiele" / "mt940_demo.sta"
+            if datei.exists():
+                imp = B.importieren(datei.read_bytes(), datei.name, admin)
+                umsaetze = list(imp.umsaetze.order_by("buchungsdatum", "pk"))
+                B.automatisch_zuordnen(umsaetze, admin)
+                for u in Bankumsatz.objects.filter(bankimport=imp, status=Bankumsatz.Status.OFFEN):
+                    zweck = u.verwendungszweck
+                    if "Lohn/Gehalt" in zweck:
+                        B.auf_konto_buchen(u, "4120", admin, text="Löhne und Gehälter Oktober 2026 (Sammelbuchung)")
+                    elif "Miete" in zweck:
+                        B.auf_konto_buchen(u, "4210", admin, steuerschluessel="V19", text="Miete Halle 3 11/2026")
+                    elif "Teilzahlung" in zweck:
+                        op = OffenerPosten.objects.filter(art="D", belegnr="RE-2026-00004", offen__gt=0).first()
+                        if op:
+                            B.zuordnen(u, [op], admin)
+            # Mahnhistorie: Zahlungserinnerung Ende September (nach Bankabgleich) für RE-2026-00002
+            try:
+                MW.ausfuehren(MW.vorschlag(date(2026, 9, 25), admin), admin)
+            except S.FibuFehler:
+                pass
+            # Perioden Januar–September abgeschlossen: Buchungen festgeschrieben (GoBD) und gesperrt
+            for periode in Periode.objects.filter(geschaeftsjahr__jahr=2026, nummer__lte=9, gesperrt=False):
+                S.periode_sperren(periode, admin)
     # ------------------------------------------------------------ Phase 2: Warenfluss
 
     def _lager(self, a, p):

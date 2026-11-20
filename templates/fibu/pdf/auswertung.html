@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<style>
+  @page { size: A4 {% if quer %}landscape{% endif %}; margin: 14mm 12mm 16mm 14mm;
+    @bottom-left { content: "{{ mandant.name }} · {{ a.titel }} · erstellt {{ jetzt|date:'d.m.Y H:i' }}";
+      font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7pt; color: #555; }
+    @bottom-right { content: "Seite " counter(page) " von " counter(pages);
+      font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7pt; color: #555; } }
+  body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 8pt; color: #111; }
+  h1 { font-size: 14pt; margin: 0 0 1mm; } .unter { color: #444; margin-bottom: 4mm; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 7.5pt; border-bottom: .8pt solid #111; padding: 1mm; }
+  td { border-bottom: .25pt solid #bbb; padding: .8mm 1mm; vertical-align: top; }
+  thead { display: table-header-group; }
+  .r { text-align: right; white-space: nowrap; }
+  tr.kopf td { font-weight: bold; background: #eee; }
+  tr.summe td { font-weight: bold; border-top: .6pt solid #111; }
+  tr.gesamt td { font-weight: bold; border-top: .8pt solid #111; border-bottom: 1.6pt double #111; }
+  tr.einrueck td:first-child { padding-left: 5mm; }
+  tr.hinweis td { color: #a00; }
+  .hinweise { margin-top: 4mm; font-size: 7pt; color: #444; }
+</style></head><body>
+<div style="font-size:8pt;color:#555">{{ mandant.name }}</div>
+<h1>{{ a.titel }}</h1>
+<div class="unter">{{ a.untertitel }}</div>
+<table>
+  <thead><tr>{% for name, ausr in a.spalten %}<th class="{% if ausr == 'r' %}r{% endif %}">{{ name }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for z in a.anzeige %}<tr class="{{ z.stil }}">{% for text, ausr in z.werte %}<td class="{% if ausr == 'r' %}r{% endif %}">{{ text }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table>
+{% if a.hinweise %}<div class="hinweise">{% for h in a.hinweise %}<div>{{ h }}</div>{% endfor %}</div>{% endif %}
+</body></html>

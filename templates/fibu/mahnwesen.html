@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Mahnwesen{% endblock %}
+{% block content %}
+{% hat_recht "fibu_mahnwesen" "anlegen" as darf %}{% hat_recht "fibu" "aendern" as darf_einstellungen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-envelope-exclamation"></i> Mahnwesen</h1>
+  <div class="ms-auto d-flex gap-2">{% if darf_einstellungen %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:mahnstufen_liste' %}">Mahnstufen</a><a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:basiszinssaetze_liste' %}">Basiszinssätze</a>{% endif %}</div></div>
+{% include "fibu/_nav.html" with aktiv="mahn" %}
+<div class="row g-3 mb-3">
+  {% if darf %}<div class="col-lg-4"><div class="card h-100"><div class="card-header bg-white fw-semibold">Mahnvorschlag erstellen</div><div class="card-body">
+    <form method="post">{% csrf_token %}{% include "generic/_formfelder.html" with form=form %}<button class="btn btn-sm btn-primary mt-3"><i class="bi bi-list-check"></i> Vorschlagslauf</button></form>
+    <div class="form-text">Je Kunde eine Mahnung mit der höchsten fälligen Stufe. Gesperrte Partner/OPs werden übersprungen.</div></div></div></div>{% endif %}
+  <div class="col-lg-8"><div class="card h-100"><div class="card-header bg-white fw-semibold">Heute mahnfähig ({{ faellig|length }})</div>
+    <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Beleg</th><th>Kunde</th><th>Fällig</th><th class="text-end">Offen</th><th>Nächste Stufe</th></tr></thead>
+    <tbody>{% for op, stufe in faellig %}<tr><td><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a></td><td>{{ op.partner.name }}</td><td>{{ op.faellig_am|date:"d.m.Y" }}</td><td class="text-end">{{ op.offen|euro }}</td><td>{{ stufe.bezeichnung }}</td></tr>
+    {% empty %}<tr><td colspan="5" class="text-muted text-center">Keine mahnfähigen Posten.</td></tr>{% endfor %}</tbody></table></div></div></div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-7"><div class="card"><div class="card-header bg-white fw-semibold">Mahnläufe</div>
+    <div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead class="table-light"><tr><th>Nummer</th><th>Stichtag</th><th class="text-end">Mahnungen</th><th>Status</th></tr></thead>
+    <tbody>{% for l in laeufe %}<tr><td><a href="{% url 'fibu:mahnlauf' l.pk %}">{{ l.nummer }}</a></td><td>{{ l.stichtag|date:"d.m.Y" }}</td><td class="text-end">{{ l.n }}</td><td>{{ l.get_status_display }}</td></tr>
+    {% empty %}<tr><td colspan="4" class="text-muted text-center">Noch keine Mahnläufe.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-lg-5"><div class="card"><div class="card-header bg-white fw-semibold">Mahnsperren</div>
+    <ul class="list-group list-group-flush small">{% for op in gesperrt %}<li class="list-group-item"><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a> {{ op.partner.name }} – {{ op.offen|euro }} <span class="badge text-bg-warning">{% if op.partner.mahnsperre %}Partner{% else %}OP{% endif %}</span></li>
+    {% empty %}<li class="list-group-item text-muted">Keine gesperrten Posten.</li>{% endfor %}</ul></div></div>
+</div>
+{% endblock %}

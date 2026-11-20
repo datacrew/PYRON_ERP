@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Demo-Kontoauszug CAMT.053 für die Hausbank der Musterwerk GmbH (passend zu den Demodaten).
+     Enthält: Skontozahlung Müller zu RE-2026-00005, Zahlung an Stahlhandel Schmidt (SH-RE-2026-3980),
+     eine nicht zuordenbare Gutschrift und das Kontoführungsentgelt. -->
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
+  <BkToCstmrStmt>
+    <GrpHdr>
+      <MsgId>CAMT-DEMO-20261120</MsgId>
+      <CreDtTm>2026-11-20T06:00:00</CreDtTm>
+    </GrpHdr>
+    <Stmt>
+      <Id>2026-11-20-001</Id>
+      <ElctrncSeqNb>215</ElctrncSeqNb>
+      <CreDtTm>2026-11-20T06:00:00</CreDtTm>
+      <Acct>
+        <Id><IBAN>DE02120300000000202051</IBAN></Id>
+        <Ccy>EUR</Ccy>
+        <Svcr><FinInstnId><BICFI>BYLADEM1001</BICFI></FinInstnId></Svcr>
+      </Acct>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="EUR">91366.14</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2026-11-17</Dt></Dt>
+      </Bal>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="EUR">93178.64</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2026-11-20</Dt></Dt>
+      </Bal>
+      <Ntry>
+        <Amt Ccy="EUR">7616.00</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-11-18</Dt></BookgDt>
+        <ValDt><Dt>2026-11-18</Dt></ValDt>
+        <AcctSvcrRef>2026111800001</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>NMSC+116</Cd><Issr>DK</Issr></Prtry></BkTxCd>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>ZAHL-2026-1118-01</EndToEndId></Refs>
+          <RltdPties>
+            <Cdtr><Pty><Nm>Stahlhandel Schmidt GmbH</Nm></Pty></Cdtr>
+            <CdtrAcct><Id><IBAN>DE75512108001245126199</IBAN></Id></CdtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Rechnung SH-RE-2026-3980 vom 20.10.2026</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">8991.40</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-11-19</Dt></BookgDt>
+        <ValDt><Dt>2026-11-19</Dt></ValDt>
+        <AcctSvcrRef>2026111900007</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>NMSC+166</Cd><Issr>DK</Issr></Prtry></BkTxCd>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+          <RltdPties>
+            <Dbtr><Pty><Nm>Müller Maschinenbau GmbH</Nm></Pty></Dbtr>
+            <DbtrAcct><Id><IBAN>DE89370400440532013000</IBAN></Id></DbtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>RE-2026-00005 Lieferung KW 46 abzgl. 2 % Skonto</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">450.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-11-19</Dt></BookgDt>
+        <ValDt><Dt>2026-11-19</Dt></ValDt>
+        <AcctSvcrRef>2026111900012</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>NMSC+166</Cd><Issr>DK</Issr></Prtry></BkTxCd>
+        <NtryDtls><TxDtls>
+          <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+          <RltdPties>
+            <Dbtr><Pty><Nm>Hans Mustermann</Nm></Pty></Dbtr>
+            <DbtrAcct><Id><IBAN>DE68210501700012345678</IBAN></Id></DbtrAcct>
+          </RltdPties>
+          <RmtInf><Ustrd>Erstattung Ref. 7781</Ustrd></RmtInf>
+        </TxDtls></NtryDtls>
+      </Ntry>
+      <Ntry>
+        <Amt Ccy="EUR">12.90</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <Sts><Cd>BOOK</Cd></Sts>
+        <BookgDt><Dt>2026-11-20</Dt></BookgDt>
+        <ValDt><Dt>2026-11-20</Dt></ValDt>
+        <AcctSvcrRef>2026112000001</AcctSvcrRef>
+        <BkTxCd><Prtry><Cd>NCHG+805</Cd><Issr>DK</Issr></Prtry></BkTxCd>
+        <AddtlNtryInf>Kontoführungsentgelt 11/2026</AddtlNtryInf>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>

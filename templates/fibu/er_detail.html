@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Eingangsrechnung {{ er.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-inbox"></i> Eingangsrechnung {{ er.nummer }} <span class="badge text-bg-{% if er.status == 'GEBUCHT' %}success{% elif er.status == 'STORNIERT' %}secondary{% else %}warning{% endif %}">{{ er.get_status_display }}</span></h1>
+  <div class="ms-auto"><a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:er_liste' %}">Liste</a></div></div>
+<div class="row g-3 mb-3">
+  <div class="col-lg-5"><div class="card h-100"><div class="card-header bg-white fw-semibold">Kopf</div><div class="card-body small"><dl class="row mb-0">
+    <dt class="col-5">Lieferant</dt><dd class="col-7">{{ er.lieferant.name }}</dd>
+    <dt class="col-5">Rechnungsnr.</dt><dd class="col-7">{{ er.rechnungsnummer }}</dd>
+    <dt class="col-5">Rechnungsdatum</dt><dd class="col-7">{{ er.rechnungsdatum|date:"d.m.Y" }}</dd>
+    <dt class="col-5">Fällig am</dt><dd class="col-7">{{ er.faellig_am|date:"d.m.Y"|default:"aus Zahlungsbedingung" }}</dd>
+    <dt class="col-5">Bestellung</dt><dd class="col-7">{{ er.bestellung.nummer|default:"–" }}</dd>
+    <dt class="col-5">Netto / USt / Brutto</dt><dd class="col-7">{{ er.summe_netto|euro }} / {{ er.summe_steuer|euro }} / <b>{{ er.summe_brutto|euro }}</b></dd>
+    {% if er.buchung %}<dt class="col-5">Buchung</dt><dd class="col-7"><a href="{% url 'fibu:buchung' er.buchung.pk %}">{{ er.buchung.nummer }}</a></dd>{% endif %}
+    {% for op in ops %}<dt class="col-5">OP</dt><dd class="col-7"><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a> offen {{ op.offen|euro }}</dd>{% endfor %}
+  </dl></div></div></div>
+  <div class="col-lg-7"><div class="card h-100 {% if er.abweichung and not er.abweichung_akzeptiert %}border-danger{% endif %}"><div class="card-header bg-white fw-semibold">Rechnungsprüfung gegen Bestellung / Wareneingang</div><div class="card-body small">
+    {% if er.pruefung %}<ul class="mb-2">{% for h in er.pruefung %}<li class="{% if h.art != 'OK' %}text-danger{% endif %}">{{ h.text }}</li>{% endfor %}</ul>
+    {% elif er.status == "ERFASST" %}<p class="text-muted">Noch nicht geprüft.</p>{% else %}<p class="text-success mb-2">Ohne Abweichung geprüft.</p>{% endif %}
+    {% if er.abweichung and er.abweichung_akzeptiert %}<p class="text-secondary">Abweichung wurde freigegeben.</p>{% endif %}
+    {% if formset %}<form method="post" class="d-flex gap-2 flex-wrap">{% csrf_token %}
+      <button name="aktion" value="pruefen" class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i> Prüfen</button>
+      {% if er.abweichung and not er.abweichung_akzeptiert %}<button name="aktion" value="freigeben" class="btn btn-sm btn-outline-warning" onclick="return confirm('Abweichung bewusst freigeben?')"><i class="bi bi-exclamation-triangle"></i> Abweichung freigeben</button>{% endif %}
+      <button name="aktion" value="buchen" class="btn btn-sm btn-success" onclick="return confirm('Eingangsrechnung buchen?')"><i class="bi bi-check2-circle"></i> Buchen</button></form>{% endif %}
+  </div></div></div></div>
+{% if formset %}
+<form method="post">{% csrf_token %}<div class="card"><div class="card-header bg-white fw-semibold">Positionen</div><div class="card-body">
+  {% include "generic/_formset.html" with formset=formset %}
+  <div class="form-text">Mit Bestellbezug bucht das System auf das WE/RE-Verrechnungskonto (zum WE-Preis, Preisdifferenz auf Aufwand); ohne Bezug auf das angegebene Konto bzw. die Kontierungsregel.</div>
+  <button name="aktion" value="speichern" class="btn btn-sm btn-primary mt-2">Speichern und prüfen</button></div></div></form>
+{% else %}
+<div class="card"><div class="card-header bg-white fw-semibold">Positionen</div><div class="table-responsive"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Pos.</th><th>Artikel</th><th>Bezeichnung</th><th class="text-end">Menge</th><th class="text-end">Preis</th><th>Steuer</th><th class="text-end">Netto</th></tr></thead>
+  <tbody>{% for p in positionen %}<tr><td>{{ p.position }}</td><td>{{ p.artikel.artikelnummer|default:"" }}</td><td>{{ p.bezeichnung }}</td><td class="text-end">{{ p.menge|menge }}</td><td class="text-end">{{ p.einzelpreis|zahl:4 }}</td><td>{{ p.steuerschluessel.code }}</td><td class="text-end">{{ p.betrag_netto|euro }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% endif %}
+{% endblock %}

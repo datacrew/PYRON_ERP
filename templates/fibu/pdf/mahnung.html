@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 20mm 18mm 22mm 22mm;
+    @bottom-center { content: "{{ mandant.name }} · {{ mandant.strasse }} · {{ mandant.plz }} {{ mandant.ort }}{% if mandant.iban %} · IBAN {{ mandant.iban }}{% endif %}{% if mandant.bic %} · BIC {{ mandant.bic }}{% endif %}";
+      font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7pt; color: #555; } }
+  body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 9.5pt; color: #111; line-height: 1.35; }
+  .absender { font-size: 7pt; color: #555; border-bottom: .3pt solid #777; display: inline-block; margin-bottom: 2mm; }
+  .anschrift { height: 40mm; margin-top: 18mm; }
+  .info { position: absolute; top: 18mm; right: 0; width: 60mm; font-size: 8.5pt; }
+  .info td { padding: .4mm 0; } .info td.l { color: #555; padding-right: 3mm; }
+  h1 { font-size: 13pt; margin: 4mm 0 4mm; }
+  table.pos { width: 100%; border-collapse: collapse; margin: 3mm 0; }
+  table.pos th { text-align: left; font-size: 8pt; border-bottom: .8pt solid #111; padding: 1mm; }
+  table.pos td { border-bottom: .3pt solid #aaa; padding: 1.2mm 1mm; }
+  .r { text-align: right; white-space: nowrap; }
+  tr.summe td { font-weight: bold; border-top: .8pt solid #111; border-bottom: none; }
+  .wasserzeichen { position: fixed; top: 110mm; left: 10mm; font-size: 70pt; color: rgba(200,0,0,.12); transform: rotate(-30deg); }
+  .klein { font-size: 8pt; color: #444; }
+</style></head><body>
+{% if entwurf %}<div class="wasserzeichen">ENTWURF</div>{% endif %}
+<div class="anschrift">
+  <div class="absender">{{ mandant.name }} · {{ mandant.strasse }} · {{ mandant.plz }} {{ mandant.ort }}</div><br>
+  {{ partner.name }}<br>
+  {% if adresse %}{% if adresse.zusatz %}{{ adresse.zusatz }}<br>{% endif %}{{ adresse.strasse }}<br>{{ adresse.plz }} {{ adresse.ort }}{% if adresse.land != "DE" %}<br>{{ adresse.land }}{% endif %}{% endif %}
+</div>
+<table class="info">
+  <tr><td class="l">Datum</td><td>{{ lauf.stichtag|date:"d.m.Y" }}</td></tr>
+  <tr><td class="l">Kundennummer</td><td>{{ partner.nummer }}</td></tr>
+  <tr><td class="l">Mahnlauf</td><td>{{ lauf.nummer }}</td></tr>
+  <tr><td class="l">Mahnstufe</td><td>{{ mahnung.stufe.stufe }}</td></tr>
+</table>
+<h1>{{ mahnung.stufe.bezeichnung }}</h1>
+<p>Sehr geehrte Damen und Herren,</p>
+<p>{{ mahnung.stufe.text|default:"bei der Durchsicht unserer Buchhaltung haben wir festgestellt, dass folgende Rechnungen noch offen sind:"|linebreaksbr }}</p>
+<table class="pos">
+  <thead><tr><th>Rechnung</th><th>Datum</th><th>Fällig am</th><th class="r">Tage Verzug</th><th class="r">Offen €</th>{% if mahnung.zinssatz %}<th class="r">Zinsen €</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for p in positionen %}<tr><td>{{ p.op.belegnr }}</td><td>{{ p.op.belegdatum|date:"d.m.Y" }}</td><td>{{ p.op.faellig_am|date:"d.m.Y" }}</td>
+    <td class="r">{{ p.tage_verzug }}</td><td class="r">{{ p.offen|euro }}</td>{% if mahnung.zinssatz %}<td class="r">{{ p.zinsen|euro }}</td>{% endif %}</tr>{% endfor %}
+  <tr><td colspan="4">Summe offene Rechnungen</td><td class="r">{{ mahnung.summe_offen|euro }}</td>{% if mahnung.zinssatz %}<td></td>{% endif %}</tr>
+  {% if mahnung.zinsen %}<tr><td colspan="4">Verzugszinsen ({{ mahnung.zinssatz|zahl }} % p. a.)</td><td class="r">{{ mahnung.zinsen|euro }}</td>{% if mahnung.zinssatz %}<td></td>{% endif %}</tr>{% endif %}
+  {% if mahnung.gebuehr %}<tr><td colspan="4">Mahngebühr</td><td class="r">{{ mahnung.gebuehr|euro }}</td>{% if mahnung.zinssatz %}<td></td>{% endif %}</tr>{% endif %}
+  <tr class="summe"><td colspan="4">Zu zahlender Gesamtbetrag</td><td class="r">{{ mahnung.gesamt|euro }}</td>{% if mahnung.zinssatz %}<td></td>{% endif %}</tr>
+  </tbody>
+</table>
+<p>Bitte überweisen Sie den Gesamtbetrag bis spätestens <b>{{ mahnung.frist|date:"d.m.Y" }}</b>{% if mandant.iban %} auf unser Konto IBAN {{ mandant.iban }}{% endif %} unter Angabe der Rechnungsnummer(n).
+Sollten Sie die Zahlung bereits veranlasst haben, betrachten Sie dieses Schreiben bitte als gegenstandslos.</p>
+{% if mahnung.zinssatz %}<p class="klein">Verzugszinsen gemäß § 288 Abs. 2 BGB: {{ mahnung.zinssatz|zahl }} % p. a. (Basiszinssatz {{ basiszins|zahl }} % zzgl. Aufschlag), berechnet taggenau (Tage/365) ab Fälligkeit.</p>{% endif %}
+<p>Mit freundlichen Grüßen<br>{{ mandant.name }} – Buchhaltung</p>
+</body></html>

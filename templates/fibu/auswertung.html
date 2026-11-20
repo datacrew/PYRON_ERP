@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ a.titel }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-graph-up"></i> {{ a.titel }}</h1>
+  <div class="ms-auto d-flex gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="?{{ params }}&format=pdf" target="_blank"><i class="bi bi-file-pdf"></i> PDF</a>
+    <a class="btn btn-sm btn-outline-secondary" href="?{{ params }}&format=csv"><i class="bi bi-filetype-csv"></i> CSV</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:auswertungen' %}">Zurück</a></div></div>
+{% include "fibu/_nav.html" with aktiv="auswertungen" %}
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-auto"><label class="form-label small mb-1">Von</label><input type="date" name="von" class="form-control form-control-sm" value="{{ von|date:'Y-m-d' }}"></div>
+  <div class="col-auto"><label class="form-label small mb-1">Bis</label><input type="date" name="bis" class="form-control form-control-sm" value="{{ bis|date:'Y-m-d' }}"></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Aktualisieren</button></div>
+  <div class="col-auto small text-muted">{{ a.untertitel }}</div>
+</form>
+<div class="card"><div class="table-responsive"><table class="table table-sm mb-0">
+<thead class="table-light"><tr>{% for name, ausr in a.spalten %}<th class="{% if ausr == 'r' %}text-end{% endif %}">{{ name }}</th>{% endfor %}</tr></thead>
+<tbody>{% for z in a.anzeige %}<tr class="{% if z.stil == 'kopf' %}table-light fw-semibold{% elif z.stil == 'summe' %}fw-semibold{% elif z.stil == 'gesamt' %}fw-bold table-secondary{% elif z.stil == 'hinweis' %}text-danger{% endif %}">{% for text, ausr in z.werte %}<td class="{% if ausr == 'r' %}text-end text-nowrap{% endif %}{% if z.stil == 'einrueck' and forloop.first %} ps-4{% endif %}">{{ text }}</td>{% endfor %}</tr>
+{% empty %}<tr><td colspan="{{ a.spalten|length }}" class="text-muted text-center">Keine Daten im Zeitraum.</td></tr>{% endfor %}</tbody></table></div></div>
+{% if a.hinweise %}<div class="small text-muted mt-2">{% for h in a.hinweise %}<div>{{ h }}</div>{% endfor %}</div>{% endif %}
+{% endblock %}

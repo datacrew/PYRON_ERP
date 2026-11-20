@@ -83,6 +83,14 @@ def _warenfluss_kennzahlen(user):
         werte["Offene Fertigungsaufträge"] = Fertigungsauftrag.objects.filter(
             status__in=Fertigungsauftrag.OFFENE_STATI).count()
         werte["Angestempelt"] = Stempelung.objects.filter(ende__isnull=True).count()
+    if hat_recht(user, "fibu"):
+        from apps.fibu.services import euro
+        from apps.fibu.views import kennzahlen
+
+        k = kennzahlen()
+        werte["Offene Forderungen"] = euro(k["debitoren"])
+        werte["Offene Verbindlichkeiten"] = euro(k["kreditoren"])
+        werte["Bankbestand"] = euro(k["liquiditaet"])
     return werte
 
 

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Hash-Kette Journal{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-shield-check"></i> Prüfung der Hash-Kette (Buchungsjournal)</h1></div>
+{% include "fibu/_nav.html" with aktiv="buchungen" %}
+{% if fehler %}<div class="alert alert-danger"><b>{{ fehler|length }} Fehler</b> in {{ anzahl }} festgeschriebenen Buchungen:<ul class="mb-0">{% for f in fehler %}<li>{{ f }}</li>{% endfor %}</ul></div>
+{% else %}<div class="alert alert-success"><i class="bi bi-check-circle"></i> {{ anzahl }} festgeschriebene Buchungen geprüft – Kette lückenlos, alle Prüfsummen stimmen.</div>{% endif %}
+<p class="small text-muted">Jede festgeschriebene Buchung enthält die SHA-256-Prüfsumme ihres Inhalts und die Prüfsumme der Vorgängerbuchung. Zusätzlich verhindert ein Datenbank-Trigger Änderungen und Löschungen.</p>
+{% endblock %}

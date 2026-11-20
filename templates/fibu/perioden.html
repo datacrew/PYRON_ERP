@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Perioden & Abschluss{% endblock %}
+{% block content %}
+{% hat_recht "fibu_abschluss" "anlegen" as darf %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-calendar-check"></i> Geschäftsjahre, Perioden & Jahresabschluss</h1>
+  <div class="ms-auto">{% if darf %}<form method="post" class="d-flex gap-1">{% csrf_token %}<input type="hidden" name="aktion" value="gj_anlegen"><input type="number" name="jahr" value="{{ naechstes }}" class="form-control form-control-sm" style="width:6rem"><button class="btn btn-sm btn-primary text-nowrap"><i class="bi bi-plus"></i> Geschäftsjahr anlegen</button></form>{% endif %}</div></div>
+{% include "fibu/_nav.html" with aktiv="perioden" %}
+{% for gj in jahre %}<div class="card mb-3"><div class="card-header bg-white d-flex align-items-center"><span class="fw-semibold">{{ gj }} ({{ gj.beginn|date:"d.m.Y" }} – {{ gj.ende|date:"d.m.Y" }})</span>
+  {% if gj.abgeschlossen %}<span class="badge text-bg-dark ms-2">abgeschlossen</span>{% endif %}{% if gj.saldenvortrag_am %}<span class="badge text-bg-info ms-2">Saldenvortrag {{ gj.saldenvortrag_am|date:"d.m.Y" }}</span>{% endif %}
+  {% if darf and not gj.abgeschlossen %}<div class="ms-auto d-flex gap-2">
+    <form method="post" onsubmit="return confirm('Saldenvortrag der Bestandskonten ins Folgejahr buchen?')">{% csrf_token %}<input type="hidden" name="aktion" value="saldenvortrag"><input type="hidden" name="jahr" value="{{ gj.jahr }}"><button class="btn btn-sm btn-outline-primary">Saldenvortrag {{ gj.jahr|add:1 }}</button></form>
+    <form method="post" onsubmit="return confirm('Geschäftsjahr abschließen? Alle Perioden werden gesperrt.')">{% csrf_token %}<input type="hidden" name="aktion" value="abschliessen"><input type="hidden" name="jahr" value="{{ gj.jahr }}"><button class="btn btn-sm btn-outline-dark">Jahr abschließen</button></form></div>{% endif %}</div>
+  <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Periode</th><th>Zeitraum</th><th class="text-end">Buchungen</th><th class="text-end">nicht festgeschrieben</th><th>Status</th><th></th></tr></thead>
+  <tbody>{% for p in gj.perioden.all %}{% with z=zaehler|get_item:p.pk %}<tr><td>{{ p }}</td><td>{{ p.beginn|date:"d.m." }} – {{ p.ende|date:"d.m.Y" }}</td><td class="text-end">{{ z.n|default:0 }}</td><td class="text-end">{{ z.offen|default:0 }}</td>
+    <td>{% if p.gesperrt %}<span class="badge text-bg-secondary"><i class="bi bi-lock-fill"></i> gesperrt</span> <small class="text-muted">{{ p.gesperrt_am|date:"d.m.Y" }}</small>{% else %}<span class="badge text-bg-success">offen</span>{% endif %}</td>
+    <td>{% if darf and not gj.abgeschlossen %}<form method="post">{% csrf_token %}<input type="hidden" name="periode" value="{{ p.pk }}">{% if p.gesperrt %}<button name="aktion" value="entsperren" class="btn btn-sm btn-outline-warning py-0">öffnen</button>{% else %}<button name="aktion" value="sperren" class="btn btn-sm btn-outline-secondary py-0" onclick="return confirm('Periode sperren? Offene Buchungen werden festgeschrieben.')">sperren</button>{% endif %}</form>{% endif %}</td></tr>{% endwith %}{% endfor %}</tbody></table></div></div>
+{% empty %}<p class="text-muted">Noch kein Geschäftsjahr angelegt.</p>{% endfor %}
+<p class="small text-muted">Periodensperre (Monatsabschluss): offene Buchungen werden festgeschrieben, danach sind in der Periode keine Buchungen mehr möglich (Code-Sperre und Datenbank-Trigger). Der Saldenvortrag überträgt die Salden der Bestandskonten auf den 01.01. des Folgejahres; das GuV-Ergebnis geht auf das Konto Gewinn-/Verlustvortrag.</p>
+{% endblock %}

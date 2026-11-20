@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.belege.api import BelegViewSet
 from apps.einkauf.api import BestellungViewSet
+from apps.fibu.api import BankumsatzViewSet, BuchungViewSet, OPViewSet, SachkontoViewSet
 from apps.produktion.api import FertigungsauftragViewSet, RueckmeldungViewSet, StempelungViewSet
 from apps.lager.api import BestandViewSet, ChargeViewSet, LagerbewegungViewSet, LagerortViewSet
 from apps.stammdaten.api import (
@@ -32,6 +33,10 @@ router.register("chargen", ChargeViewSet, basename="charge")
 router.register("fertigungsauftraege", FertigungsauftragViewSet, basename="fertigungsauftrag")
 router.register("stempelungen", StempelungViewSet, basename="stempelung")
 router.register("rueckmeldungen", RueckmeldungViewSet, basename="rueckmeldung")
+router.register("fibu/konten", SachkontoViewSet, basename="fibu-konto")
+router.register("buchungen", BuchungViewSet, basename="buchung")
+router.register("offene-posten", OPViewSet, basename="offener-posten")
+router.register("bankumsaetze", BankumsatzViewSet, basename="bankumsatz")
 
 urlpatterns = [
     path("token/", obtain_auth_token, name="api-token"),

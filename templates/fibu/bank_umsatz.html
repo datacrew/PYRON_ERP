@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Bankumsatz zuordnen{% endblock %}
+{% block content %}
+{% hat_recht "fibu_bank" "anlegen" as darf %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-arrow-left-right"></i> Bankumsatz {{ u.buchungsdatum|date:"d.m.Y" }} <span class="{% if u.betrag < 0 %}text-danger{% else %}text-success{% endif %}">{{ u.betrag|euro }}</span></h1>
+  <div class="ms-auto"><a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:bank' %}">Zurück</a></div></div>
+<div class="card mb-3"><div class="card-body small"><dl class="row mb-0">
+  <dt class="col-sm-2">Bankkonto</dt><dd class="col-sm-10">{{ u.bankkonto }}</dd>
+  <dt class="col-sm-2">Gegenseite</dt><dd class="col-sm-10">{{ u.name }} {{ u.iban }}</dd>
+  <dt class="col-sm-2">Verwendungszweck</dt><dd class="col-sm-10">{{ u.verwendungszweck }}</dd>
+  <dt class="col-sm-2">Referenz / GVC</dt><dd class="col-sm-10">{{ u.referenz|default:"–" }} / {{ u.gvc|default:"–" }}</dd>
+  <dt class="col-sm-2">Status</dt><dd class="col-sm-10">{{ u.get_status_display }}{% if u.buchung %} – <a href="{% url 'fibu:buchung' u.buchung.pk %}">{{ u.buchung.nummer }}</a>{% endif %}{% if u.zuordnung_buchung %}, Zuordnung <a href="{% url 'fibu:buchung' u.zuordnung_buchung.pk %}">{{ u.zuordnung_buchung.nummer }}</a>{% endif %}</dd>
+</dl></div></div>
+{% if darf and u.status != "GEBUCHT" %}
+<form method="post">{% csrf_token %}<input type="hidden" name="aktion" value="zuordnen">
+<div class="card mb-3"><div class="card-header bg-white fw-semibold">Offene Posten zuordnen</div>
+<div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th></th><th>Beleg</th><th>Partner</th><th>Fällig</th><th class="text-end">Offen</th><th class="text-end">Skonto</th><th>Treffer</th></tr></thead>
+<tbody>{% for v in vorschlaege %}<tr class="table-success"><td><input class="form-check-input" type="checkbox" name="op" value="{{ v.op.pk }}" {% if forloop.first and v.punkte >= 60 %}checked{% endif %}></td>
+  <td>{{ v.op.belegnr }} <small class="text-muted">{{ v.op.fremdbelegnr }}</small></td><td>{{ v.op.partner.name }}</td><td>{{ v.op.faellig_am|date:"d.m.Y" }}</td><td class="text-end">{{ v.op.offen|euro }}</td><td class="text-end">{% if v.skonto %}{{ v.skonto|euro }}{% endif %}</td>
+  <td><span class="badge text-bg-success">{{ v.punkte }} Pkt.</span> <small>{{ v.gruende|join:", " }}</small></td></tr>{% endfor %}
+{% for op in weitere %}<tr><td><input class="form-check-input" type="checkbox" name="op" value="{{ op.pk }}"></td><td>{{ op.belegnr }} <small class="text-muted">{{ op.fremdbelegnr }}</small></td><td>{{ op.partner.name }}</td><td>{{ op.faellig_am|date:"d.m.Y" }}</td><td class="text-end">{{ op.offen|euro }}</td><td></td><td></td></tr>
+{% empty %}{% if not vorschlaege %}<tr><td colspan="7" class="text-muted text-center">Keine passenden offenen Posten.</td></tr>{% endif %}{% endfor %}</tbody></table></div>
+<div class="card-body border-top d-flex align-items-center gap-3"><div class="form-check"><input class="form-check-input" type="checkbox" name="skonto" value="1" id="sk" checked><label class="form-check-label small" for="sk">Differenz innerhalb der Skontofrist als Skonto buchen</label></div>
+  <button class="btn btn-sm btn-primary ms-auto"><i class="bi bi-link-45deg"></i> Zuordnen und buchen</button></div></div></form>
+<div class="row g-3">
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Auf Sachkonto buchen</div><div class="card-body">
+    <form method="post">{% csrf_token %}<input type="hidden" name="aktion" value="sachkonto">{% include "generic/_formfelder.html" with form=sach_form %}<button class="btn btn-sm btn-outline-primary mt-3">Buchen</button></form></div></div></div>
+  <div class="col-lg-6"><div class="card h-100"><div class="card-header bg-white fw-semibold">Weitere Aktionen</div><div class="card-body d-flex flex-column gap-2 align-items-start">
+    {% if u.betrag < 0 %}<form method="post">{% csrf_token %}<input type="hidden" name="aktion" value="gebuehr"><button class="btn btn-sm btn-outline-secondary"><i class="bi bi-cash-coin"></i> Als Bankgebühr buchen</button>{% if gebuehr %} <small class="text-success">erkannt</small>{% endif %}</form>{% endif %}
+    {% if u.status == "OFFEN" %}<form method="post">{% csrf_token %}<input type="hidden" name="aktion" value="verrechnung"><button class="btn btn-sm btn-outline-warning"><i class="bi bi-question-circle"></i> Auf Verrechnungskonto (ungeklärt) buchen</button></form>
+    <div class="form-text">Ungeklärte Umsätze werden auf das Verrechnungskonto gebucht und können später einem OP zugeordnet werden (Umbuchung).</div>{% endif %}
+  </div></div></div></div>
+{% endif %}
+{% endblock %}

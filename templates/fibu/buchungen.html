@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Buchungsjournal{% endblock %}
+{% block content %}
+{% hat_recht "fibu" "anlegen" as darf_buchen %}{% hat_recht "fibu" "freigeben" as darf_festschreiben %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-journal-text"></i> Buchungsjournal</h1>
+  <div class="ms-auto d-flex gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:kette' %}"><i class="bi bi-shield-check"></i> Hash-Kette prüfen</a>
+    {% if darf_festschreiben %}<form method="post" action="{% url 'fibu:buchungen_festschreiben' %}" class="d-flex gap-1" onsubmit="return confirm('Alle erfassten Buchungen bis zum Datum unwiderruflich festschreiben?')">{% csrf_token %}
+      <input type="date" name="bis" class="form-control form-control-sm" required><button class="btn btn-sm btn-outline-success text-nowrap"><i class="bi bi-lock"></i> Festschreiben bis</button></form>{% endif %}
+    {% if darf_buchen %}<a class="btn btn-sm btn-primary" href="{% url 'fibu:buchung_neu' %}"><i class="bi bi-plus"></i> Buchung erfassen</a>{% endif %}
+  </div></div>
+{% include "fibu/_nav.html" with aktiv="buchungen" %}
+<form class="row g-2 mb-3" method="get">
+  <div class="col-auto"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Nummer, Beleg, Text"></div>
+  <div class="col-auto"><select name="status" class="form-select form-select-sm"><option value="">alle Stati</option><option value="ERFASST" {% if status == "ERFASST" %}selected{% endif %}>erfasst</option><option value="FESTGESCHRIEBEN" {% if status == "FESTGESCHRIEBEN" %}selected{% endif %}>festgeschrieben</option></select></div>
+  <div class="col-auto"><select name="quelle" class="form-select form-select-sm"><option value="alle">alle Quellen</option>{% for qu in quellen %}<option value="{{ qu }}" {% if request.GET.quelle == qu %}selected{% endif %}>{{ qu|default:"manuell" }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Filtern</button></div>
+</form>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th>Nummer</th><th>Belegdatum</th><th>Periode</th><th>Beleg</th><th>Text</th><th>Quelle</th><th class="text-end">Betrag</th><th>Status</th></tr></thead>
+<tbody>{% for b in seite %}<tr><td><a href="{% url 'fibu:buchung' b.pk %}">{{ b.nummer }}</a></td><td>{{ b.belegdatum|date:"d.m.Y" }}</td><td>{{ b.periode }}</td><td>{{ b.belegnr }}</td><td>{{ b.text|truncatechars:60 }}</td>
+  <td><small>{{ b.quelle|default:"manuell" }}</small></td><td class="text-end">{{ b.betrag|euro }}</td><td>{% include "fibu/_status.html" %}</td></tr>
+{% empty %}<tr><td colspan="8" class="text-muted text-center">Keine Buchungen.</td></tr>{% endfor %}</tbody></table></div></div>
+{% if seite.has_other_pages %}<nav class="mt-3"><ul class="pagination pagination-sm">
+  {% if seite.has_previous %}<li class="page-item"><a class="page-link" href="?q={{ q|urlencode }}&status={{ status|default:'' }}&quelle={{ request.GET.quelle|default:'alle' }}&seite={{ seite.previous_page_number }}">‹ Zurück</a></li>{% endif %}
+  <li class="page-item disabled"><span class="page-link">Seite {{ seite.number }} von {{ seite.paginator.num_pages }}</span></li>
+  {% if seite.has_next %}<li class="page-item"><a class="page-link" href="?q={{ q|urlencode }}&status={{ status|default:'' }}&quelle={{ request.GET.quelle|default:'alle' }}&seite={{ seite.next_page_number }}">Weiter ›</a></li>{% endif %}
+</ul></nav>{% endif %}
+{% endblock %}

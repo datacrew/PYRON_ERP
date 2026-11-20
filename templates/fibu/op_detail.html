@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Offener Posten {{ op.belegnr }}{% endblock %}
+{% block content %}
+{% hat_recht "fibu" "anlegen" as darf_buchen %}{% hat_recht "fibu_mahnwesen" "anlegen" as darf_mahnen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-receipt"></i> {{ op.get_art_display }} {{ op.belegnr }}
+  {% if op.ausgeglichen %}<span class="badge text-bg-success">ausgeglichen</span>{% elif op.offen != op.betrag %}<span class="badge text-bg-info">teilweise ausgeglichen</span>{% else %}<span class="badge text-bg-warning">offen</span>{% endif %}</h1>
+  <div class="ms-auto d-flex gap-2">
+    {% if darf_mahnen and op.art == "D" %}<form method="post" action="{% url 'fibu:op_mahnsperre' op.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-warning"><i class="bi bi-slash-circle"></i> Mahnsperre {% if op.mahnsperre %}aufheben{% else %}setzen{% endif %}</button></form>{% endif %}
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu:op_liste' %}?art={{ op.art }}">Liste</a></div></div>
+<div class="row g-3">
+  <div class="col-lg-5"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Daten</div><div class="card-body small"><dl class="row mb-0">
+    <dt class="col-5">Partner</dt><dd class="col-7">{{ op.partner.name }} ({{ op.partner.nummer }}){% if op.partner.mahnsperre %} <span class="badge text-bg-warning">Partner-Mahnsperre</span>{% endif %}</dd>
+    <dt class="col-5">Personenkonto</dt><dd class="col-7"><a href="{% url 'fibu:kontoblatt' op.konto.pk %}">{{ op.konto.nummer }}</a> {{ op.konto.bezeichnung }}</dd>
+    <dt class="col-5">Buchung</dt><dd class="col-7"><a href="{% url 'fibu:buchung' op.buchung.pk %}">{{ op.buchung.nummer }}</a></dd>
+    {% if op.fremdbelegnr %}<dt class="col-5">Fremdbeleg</dt><dd class="col-7">{{ op.fremdbelegnr }}</dd>{% endif %}
+    <dt class="col-5">Belegdatum</dt><dd class="col-7">{{ op.belegdatum|date:"d.m.Y" }}</dd>
+    <dt class="col-5">Fällig am</dt><dd class="col-7">{{ op.faellig_am|date:"d.m.Y" }}</dd>
+    <dt class="col-5">Skonto</dt><dd class="col-7">{% if op.skonto_prozent %}{{ op.skonto_prozent|zahl }} % bis {{ op.skonto_bis|date:"d.m.Y" }}{% if skonto %} (heute {{ skonto|euro }}){% endif %}{% else %}–{% endif %}</dd>
+    <dt class="col-5">Betrag</dt><dd class="col-7">{{ op.betrag|euro }}</dd>
+    <dt class="col-5">Offen</dt><dd class="col-7 fw-semibold">{{ op.offen|euro }}</dd>
+    <dt class="col-5">Mahnstufe</dt><dd class="col-7">{{ op.mahnstufe }}{% if op.letzte_mahnung %} (zuletzt {{ op.letzte_mahnung|date:"d.m.Y" }}){% endif %}</dd>
+  </dl></div></div>
+  {% if darf_buchen and op.offen %}<div class="card"><div class="card-header bg-white fw-semibold">Zahlung / Ausgleich buchen</div><div class="card-body">
+    <form method="post">{% csrf_token %}{% include "generic/_formfelder.html" with form=form %}<button class="btn btn-sm btn-primary mt-3"><i class="bi bi-check2"></i> Ausgleich buchen</button></form>
+    <div class="form-text">Teilzahlungen lassen den Rest offen. Skonto wird mit anteiliger Steuerkorrektur gebucht.</div></div></div>{% endif %}
+  </div>
+  <div class="col-lg-7"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Ausgleiche</div>
+    <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Datum</th><th>Art</th><th class="text-end">Betrag</th><th>Buchung</th></tr></thead>
+    <tbody>{% for a in ausgleiche %}<tr><td>{{ a.datum|date:"d.m.Y" }}</td><td>{{ a.get_art_display }}</td><td class="text-end">{{ a.betrag|euro }}</td><td>{% if a.buchung %}<a href="{% url 'fibu:buchung' a.buchung.pk %}">{{ a.buchung.nummer }}</a>{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="4" class="text-muted text-center">Noch keine Ausgleiche.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><div class="card-header bg-white fw-semibold">Mahnhistorie</div>
+    <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Mahnlauf</th><th>Stichtag</th><th>Stufe</th><th class="text-end">Offen</th><th class="text-end">Zinsen</th><th></th></tr></thead>
+    <tbody>{% for p in mahnungen %}<tr><td><a href="{% url 'fibu:mahnlauf' p.mahnung.mahnlauf.pk %}">{{ p.mahnung.mahnlauf.nummer }}</a> <small class="text-muted">{{ p.mahnung.mahnlauf.get_status_display }}</small></td><td>{{ p.mahnung.mahnlauf.stichtag|date:"d.m.Y" }}</td><td>{{ p.mahnung.stufe.bezeichnung }}</td><td class="text-end">{{ p.offen|euro }}</td><td class="text-end">{{ p.zinsen|euro }}</td>
+      <td><a href="{% url 'fibu:mahnung_pdf' p.mahnung.pk %}" target="_blank"><i class="bi bi-file-pdf"></i></a></td></tr>
+    {% empty %}<tr><td colspan="6" class="text-muted text-center">Nicht gemahnt.</td></tr>{% endfor %}</tbody></table></div></div>
+  </div></div>
+{% endblock %}
