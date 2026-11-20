@@ -2,7 +2,7 @@ from django.apps import AppConfig
 
 
 class ReportingConfig(AppConfig):
-    """Gerüst – fachliche Umsetzung folgt laut docs/ROADMAP.md."""
+    """Phase 6 – Reporting: Bericht-Registry, Standardberichte, Management-Cockpit, Exporte."""
 
     name = "apps.reporting"
     label = "reporting"
@@ -11,9 +11,14 @@ class ReportingConfig(AppConfig):
     erp_modul = {
         "code": "reporting",
         "name": "Reporting",
-        "beschreibung": "Auswertungen und Kennzahlen über alle Module",
+        "beschreibung": "Management-Cockpit, Standardberichte aller Module, Export nach Excel, CSV und PDF",
         "icon": "bi-bar-chart",
         "reihenfolge": 85,
-        "url_name": "",
-        "geplant": ['Umsatz-, Deckungsbeitrags- und Lieferantenauswertungen', 'Produktionskennzahlen (OEE, Akkord, Ausschuss)', 'Liquiditätsübersicht', 'Export nach Excel/CSV', 'Benutzerdefinierte Berichte'],
+        "url_name": "reporting:index",
+        "geplant": [],
     }
+
+    def ready(self):
+        from django.utils.module_loading import autodiscover_modules
+
+        autodiscover_modules("berichte")

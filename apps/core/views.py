@@ -39,8 +39,13 @@ def dashboard(request):
         kennzahlen["Festgeschriebene Belege"] = Beleg.objects.filter(status=Beleg.Status.FESTGESCHRIEBEN).count()
         letzte_belege = Beleg.objects.select_related("partner").order_by("-pk")[:8]
     kennzahlen.update(_warenfluss_kennzahlen(request.user))
+    favoriten = []
+    if hat_recht(request.user, "reporting"):
+        from apps.reporting.views import favoriten as reporting_favoriten
+
+        favoriten = reporting_favoriten(request.user)
     return render(request, "core/dashboard.html", {"kacheln": kacheln, "kennzahlen": kennzahlen,
-                                                   "letzte_belege": letzte_belege,
+                                                   "letzte_belege": letzte_belege, "favoriten": favoriten,
                                                    "hinweise": _modul_hinweise(request, kacheln)})
 
 
@@ -240,3 +245,53 @@ def audit_log(request):
         qs = qs.filter(objekt_text__icontains=request.GET["objekt"])
     seite = Paginator(qs, 50).get_page(request.GET.get("page"))
     return render(request, "core/audit_log.html", {"seite": seite, "page_obj": seite, "aktionen": AuditLog.AKTIONEN})
+
+
+@login_required
+def suche(request):
+    """Globale Suche in der Kopfzeile: Artikel, Geschäftspartner und Belegnummern – je nach Leserecht."""
+    from django.db.models import Q
+
+    q = (request.GET.get("q") or "").strip()
+    gruppen = []
+    if len(q) >= 2:
+        u = request.user
+
+        def gruppe(titel, icon, eintraege):
+            if eintraege:
+                gruppen.append({"titel": titel, "icon": icon, "eintraege": eintraege})
+
+        if hat_recht(u, "stammdaten"):
+            from apps.stammdaten.models import Artikel, Geschaeftspartner
+
+            gruppe("Artikel", "bi-box", [
+                (f"{a.artikelnummer} – {a.bezeichnung}", reverse("stammdaten:artikel_bearbeiten", args=[a.pk]))
+                for a in Artikel.objects.filter(Q(artikelnummer__icontains=q) | Q(bezeichnung__icontains=q))[:15]])
+            gruppe("Geschäftspartner", "bi-people", [
+                (f"{p.nummer} – {p.name}", reverse("stammdaten:partner_bearbeiten", args=[p.pk]))
+                for p in Geschaeftspartner.objects.filter(Q(nummer__icontains=q) | Q(name__icontains=q))[:15]])
+        if hat_recht(u, "belege"):
+            from apps.belege.models import Beleg
+
+            gruppe("Belege", "bi-file-earmark-text", [
+                (f"{b} – {b.partner.name if b.partner_id else ''}", reverse("belege:detail", args=[b.pk]))
+                for b in Beleg.objects.select_related("partner").filter(nummer__icontains=q)[:15]])
+        if hat_recht(u, "vertrieb"):
+            from apps.vertrieb.models import Auftrag
+
+            gruppe("Kundenaufträge", "bi-cart", [
+                (f"{a.nummer} – {a.partner.name}", reverse("vertrieb:auftrag", args=[a.pk]))
+                for a in Auftrag.objects.select_related("partner").filter(nummer__icontains=q)[:15]])
+        if hat_recht(u, "einkauf"):
+            from apps.einkauf.models import Bestellung
+
+            gruppe("Bestellungen / Anfragen", "bi-truck", [
+                (str(b), reverse("einkauf:detail", args=[b.pk]))
+                for b in Bestellung.objects.filter(nummer__icontains=q)[:15]])
+        if hat_recht(u, "produktion"):
+            from apps.produktion.models import Fertigungsauftrag
+
+            gruppe("Fertigungsaufträge", "bi-gear", [
+                (str(f), reverse("produktion:detail", args=[f.pk]))
+                for f in Fertigungsauftrag.objects.filter(nummer__icontains=q)[:15]])
+    return render(request, "core/suche.html", {"q": q, "gruppen": gruppen})

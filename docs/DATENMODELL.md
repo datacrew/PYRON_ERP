@@ -617,3 +617,13 @@ Regeln:
 
 Rechnungen, Gutschriften, Angebote und Auftragsbestätigungen bleiben Belege (`apps/belege`) – GoBD-Festschreibung,
 Hash-Kette und Fibu-Automatikbuchung gelten unverändert; Lagerabgänge laufen über das Lagerjournal.
+
+## Phase 6 – Reporting (`apps/reporting`)
+
+| Modell | Zweck / wichtige Felder |
+|---|---|
+| Berichtsvariante | Gespeicherte Filter je Benutzer: benutzer → User, bericht (Code aus der Registry, z. B. `vertrieb.umsatz_kunde`), name, filter (JSON), favorit (im Dashboard/Cockpit), erstellt_am; eindeutig je (benutzer, bericht, name) |
+
+Berichte selbst sind keine Datenbankobjekte: Sie werden im Code über die Bericht-Registry
+(`apps/reporting/registry.py`, je Modul `berichte.py`) registriert und lesen nur über Querysets/Services der
+Fachmodule. Reporting schreibt nicht in fremde Tabellen.

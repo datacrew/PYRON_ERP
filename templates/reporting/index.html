@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Reporting{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-bar-chart me-2"></i>Reporting</h1>
+  <a class="btn btn-primary btn-sm ms-auto" href="{% url 'reporting:cockpit' %}"><i class="bi bi-speedometer2 me-1"></i>Management-Cockpit</a>
+</div>
+{% if varianten %}
+<div class="card mb-4"><div class="card-header py-2"><i class="bi bi-bookmark-star me-1"></i>Meine gespeicherten Berichtsvarianten</div>
+  <table class="table table-sm mb-0"><tbody>{% for v, b in varianten %}
+    <tr><td>{% if v.favorit %}<i class="bi bi-star-fill text-warning me-1" title="Favorit"></i>{% endif %}
+      <a href="{% url 'reporting:bericht' b.code %}?{{ v.query }}">{{ v.name }}</a></td>
+      <td class="text-muted">{{ b.name }}</td>
+      <td class="text-end"><form method="post" action="{% url 'reporting:variante_loeschen' v.pk %}" class="d-inline">{% csrf_token %}
+        <button class="btn btn-sm btn-outline-danger py-0" title="Löschen"><i class="bi bi-trash"></i></button></form></td></tr>
+  {% endfor %}</tbody></table></div>
+{% endif %}
+<div class="row g-3">
+  {% for kategorie, berichte in gruppen %}
+  <div class="col-lg-6 col-xxl-4"><div class="card h-100">
+    <div class="card-header py-2 fw-semibold">{{ kategorie }} <span class="badge bg-light text-secondary border">{{ berichte|length }}</span></div>
+    <div class="list-group list-group-flush">{% for b in berichte %}
+      <a class="list-group-item list-group-item-action py-2" href="{% url 'reporting:bericht' b.code %}">
+        <div class="fw-semibold">{{ b.name }}</div><div class="small text-muted">{{ b.beschreibung }}</div></a>{% endfor %}</div>
+  </div></div>
+  {% empty %}
+  <div class="col"><div class="alert alert-warning">Für Ihre Module sind keine Berichte freigegeben.</div></div>
+  {% endfor %}
+</div>
+{% endblock %}

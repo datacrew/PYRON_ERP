@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Suche{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3"><i class="bi bi-search me-2"></i>Suche{% if q %}: „{{ q }}“{% endif %}</h1>
+<form method="get" class="mb-3" style="max-width:480px">
+  <div class="input-group"><input class="form-control" name="q" value="{{ q }}" placeholder="Artikel, Partner, Belegnummer …" autofocus>
+    <button class="btn btn-primary">Suchen</button></div>
+</form>
+{% if q|length < 2 %}
+  <div class="text-muted">Bitte mindestens zwei Zeichen eingeben.</div>
+{% else %}
+  {% for g in gruppen %}
+  <div class="card mb-3"><div class="card-header py-2"><i class="bi {{ g.icon }} me-1"></i>{{ g.titel }}
+    <span class="badge bg-secondary ms-1">{{ g.eintraege|length }}</span></div>
+    <div class="list-group list-group-flush">{% for text, url in g.eintraege %}
+      <a class="list-group-item list-group-item-action py-2" href="{{ url }}">{{ text }}</a>{% endfor %}</div></div>
+  {% empty %}
+  <div class="alert alert-light border">Keine Treffer.</div>
+  {% endfor %}
+{% endif %}
+{% endblock %}

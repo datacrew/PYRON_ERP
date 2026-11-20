@@ -1,4 +1,4 @@
-# Roadmap – Phasen 2 bis 6 (Produktion vorgezogen)
+# Roadmap – Phasen 2 bis 6 (alle erledigt)
 
 Die Aufwände sind **grobe Schätzungen** in Personentagen (PT) für eine erfahrene Django-Entwicklerin bzw.
 einen erfahrenen Django-Entwickler. Enthalten sind Umsetzung, Tests und Doku, **nicht** enthalten sind
@@ -11,10 +11,10 @@ Steuerberatung. Realistisch sind ±30 %, je nach Tiefe der Anforderungen.
 | 2 | Einkauf + Wareneingang + Lagerbestand (**abgeschlossen**) | – |
 | 3 | Produktion mit Zeiterfassung und Akkord (**abgeschlossen**, vorgezogen) | – |
 | 4 | Finanzbuchhaltung (**abgeschlossen**) | – |
-| 5 | Vertrieb, CRM, E-Rechnung, EDIFACT, Versand | 40–55 PT |
-| 6 | Reporting, Betrieb, Härtung | 20–30 PT |
+| 5 | Vertrieb, CRM, E-Rechnung, EDIFACT, Versand (**abgeschlossen**) | – |
+| 6 | Reporting und Feinschliff (**abgeschlossen**) | – |
+| | Betrieb/Härtung für den Produktivbetrieb (siehe unten) | 15–25 PT |
 | | Produktion-Ausbau (Kapazitätsplanung, Reservierung, Lohnexport-Formate) | 10–20 PT |
-| | **Summe offene Phasen** | **ca. 70–105 PT** |
 
 Die Reihenfolge ist ein Vorschlag: Einkauf/Lager zuerst, weil Produktion und Versand Bestände brauchen;
 Die Produktion wurde auf Wunsch vor Fibu und Vertrieb gezogen und ist als **Phase 3** umgesetzt. Die bisherigen
@@ -107,9 +107,27 @@ Ursprünglicher Umfang:
 - **LVS-Schnittstelle** (Lagerverwaltungssystem): Auftrags- und Rückmeldeschnittstelle (Datei/REST),
   Spezifikation abhängig vom eingesetzten LVS
 
-## Phase 6 – Reporting, Betrieb, Härtung, Feinschliff (20–30 PT) – **als Nächstes**
-- Reporting-Modul: Kennzahlen-Dashboard (Umsatz, Deckungsbeitrag, Bestände, OP, Produktivität),
-  Listen mit Filtern und Excel/CSV-Export, geplante Berichte per E-Mail
+## Phase 6 – Reporting und Feinschliff (**erledigt**, siehe README „Phase 6: Reporting", 12 neue Tests, gesamt 119)
+- ✅ Bericht-Registry (`berichte.py` je Modul), 28 Standardberichte aus Vertrieb, Einkauf, Lager, Produktion,
+  Fibu und Versand, Rechte: `reporting.lesen` + Leserecht Quellmodul
+- ✅ Management-Cockpit mit KPI-Kacheln und Chart.js-Diagrammen (rechteabhängig)
+- ✅ Export Excel (Summenformeln, deutsche Formate, Filterkopf), CSV (Semikolon, UTF-8 BOM), PDF (Querformat)
+- ✅ Berichtsvarianten je Benutzer mit Favoriten im Dashboard, REST-API `/api/v1/berichte/`
+- ✅ Feinschliff: Reporting-Platzhalter ersetzt, globale Suche in der Kopfzeile, Rolle Lager/Fertigungsleitung mit Reporting-Leserecht
+- offen: geplante Berichte per E-Mail, Berichtsdesigner
+
+## Empfohlene nächste Schritte für den Produktivbetrieb
+1. **Eigener Server mit fester PostgreSQL-Datenbank und Backups** (tägliche Sicherung + regelmäßiger
+   Wiederherstellungstest); die Demo-Umgebung ist flüchtig.
+2. **Docker-Test**: `docker compose` wurde bisher nicht ausgeführt – auf dem Zielsystem testen.
+3. **E-Rechnung validieren**: KoSIT-Validator (XRechnung-Schematron) und veraPDF (PDF/A-3) in die Prüfung aufnehmen.
+4. **Steuerberater-Abnahme** der Fibu (Kontierung, USt-VA, DATEV-Export, Verfahrensdokumentation GoBD).
+5. **Echte EDI-/LVS-Übertragungswege** (AS2/SFTP, Abstimmung mit Kunden und LVS-Anbieter).
+6. **Betriebsrat und Datenschutz** für Zeiterfassung/Akkord (Betriebsvereinbarung, DSFA, Löschfristen).
+7. **Lasttest** mit realistischen Datenmengen und Benutzerzahlen; danach Produktiv-Setup (Gunicorn + Nginx, HTTPS,
+   Monitoring, Hintergrundjobs).
+
+## Weitere Härtung (optional)
 - Mehrmandantenfähigkeit (falls benötigt), Feld-/Datensatzrechte, Zwei-Faktor-Anmeldung, Passwortrichtlinie
 - Betrieb: Produktiv-Setup (Gunicorn + Nginx, HTTPS), Backups mit Wiederherstellungstest, Monitoring/Logging,
   Hintergrundjobs (z. B. Celery/RQ für Importe, E-Mails, PDF-Massendruck)

@@ -93,13 +93,13 @@ class RechteTests(TestCase):
                      "vertrieb:auftraege", "vertrieb:auftrag_neu", "vertrieb:lieferscheine", "vertrieb:rechnungen",
                      "vertrieb:edi", "vertrieb:shops", "vertrieb:leads_liste", "vertrieb:edipartner_liste",
                      "versand:index", "versand:touren", "versand:planen", "versand:lvs", "versand:regionen_liste",
-                     "versand:fahrzeuge_liste"]:
+                     "versand:fahrzeuge_liste", "reporting:index", "reporting:cockpit", "core:suche"]:
             self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
         # umgesetzte Module leiten von der Platzhalterseite auf ihre Startseite weiter
         self.assertRedirects(self.client.get(reverse("core:platzhalter", args=["produktion"])),
                              reverse("produktion:index"))
         self.assertRedirects(self.client.get(reverse("core:platzhalter", args=["fibu"])), reverse("fibu:index"))
-        for modul in ("vertrieb", "versand"):
+        for modul in ("vertrieb", "versand", "reporting"):
             self.assertRedirects(self.client.get(reverse("core:platzhalter", args=[modul])),
                                  reverse(f"{modul}:index"))
 

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Management-Cockpit{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-speedometer2 me-2"></i>Management-Cockpit</h1>
+  <a class="btn btn-outline-primary btn-sm ms-auto" href="{% url 'reporting:index' %}"><i class="bi bi-list-ul me-1"></i>Alle Berichte</a>
+</div>
+<div class="row g-3 mb-4">
+  {% for k in kacheln %}
+  <div class="col-6 col-lg-4 col-xxl-3"><div class="card h-100 {% if k.stufe %}border-{{ k.stufe }}{% endif %}"><div class="card-body py-3">
+    <div class="text-muted small"><i class="bi {{ k.icon }} me-1"></i>{{ k.name }}</div>
+    <div class="fs-4 fw-semibold {% if k.stufe %}text-{{ k.stufe }}{% endif %}">{{ k.text }}</div>
+    <div class="small">{% if k.vergleich is not None %}<span class="{% if k.vergleich >= 0 %}text-success{% else %}text-danger{% endif %}">
+      <i class="bi {% if k.vergleich >= 0 %}bi-arrow-up-right{% else %}bi-arrow-down-right{% endif %}"></i> {{ k.vergleich_text }}</span>{% endif %}
+      <span class="text-muted">{{ k.hinweis }}</span></div>
+  </div></div></div>
+  {% empty %}
+  <div class="col"><div class="alert alert-warning">Für Ihre Rechte sind keine Kennzahlen verfügbar.</div></div>
+  {% endfor %}
+</div>
+<div class="row g-3 mb-4">
+  {% if diagramme.umsatz %}<div class="col-xl-8"><div class="card h-100"><div class="card-header py-2">Umsatzentwicklung (12 Monate, netto)</div>
+    <div class="card-body" style="height:300px"><canvas id="chartUmsatz"></canvas></div></div></div>{% endif %}
+  {% if diagramme.op_alter %}<div class="col-xl-4"><div class="card h-100"><div class="card-header py-2">OP-Altersstruktur Debitoren</div>
+    <div class="card-body" style="height:300px"><canvas id="chartOp"></canvas></div></div></div>{% endif %}
+  {% if diagramme.top_kunden %}<div class="col-xl-8"><div class="card h-100"><div class="card-header py-2">Top-10-Kunden (letzte 12 Monate)</div>
+    <div class="card-body" style="height:320px"><canvas id="chartKunden"></canvas></div></div></div>{% endif %}
+  {% if favoriten %}<div class="col-xl-4"><div class="card h-100"><div class="card-header py-2"><i class="bi bi-star-fill text-warning me-1"></i>Favoriten</div>
+    <div class="list-group list-group-flush">{% for f in favoriten %}<a class="list-group-item list-group-item-action py-2" href="{{ f.url }}">{{ f.name }}<div class="small text-muted">{{ f.bericht }}</div></a>{% endfor %}</div></div></div>{% endif %}
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+  const D = {{ diagramme_json|safe }};
+  const euro = v => new Intl.NumberFormat("de-DE", {style: "currency", currency: "EUR", maximumFractionDigits: 0}).format(v);
+  const opt = (achse) => ({maintainAspectRatio: false, indexAxis: achse || "x", plugins: {legend: {display: false},
+    tooltip: {callbacks: {label: c => euro(c.parsed[achse === "y" ? "x" : "y"] ?? c.parsed)}}},
+    scales: {[achse === "y" ? "x" : "y"]: {ticks: {callback: v => euro(v)}}}});
+  if (D.umsatz) new Chart(chartUmsatz, {type: "bar", data: {labels: D.umsatz.labels,
+    datasets: [{data: D.umsatz.werte, backgroundColor: "#6172f3"}]}, options: opt()});
+  if (D.top_kunden) new Chart(chartKunden, {type: "bar", data: {labels: D.top_kunden.labels,
+    datasets: [{data: D.top_kunden.werte, backgroundColor: "#12b76a"}]}, options: opt("y")});
+  if (D.op_alter) new Chart(chartOp, {type: "doughnut", data: {labels: D.op_alter.labels,
+    datasets: [{data: D.op_alter.werte, backgroundColor: ["#98a2b3", "#12b76a", "#f79009", "#f97066", "#d92d20"]}]},
+    options: {maintainAspectRatio: false, plugins: {legend: {position: "bottom"},
+      tooltip: {callbacks: {label: c => c.label + ": " + euro(c.parsed)}}}}});
+</script>
+{% endblock %}

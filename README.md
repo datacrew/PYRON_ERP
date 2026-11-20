@@ -1,4 +1,4 @@
-# ERP-System Mittelstand – Phase 1 (Fundament) + Phase 2 (Warenfluss) + Phase 3 (Produktion)
+# ERP-System Mittelstand – Phasen 1 bis 6 (Fundament, Warenfluss, Produktion, Fibu, Vertrieb/Versand, Reporting)
 
 Modulares ERP für einen mittelständischen Industriebetrieb – **Django 5.2 · Django REST Framework · PostgreSQL ·
 WeasyPrint**. Phase 1 liefert das Fundament: Mandant, Modul-Registry, Rechte, Nummernkreise, Audit-Log,
@@ -8,8 +8,10 @@ Einkauf (Bestellanforderung, Anfrage, Bestellung, Bestellvorschlag, Bestell-PDF)
 Qualitätsprüfung mit Sperrbestand, WE-Beleg-PDF). Phase 3 bringt die **Produktion**: Fertigungsaufträge aus
 Stückliste und Arbeitsplan, Fehlteilliste, Laufkarte mit Barcode, Betriebsdatenerfassung (Kommen/Gehen,
 Auftragsstempelung am Terminal), Rückmeldungen, Zeitakkord mit Mindestlohngarantie, Materialentnahme,
-Fertigmeldung zu Herstellkosten und Nachkalkulation. Vertrieb, Versand, Fibu und Reporting sind als Gerüste
-registriert (siehe [docs/ROADMAP.md](docs/ROADMAP.md)).
+Fertigmeldung zu Herstellkosten und Nachkalkulation. Phase 4 ergänzt die **Finanzbuchhaltung**, Phase 5
+**Vertrieb und Versand** (CRM, ZUGFeRD/XRechnung, Shop-API, EDIFACT, Touren, LVS-Adapter) und Phase 6 das
+**Reporting** (Bericht-Registry mit 28 Standardberichten, Management-Cockpit, Excel/CSV/PDF-Export,
+Berichtsvarianten, Berichts-API) sowie eine globale Suche (siehe [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ---
 
@@ -98,7 +100,7 @@ Phase 4 ergänzt 20 Tests für die Finanzbuchhaltung (gesamt 86). Phase 5 ergän
 Versand (Kernfluss Angebot → Auftrag → Lieferschein → Rechnung mit Lagerabgang, Fibu-Buchung und OP,
 Teillieferung, Gutschrift, ZUGFeRD-/XRechnung-XML inkl. XSD und Summen, PDF/A-3-Einbettung, Shop-API mit Token
 und Idempotenz, EDIFACT-Parser/-Generator, Tourenbildung, Kapazitätsprüfung, LVS-Export/-Rückmeldung, Rechte).
-**Aktueller Stand: 107 Tests, alle grün** (gezählt mit `python manage.py test apps`).
+**Aktueller Stand: 119 Tests, alle grün** (gezählt mit `python manage.py test apps`).
 
 ---
 
@@ -613,6 +615,73 @@ OpenAPI-Schema: `/api/v1/schema/`, Swagger-UI: `/api/v1/docs/`, ReDoc: `/api/v1/
 
 ---
 
+## Phase 6: Reporting
+
+Menü **Reporting** (`apps/reporting`, Recht `reporting`). Ein Bericht ist nur sichtbar, wenn der Benutzer
+**`reporting.lesen` und Leserecht auf das Quellmodul** des Berichts hat (z. B. `fibu` für OP-Berichte). Reporting
+liest ausschließlich über Querysets/Services der Module und schreibt nur in die eigene Tabelle `Berichtsvariante`.
+
+### Berichtsliste (28 Standardberichte)
+| Modul | Berichte (Code) |
+|---|---|
+| Vertrieb | Umsatz nach Monat/Kunde/Artikel/Vertriebsmitarbeiter (`vertrieb.umsatz_*`), Auftragsbestand, Lieferrückstand, Angebotserfolgsquote, ABC-Analyse Kunden |
+| Einkauf | Einkaufsvolumen nach Lieferant/Artikelart, offene Bestellungen, Liefertreue Lieferanten (termin-/mengengerecht) |
+| Lager | Bestandswert nach Artikelart/Lagerort, Meldebestands-Unterschreitungen, Lagerumschlag/Reichweite, Ladenhüter (keine Bewegung seit X Tagen), Chargen mit MHD-Ablauf |
+| Produktion / Akkord | Leistungsgrad je Mitarbeiter (Recht `akkord`) und je Arbeitsplatz, Ausschussquote nach Artikel/Grund, Nachkalkulation Soll/Ist je Auftrag, Auslastung der Arbeitsplätze (Kapazität `ERP_KAPAZITAET_STUNDEN_TAG`, Standard 8 h/Arbeitstag) |
+| Fibu | Offene Posten Debitoren/Kreditoren mit Altersstruktur (nicht fällig/0–30/31–60/61–90/>90 Tage), Liquiditätsübersicht (Bank + erwartete Ein-/Auszahlungen aus OPs), GuV-Monatsvergleich, Deckungsbeitrag einfach (Umsatz − Durchschnitts-EK) |
+| Versand | Touren je Region, Fahrzeugauslastung, Liefertreue gegenüber Kunden |
+
+Umsatz = festgeschriebene Rechnungen netto abzüglich festgeschriebener Gutschriften (Belegdatum im Zeitraum).
+Filter je Bericht: Zeitraum, Stichtag, Kunde, Lieferant, Artikel, Artikelart, Kostenstelle, Tage, Gruppierung.
+
+**Management-Cockpit** (`/reporting/cockpit/`): KPI-Kacheln (Umsatz Monat/Jahr mit Vorjahresvergleich,
+Auftragseingang, Auftragsbestand, Lagerwert, offene Forderungen/Verbindlichkeiten, überfällige Forderungen,
+Liquidität, Leistungsgrad und Ausschussquote der letzten 30 Tage) und Diagramme (Chart.js per CDN:
+Umsatz 12 Monate, Top-10-Kunden, OP-Altersstruktur) – jeweils nur für Module, auf die der Benutzer Leserecht hat.
+
+**Berichtsvarianten**: Auf jeder Berichtsseite lassen sich die aktuellen Filter unter einem Namen speichern
+(je Benutzer); als „Favorit" markierte Varianten erscheinen im Dashboard und im Cockpit.
+
+**Globale Suche** in der Kopfzeile: Artikel, Geschäftspartner, Belegnummern, Kundenaufträge, Bestellungen und
+Fertigungsaufträge – je nach Leserecht.
+
+### Exporte
+Jede Berichtsseite bietet Excel, CSV und PDF (URL-Parameter `?format=xlsx|csv|pdf`, Filter bleiben erhalten):
+- **Excel (.xlsx, openpyxl)**: Titel, Mandant/Erstellzeit und Filterangaben im Kopf, formatierte Kopfzeile,
+  deutsche Zahlenformate (`#.##0,00 €`), Summenzeile als `=SUMME()`-Formel, Autofilter, fixierte Kopfzeile.
+- **CSV**: Semikolon, UTF-8 mit BOM (öffnet direkt in Excel), deutsche Zahlen ohne Einheit, Summenzeile.
+- **PDF**: WeasyPrint über `templates/reporting/pdf/bericht.html`; Berichte mit mehr als 7 Spalten im Querformat.
+
+Beispiele: [docs/beispiel_berichte/umsatz_nach_kunde.xlsx](docs/beispiel_berichte/umsatz_nach_kunde.xlsx),
+[docs/beispiel_berichte/op_altersstruktur.pdf](docs/beispiel_berichte/op_altersstruktur.pdf).
+
+**REST-API**: `GET /api/v1/berichte/` (sichtbare Berichte mit Filtern und Spalten) und
+`GET /api/v1/berichte/<code>/?von=2026-01-01&bis=2026-12-31&kunde=<id>` (Zeilen, Summen, Hinweise als JSON;
+403 ohne Recht, 404 unbekannt, 400 bei ungültigen Filtern).
+
+### Eigene Berichte registrieren (Entwickleranleitung)
+In einer Datei `berichte.py` der jeweiligen App (wird beim Start automatisch geladen):
+
+```python
+from decimal import Decimal
+from apps.reporting.registry import Spalte, bericht
+
+@bericht("lager.mein_bericht", "Mein Bericht", modul="lager",          # modul = Recht des Quellmoduls
+         filter=["stichtag", "artikel"],                                 # Namen aus apps/reporting/filter.py
+         spalten=[Spalte("artikel", "Artikel"),
+                  Spalte("wert", "Wert", "geld", summe=True)],           # Typen: text/zahl/menge/geld/prozent/datum/stunden
+         beschreibung="Kurzbeschreibung für die Berichtsliste",
+         diagramm={"typ": "bar", "label": "artikel", "wert": "wert"})   # optional
+def mein_bericht(f):  # f = bereinigte Filterwerte (Standardwerte bereits gesetzt)
+    return [{"artikel": "F-5000", "wert": Decimal("12.50")}]
+    # oder {"zeilen": [...], "summen_extra": {"quote": ...}, "hinweise": ["..."]}
+```
+Neue Filtertypen werden in `FILTER` (`apps/reporting/filter.py`) ergänzt. Summen bildet die Registry aus
+Spalten mit `summe=True`; abgeleitete Summen (Quoten) liefert die Funktion über `summen_extra`.
+Export, Web-Ansicht, Varianten und API funktionieren dann ohne weiteren Code.
+
+---
+
 ## REST-API
 
 Basis: `/api/v1/` – Authentifizierung per Session, Basic-Auth oder Token. Alle Endpunkte prüfen die
@@ -665,10 +734,12 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 
 ## Weitere Dokumentation
 - [docs/DATENMODELL.md](docs/DATENMODELL.md) – Datenmodell als Mermaid-ERD
-- [docs/ROADMAP.md](docs/ROADMAP.md) – Phasen 2–6 mit groben Aufwänden
+- [docs/ROADMAP.md](docs/ROADMAP.md) – Phasen 2–6 (alle erledigt) und nächste Schritte für den Produktivbetrieb
 
-## Bekannte Grenzen (Stand Phase 5)
-- Das Modul Reporting ist nur als Gerüst mit Platzhalterseite vorhanden.
+## Bekannte Grenzen (Stand Phase 6)
+- Reporting: keine geplanten Berichte per E-Mail, kein freier Berichtsdesigner; Diagramme laden Chart.js per CDN
+  (ohne Internetzugang keine Diagramme, Tabellen und Exporte funktionieren weiter); Vorjahresvergleiche sind
+  mit den Demodaten leer (keine Vorjahresumsätze).
 - E-Rechnung: Prüfung nur per XSD (Factur-X EN 16931 / CII D16B, UBL 2.1) und eigenen Summenregeln; kein
   Schematron/KoSIT-Validator, keine veraPDF-Prüfung des PDF/A-3. Kein Empfang von E-Rechnungen im Einkauf.
 - EDIFACT/LVS: nur Datei-Upload/-Download und REST, keine Übertragungsstrecke (AS2/X.400/SFTP), Adapter vorbereitet.

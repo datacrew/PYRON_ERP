@@ -3,13 +3,14 @@
 Demo-Zugänge (Passwort für alle Fachbenutzer: Demo!2026, Administrator: Admin!2026):
 admin, einkauf, vertrieb, produktion, meister, terminal, lager, buchhaltung, gast
 """
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from apps.core.models import Rolle
 
@@ -358,7 +359,10 @@ class Command(BaseCommand):
                 ("F-5010", "18", "118.00", fl, None, None),
             ]
             for nr, menge, preis, ort, platz, charge_nr in anfang:
-                charge = lager.charge_holen(a[nr], charge_nr, anlegen=True, lieferant=schmidt) if charge_nr else None
+                # Schweißdraht mit Mindesthaltbarkeit (Beispiel für den Bericht „Chargen mit MHD-Ablauf“)
+                mhd = timezone.localdate() + timedelta(days=60) if nr == "B-3100" else None
+                charge = lager.charge_holen(a[nr], charge_nr, anlegen=True, lieferant=schmidt,
+                                            mhd=mhd) if charge_nr else None
                 lager.buchen(Lagerbewegung.Art.ZUGANG, a[nr], Decimal(menge), nach=(ort, platz, frei), charge=charge,
                              preis=Decimal(preis), benutzer=admin, quelle="anfangsbestand",
                              grund="Anfangsbestand Datenübernahme")

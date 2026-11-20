@@ -6,6 +6,7 @@ from rest_framework.routers import DefaultRouter
 from apps.belege.api import BelegViewSet
 from apps.einkauf.api import BestellungViewSet
 from apps.fibu.api import BankumsatzViewSet, BuchungViewSet, OPViewSet, SachkontoViewSet
+from apps.reporting.api import BerichtAbrufView, BerichtListeView
 from apps.produktion.api import FertigungsauftragViewSet, RueckmeldungViewSet, StempelungViewSet
 from apps.lager.api import BestandViewSet, ChargeViewSet, LagerbewegungViewSet, LagerortViewSet
 from apps.stammdaten.api import (
@@ -53,6 +54,8 @@ router.register("shop/bestellungen", ShopBestellungViewSet, basename="shop-beste
 urlpatterns = [
     path("token/", obtain_auth_token, name="api-token"),
     path("shop/bestaende/", ShopBestaendeView.as_view(), name="shop-bestaende"),
+    path("berichte/", BerichtListeView.as_view(), name="berichte"),
+    path("berichte/<str:code>/", BerichtAbrufView.as_view(), name="bericht-abruf"),
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="api-docs"),
     path("redoc/", SpectacularRedocView.as_view(url_name="schema"), name="api-redoc"),

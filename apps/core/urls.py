@@ -8,6 +8,7 @@ app_name = "core"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("suche/", views.suche, name="suche"),
     path("modul/<slug:code>/", views.platzhalter, name="platzhalter"),
     path("verwaltung/", views.verwaltung, name="verwaltung"),
     path("verwaltung/benutzer/", views.benutzer_liste, name="benutzer_liste"),
