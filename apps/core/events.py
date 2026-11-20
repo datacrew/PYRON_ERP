@@ -30,6 +30,11 @@ EREIGNISSE = {
     "bestellung.status": "Lieferstatus einer Bestellung geändert (bestellung, status)",
     "wareneingang.gebucht": "Wareneingang gebucht – Grundlage für spätere Rechnungsprüfung / WE-RE-Verrechnung "
                             "(wareneingang, bestellung, wert, benutzer)",
+    "produktion.freigegeben": "Fertigungsauftrag freigegeben, Material und Arbeitsgänge kopiert (auftrag, benutzer)",
+    "produktion.material_entnommen": "Material zum Fertigungsauftrag entnommen (auftrag, entnahmen, wert, benutzer)",
+    "produktion.rueckmeldung": "Rückmeldung Gut/Ausschuss/Nacharbeit zu einem Arbeitsgang (rueckmeldung)",
+    "produktion.fertiggemeldet": "Fertigmeldung mit Lagerzugang zu Herstellkosten (auftrag, fertigmeldung, wert, "
+                                 "benutzer)",
     "wareneingang.qs_entschieden": "QS-Entscheid zu einer WE-Position (position, entscheid, ruecksendung, benutzer)",
 }
 

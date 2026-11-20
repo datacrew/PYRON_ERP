@@ -1,0 +1,1 @@
+{% if lg is not None %}<span class="badge {% if lg >= 120 %}bg-success{% elif lg >= 100 %}bg-primary{% elif lg >= 90 %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ lg|zahl:1 }} %</span>{% else %}–{% endif %}

@@ -1,6 +1,6 @@
-# Datenmodell – Phase 1 und 2
+# Datenmodell – Phasen 1 bis 3
 
-Stand: Phase 2 (Warenfluss). Lager, Einkauf und Wareneingang siehe Abschnitt [Phase 2](#phase-2--lager-einkauf-wareneingang). Tabellennamen folgen dem Django-Schema `<app>_<modell>`
+Stand: Phase 3 (Produktion). Lager, Einkauf und Wareneingang siehe Abschnitt [Phase 2](#phase-2--lager-einkauf-wareneingang), Fertigung/BDE/Akkord siehe [Phase 3](#phase-3--produktion-bde-akkord). Tabellennamen folgen dem Django-Schema `<app>_<modell>`
 (z. B. `belege_beleg`). Primärschlüssel ist jeweils `id` (bigint). Geldbeträge sind `numeric` (Decimal),
 nie Gleitkomma.
 
@@ -143,11 +143,12 @@ erDiagram
     ARBEITSGANG {
         fk arbeitsplan
         int position
-        string arbeitsplatz
+        string bezeichnung
+        fk arbeitsplatz "seit Phase 3"
         decimal ruestzeit_min
         decimal stueckzeit_min
         string lohngruppe
-        bool akkordfaehig
+        string lohnart "AKKORD | ZEITLOHN (ersetzt akkordfaehig)"
     }
     KONTO {
         string kontenrahmen "SKR03/SKR04"
@@ -390,5 +391,171 @@ stateDiagram-v2
     ENTWURF --> STORNIERT: stornieren (Grund)
     BESTELLT --> STORNIERT: stornieren (Grund, nur ohne Lieferung)
     ANGEFRAGT --> STORNIERT: stornieren (Grund)
+    ENTWURF --> [*]: löschen
+```
+
+
+## Phase 3 – Produktion, BDE, Akkord
+
+Neue Stammdaten in `apps/stammdaten` (`Arbeitsplatz`, `Mitarbeiter`, Auswahl `Lohnart`), Bewegungsdaten in
+`apps/produktion`. Migration `stammdaten/0002` übernimmt den bisherigen Text-Arbeitsplatz und `akkordfaehig`
+in die neuen Felder.
+
+```mermaid
+erDiagram
+    ARBEITSPLATZ ||--o{ ARBEITSGANG : "Plan"
+    ARBEITSPLATZ ||--o{ FA_ARBEITSGANG : "Auftrag"
+    ARTIKEL ||--o{ FERTIGUNGSAUFTRAG : fertigt
+    STUECKLISTE ||--o{ FERTIGUNGSAUFTRAG : "Version"
+    ARBEITSPLAN ||--o{ FERTIGUNGSAUFTRAG : "Version"
+    FERTIGUNGSAUFTRAG ||--o{ FERTIGUNGSAUFTRAG : "Unterauftrag (uebergeordnet)"
+    FERTIGUNGSAUFTRAG ||--o{ FA_MATERIAL : Bedarf
+    FERTIGUNGSAUFTRAG ||--o{ FA_ARBEITSGANG : Arbeitsgaenge
+    FA_MATERIAL o|--o| FERTIGUNGSAUFTRAG : "unterauftrag"
+    FA_MATERIAL ||--o{ MATERIALENTNAHME : entnommen
+    MATERIALENTNAHME ||--|| LAGERBEWEGUNG : "ABGANG"
+    FERTIGUNGSAUFTRAG ||--o{ FERTIGMELDUNG : gemeldet
+    FERTIGMELDUNG ||--|| LAGERBEWEGUNG : "ZUGANG"
+    FERTIGMELDUNG }o--|| CHARGE : "Fertigungscharge"
+    MITARBEITER ||--o{ ANWESENHEIT : "Kommen/Gehen"
+    MITARBEITER ||--o{ STEMPELUNG : stempelt
+    FA_ARBEITSGANG ||--o{ STEMPELUNG : Zeiten
+    FA_ARBEITSGANG ||--o{ RUECKMELDUNG : Mengen
+    STEMPELUNG |o--o{ RUECKMELDUNG : "beim Abstempeln"
+    MITARBEITER }o--o| USER : "optional"
+
+    ARBEITSPLATZ {
+        string code UK
+        string bezeichnung
+        string art "MASCHINE | HAND"
+        string kostenstelle
+        decimal stundensatz "EUR/h"
+    }
+    MITARBEITER {
+        string personalnummer UK
+        string ausweisnummer "Stempelkarte, eindeutig wenn gesetzt"
+        string vorname
+        string nachname
+        string lohngruppe
+        decimal stundenlohn "Grundlohn EUR/h"
+        decimal akkordrichtsatz "EUR/h"
+        fk benutzer "optional"
+    }
+    FERTIGUNGSAUFTRAG {
+        string nummer UK "FA-JJJJ-NNNNN"
+        fk artikel
+        fk stueckliste
+        fk arbeitsplan
+        decimal menge
+        date starttermin
+        date termin
+        string status
+        fk uebergeordnet
+        fk ziel_lagerort
+        decimal gut_menge
+        decimal ausschuss_menge
+        datetime freigegeben_am
+        string storno_grund
+    }
+    FA_MATERIAL {
+        fk auftrag
+        int position
+        fk artikel
+        decimal soll_menge
+        decimal entnommen_menge
+        fk unterauftrag
+    }
+    FA_ARBEITSGANG {
+        fk auftrag
+        int position "Code = Auftragsnr-Position"
+        string bezeichnung
+        fk arbeitsplatz
+        decimal ruestzeit_min
+        decimal stueckzeit_min
+        string lohngruppe
+        string lohnart
+        string status "OFFEN | LAEUFT | UNTERBROCHEN | ERLEDIGT"
+        decimal gut_menge
+        decimal ausschuss_menge
+        decimal nacharbeit_menge
+    }
+    ANWESENHEIT {
+        fk mitarbeiter
+        datetime kommen
+        datetime gehen
+    }
+    STEMPELUNG {
+        fk mitarbeiter
+        fk arbeitsgang
+        string taetigkeit "RUESTEN | FERTIGEN"
+        datetime beginn
+        datetime ende
+        string ende_art "UNTERBRECHUNG | ENDE"
+        string quelle "TERMINAL | API | MANUELL"
+        bool korrigiert
+        string korrektur_grund
+    }
+    RUECKMELDUNG {
+        fk arbeitsgang
+        fk mitarbeiter
+        fk stempelung
+        datetime zeitpunkt
+        decimal gut_menge
+        decimal ausschuss_menge
+        string ausschuss_grund
+        decimal nacharbeit_menge
+    }
+    MATERIALENTNAHME {
+        fk auftrag
+        fk material
+        fk artikel
+        fk charge
+        fk lagerort
+        decimal menge
+        decimal wert
+        fk bewegung
+    }
+    FERTIGMELDUNG {
+        fk auftrag
+        decimal menge
+        fk charge
+        fk lagerort
+        decimal materialkosten
+        decimal lohnkosten
+        decimal platzkosten
+        decimal herstellkosten_stueck
+        fk bewegung
+    }
+```
+
+### Regeln Phase 3
+
+| Bereich | Regel | Umsetzung |
+|---|---|---|
+| Nummern | `FA-` (Anlage), Fertigungscharge `FC-` (Fertigmeldung ohne eigene Nummer) | `naechste_nummer()` |
+| Freigabe | kopiert Stücklisten-Bedarf (eine Ebene, × Menge) und Arbeitsgänge; optional Unteraufträge für fehlende Eigenfertigungsteile | `produktion.services.freigeben()` |
+| Fehlteile | Bedarf gegen **freien** Bestand, mehrstufig für Eigenfertigungsteile | `fehlteile()` |
+| Stempeln | höchstens eine offene Stempelung und eine offene Anwesenheit je Mitarbeiter, keine Überschneidung, Ende ≥ Beginn | Service-Prüfung + Partial-Unique- und Check-Constraints |
+| Korrektur | nur mit Recht `bde.ändern`, Grund Pflicht, Vorher/Nachher im Audit-Log | `stempelung_korrigieren()`, `nachtragen()` |
+| Rückmeldung | Ausschuss nur mit Grund; Mengen ≥ 0 | `rueckmelden()` |
+| Lager | Entnahme = `ABGANG`, Fertigmeldung = `ZUGANG` ausschließlich über `lager.services.buchen()` (Journal-Trigger bleibt wirksam) | `material_entnehmen()`, `fertigmelden()` |
+| Bewertung | Herstellkosten = Material (Entnahmewerte) + Lohn (Ist-Zeit × Richtsatz/Stundenlohn) + Arbeitsplatz (Ist-Zeit × Stundensatz) | `ist_kosten()`, `fertigmelden()` |
+| Akkord | Vorgabe = Σ Gut × te + tr; Leistungsgrad = Vorgabe/Ist; Verdienst = Vorgabe × Richtsatz/60; Garantie = Ist × max(Stundenlohn, Mindestlohn)/60 | `akkord_auswertung()` |
+| Fibu-Kopplung | nur Events `produktion.material_entnommen`, `produktion.fertiggemeldet` | Abonnent in `apps/fibu/ereignisse.py` (Logging) |
+
+### Status Fertigungsauftrag
+
+```mermaid
+stateDiagram-v2
+    [*] --> ENTWURF
+    ENTWURF --> FREIGEGEBEN: freigeben (Material + Arbeitsgänge kopieren)
+    FREIGEGEBEN --> IN_ARBEIT: erste Entnahme / Anstempelung
+    FREIGEGEBEN --> TEILGEFERTIGT: erste Rückmeldung
+    IN_ARBEIT --> TEILGEFERTIGT: Rückmeldung oder Teil-Fertigmeldung
+    TEILGEFERTIGT --> ABGESCHLOSSEN: Restmenge gemeldet oder „abschließen“
+    IN_ARBEIT --> ABGESCHLOSSEN: Fertigmeldung der gesamten Menge
+    ENTWURF --> STORNIERT: stornieren (Grund)
+    FREIGEGEBEN --> STORNIERT: stornieren (ohne Entnahme/Fertigmeldung, niemand angestempelt)
+    IN_ARBEIT --> STORNIERT: dto.
     ENTWURF --> [*]: löschen
 ```

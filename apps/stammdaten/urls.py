@@ -5,7 +5,7 @@ from apps.core.generic import crud_urls
 
 from . import views
 from .models import (
-    Adresse, Ansprechpartner, Arbeitsgang, Arbeitsplan, Artikel, Einheit, Geschaeftspartner, Konto,
+    Adresse, Ansprechpartner, Arbeitsgang, Arbeitsplan, Arbeitsplatz, Artikel, Einheit, Geschaeftspartner, Konto,
     Steuersatz, Stueckliste, StuecklistenPosition, Zahlungsbedingung,
 )
 
@@ -55,8 +55,15 @@ urlpatterns += crud_urls(
     suchfelder=["artikel__artikelnummer", "bezeichnung"],
     inlines=[("Arbeitsgänge", Arbeitsgang,
               ["position", "bezeichnung", "arbeitsplatz", "ruestzeit_min", "stueckzeit_min", "lohngruppe",
-               "akkordfaehig"])],
+               "lohnart"])],
     queryset=Arbeitsplan.objects.select_related("artikel"),
+)
+urlpatterns += crud_urls(
+    "arbeitsplatz", Arbeitsplatz, M,
+    felder=["code", "bezeichnung", "art", "kostenstelle", "stundensatz", "aktiv"],
+    spalten=[("Code", "code"), ("Bezeichnung", "bezeichnung"), ("Art", "art"),
+             ("Kostenstelle", "kostenstelle"), ("€/h", "stundensatz"), ("Aktiv", "aktiv")],
+    suchfelder=["code", "bezeichnung", "kostenstelle"],
 )
 urlpatterns += crud_urls(
     "konto", Konto, M, felder=["kontenrahmen", "nummer", "bezeichnung", "kontoart", "aktiv"],

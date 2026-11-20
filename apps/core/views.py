@@ -77,6 +77,12 @@ def _warenfluss_kennzahlen(user):
 
         wert = ArtikelLager.objects.aggregate(s=Sum(F("bestand_gesamt") * F("durchschnittspreis")))["s"] or 0
         werte["Lagerwert"] = f"{wert:,.2f} €".replace(",", "§").replace(".", ",").replace("§", ".")
+    if hat_recht(user, "produktion"):
+        from apps.produktion.models import Fertigungsauftrag, Stempelung
+
+        werte["Offene Fertigungsaufträge"] = Fertigungsauftrag.objects.filter(
+            status__in=Fertigungsauftrag.OFFENE_STATI).count()
+        werte["Angestempelt"] = Stempelung.objects.filter(ende__isnull=True).count()
     return werte
 
 
@@ -89,6 +95,8 @@ def platzhalter(request, code):
         from django.core.exceptions import PermissionDenied
 
         raise PermissionDenied
+    if modul.url_name:  # Modul inzwischen umgesetzt → auf die echte Startseite weiterleiten
+        return redirect(modul.url_name)
     return render(request, "core/platzhalter.html", {"modul": modul})
 
 

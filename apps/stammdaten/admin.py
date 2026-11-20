@@ -1,8 +1,8 @@
 from django.contrib import admin
 
 from .models import (
-    Adresse, Ansprechpartner, Arbeitsgang, Arbeitsplan, Artikel, Einheit, Geschaeftspartner, Konto,
-    Steuersatz, Stueckliste, StuecklistenPosition, Zahlungsbedingung,
+    Adresse, Ansprechpartner, Arbeitsgang, Arbeitsplan, Arbeitsplatz, Artikel, Einheit, Geschaeftspartner, Konto,
+    Mitarbeiter, Steuersatz, Stueckliste, StuecklistenPosition, Zahlungsbedingung,
 )
 
 
@@ -59,6 +59,17 @@ class KontoAdmin(admin.ModelAdmin):
     list_display = ["kontenrahmen", "nummer", "bezeichnung", "kontoart", "aktiv"]
     list_filter = ["kontenrahmen", "kontoart"]
     search_fields = ["nummer", "bezeichnung"]
+
+
+@admin.register(Arbeitsplatz)
+class ArbeitsplatzAdmin(admin.ModelAdmin):
+    list_display = ["code", "bezeichnung", "art", "kostenstelle", "stundensatz", "aktiv"]
+
+
+@admin.register(Mitarbeiter)
+class MitarbeiterAdmin(admin.ModelAdmin):
+    list_display = ["personalnummer", "vorname", "nachname", "lohngruppe", "stundenlohn", "akkordrichtsatz", "aktiv"]
+    search_fields = ["personalnummer", "nachname", "ausweisnummer"]
 
 
 admin.site.register([Einheit, Steuersatz, Zahlungsbedingung])

@@ -19,3 +19,15 @@ def beleg_festgeschrieben(beleg, benutzer=None, **kwargs):
 def wareneingang_gebucht(wareneingang, wert=0, **kwargs):
     """Phase 2: nur Protokoll. Später: Buchung Wareneingang an WE/RE-Verrechnungskonto, Rechnungsprüfung."""
     logger.info("Fibu: %s gebucht (Warenwert %s €) – WE/RE-Verrechnung folgt ab Phase 4.", wareneingang, wert)
+
+
+@abonnieren("produktion.material_entnommen")
+def material_entnommen(auftrag, wert=0, **kwargs):
+    """Phase 3: nur Protokoll. Später: Materialaufwand an Bestand Roh-/Hilfsstoffe bzw. unfertige Erzeugnisse."""
+    logger.info("Fibu: Materialentnahme zu %s (Wert %s €) – Buchung folgt ab Phase 4.", auftrag.nummer, wert)
+
+
+@abonnieren("produktion.fertiggemeldet")
+def fertiggemeldet(auftrag, fertigmeldung=None, wert=0, **kwargs):
+    """Phase 3: nur Protokoll. Später: Bestand fertige/unfertige Erzeugnisse an Bestandsveränderungen."""
+    logger.info("Fibu: Fertigmeldung zu %s (Herstellkosten %s €) – Buchung folgt ab Phase 4.", auftrag.nummer, wert)

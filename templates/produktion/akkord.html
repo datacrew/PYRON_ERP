@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Akkordauswertung{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-cash-coin"></i> Akkordauswertung (Zeitakkord)</h1>
+  {% if a %}<div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="{% url 'produktion:akkord_pdf' %}?{{ query }}" target="_blank"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'produktion:akkord_csv' %}?{{ query }}"><i class="bi bi-filetype-csv"></i> CSV für Lohnbuchhaltung</a></div>{% endif %}</div>
+<form method="get" class="card card-body mb-3">{% include "generic/_formfelder.html" %}<div><button class="btn btn-sm btn-primary mt-2">Auswerten</button></div></form>
+{% if a %}
+<p class="small text-muted">Vorgabe = Gutmenge × te + Rüstzeit (dem Rüstenden gutgeschrieben) · Leistungsgrad = Vorgabe ÷ Ist · Akkordverdienst = Vorgabeminuten × Richtsatz ÷ 60 · Garantie = Ist-Stunden × max(Grundlohn, Mindestlohn {{ a.mindestlohn|euro }}) · Zeitlohn-Arbeitsgänge separat. Vorlage für die Lohnbuchhaltung – keine Lohnabrechnung.</p>
+<div class="card"><div class="table-responsive"><table class="table table-sm mb-0 align-middle">
+  <thead class="table-light"><tr><th>Mitarbeiter</th><th class="text-end">Ist Akkord</th><th class="text-end">Vorgabe</th><th class="text-end">LG</th><th class="text-end">Richtsatz</th><th class="text-end">Akkordverdienst</th><th class="text-end">Garantie</th><th class="text-end">Ausgleich</th><th class="text-end">Akkordlohn</th><th class="text-end">Zeitlohn</th><th class="text-end">Gesamt</th><th class="text-end">Ø €/h</th></tr></thead>
+  <tbody>{% for z in a.zeilen %}<tr>
+    <td><a data-bs-toggle="collapse" href="#d{{ forloop.counter }}">{{ z.mitarbeiter.personalnummer }} {{ z.mitarbeiter.name }}</a> <small class="text-muted">{{ z.mitarbeiter.lohngruppe }}</small>{% if z.mindestlohn_angehoben %} <span class="badge bg-warning text-dark" title="Grundlohn unter Mindestlohn – Garantie auf Mindestlohn angehoben">ML</span>{% endif %}</td>
+    <td class="text-end">{{ z.ist_akkord_min|zahl:0 }} min</td><td class="text-end">{{ z.vorgabe_min|zahl:0 }} min</td><td class="text-end">{% include "produktion/_lg.html" with lg=z.leistungsgrad %}</td>
+    <td class="text-end">{{ z.mitarbeiter.akkordrichtsatz|euro }}</td><td class="text-end">{{ z.akkordverdienst|euro }}</td><td class="text-end">{{ z.garantie|euro }}</td>
+    <td class="text-end {% if z.ausgleich %}text-danger fw-semibold{% endif %}">{{ z.ausgleich|euro }}</td><td class="text-end">{{ z.akkordlohn|euro }}</td>
+    <td class="text-end">{{ z.zeitlohn|euro }}{% if z.ist_zeit_min %}<br><small class="text-muted">{{ z.ist_zeit_min|zahl:0 }} min</small>{% endif %}</td><td class="text-end fw-bold">{{ z.gesamt|euro }}</td><td class="text-end">{{ z.stundenverdienst|euro }}</td></tr>
+    <tr class="collapse" id="d{{ forloop.counter }}"><td colspan="12" class="bg-light"><table class="table table-sm mb-0 small">
+      <thead><tr><th>Arbeitsgang</th><th>Lohnart</th><th class="text-end">Gut</th><th class="text-end">Rüstvorgabe</th><th class="text-end">Vorgabe</th><th class="text-end">Ist</th><th class="text-end">LG</th></tr></thead>
+      <tbody>{% for p in z.positionen %}<tr><td>{{ p.ag.code }} {{ p.ag.bezeichnung }}</td><td>{{ p.ag.get_lohnart_display }}</td><td class="text-end">{{ p.gut|menge }}</td><td class="text-end">{{ p.ruest_min|zahl }}</td>
+        <td class="text-end">{% if p.akkord %}{{ p.vorgabe_min|zahl }}{% else %}–{% endif %}</td><td class="text-end">{{ p.ist_min|zahl }}</td><td class="text-end">{% include "produktion/_lg.html" with lg=p.leistungsgrad %}</td></tr>{% endfor %}
+      <tr><td colspan="7" class="text-muted">Anwesenheit {{ z.anwesend_min|zahl:0 }} min · davon nicht auftragsbezogen {{ z.nicht_zugeordnet_min|zahl:0 }} min · Minutenfaktor {{ z.minutenfaktor|zahl:4 }} € · Garantiesatz {{ z.garantiesatz|euro }}/h</td></tr></tbody></table></td></tr>
+  {% empty %}<tr><td colspan="12" class="text-muted text-center">Keine Stempelungen im Zeitraum.</td></tr>{% endfor %}</tbody>
+  {% if a.zeilen %}<tfoot><tr class="fw-bold"><td>Summe</td><td class="text-end">{{ a.summe.ist_akkord_min|zahl:0 }} min</td><td class="text-end">{{ a.summe.vorgabe_min|zahl:0 }} min</td><td class="text-end">{% include "produktion/_lg.html" with lg=a.summe.leistungsgrad %}</td><td></td>
+    <td class="text-end">{{ a.summe.akkordverdienst|euro }}</td><td></td><td class="text-end">{{ a.summe.ausgleich|euro }}</td><td class="text-end">{{ a.summe.akkordlohn|euro }}</td><td class="text-end">{{ a.summe.zeitlohn|euro }}</td><td class="text-end">{{ a.summe.gesamt|euro }}</td><td></td></tr></tfoot>{% endif %}
+</table></div></div>
+{% endif %}
+{% endblock %}

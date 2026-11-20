@@ -1,7 +1,7 @@
 """Demodaten für Test und Präsentation (idempotent). NICHT im Produktivsystem ausführen!
 
 Demo-Zugänge (Passwort für alle Fachbenutzer: Demo!2026, Administrator: Admin!2026):
-admin, einkauf, vertrieb, produktion, lager, buchhaltung, gast
+admin, einkauf, vertrieb, produktion, meister, terminal, lager, buchhaltung, gast
 """
 from decimal import Decimal
 
@@ -18,6 +18,8 @@ BENUTZER = [
     ("einkauf", "Erik", "Einkäufer", "Einkauf", False),
     ("vertrieb", "Vera", "Vertrieb", "Vertrieb", False),
     ("produktion", "Paul", "Produktion", "Produktion", False),
+    ("meister", "Martin", "Meister", "Fertigungsleitung", False),
+    ("terminal", "Stempel", "Terminal", "Terminal", False),
     ("lager", "Lars", "Lager", "Lager", False),
     ("buchhaltung", "Berta", "Buchhaltung", "Buchhaltung", False),
     ("gast", "Gerd", "Gast", "Nur Lesen", False),
@@ -60,8 +62,9 @@ class Command(BaseCommand):
         self._belege(artikel, partner)
         self._lager(artikel, partner)
         self._einkauf(artikel, partner)
+        self._produktion(artikel)
         self.stdout.write(self.style.SUCCESS(
-            f"Demodaten bereit. Logins: admin / {ADMIN_PASSWORT}; einkauf, vertrieb, produktion, lager, "
+            f"Demodaten bereit. Logins: admin / {ADMIN_PASSWORT}; einkauf, vertrieb, produktion, meister, terminal, lager, "
             f"buchhaltung, gast / {DEMO_PASSWORT}"))
 
     def _benutzer(self):
@@ -119,18 +122,53 @@ class Command(BaseCommand):
                 for i, (komp, menge) in enumerate(positionen, start=1):
                     StuecklistenPosition.objects.create(stueckliste=sl, position=i * 10, komponente=a[komp],
                                                         menge=Decimal(menge))
-        plan, angelegt = Arbeitsplan.objects.get_or_create(artikel=a["F-5000"], version=1,
-                                                          defaults={"bezeichnung": "Standardfertigung"})
-        if angelegt:
-            for pos, bez, platz, ruest, stueck in [
-                (10, "Zuschneiden", "Tafelschere TS-2", "15", "0.80"),
-                (20, "Stanzen", "Exzenterpresse EP-63 (Werkzeug W-3000)", "30", "0.35"),
-                (30, "Schweißen", "Schweißplatz SP-1", "10", "2.50"),
-                (40, "Montage & Prüfung", "Montageplatz MP-3", "5", "1.20"),
-            ]:
-                Arbeitsgang.objects.create(arbeitsplan=plan, position=pos, bezeichnung=bez, arbeitsplatz=platz,
-                                           ruestzeit_min=Decimal(ruest), stueckzeit_min=Decimal(stueck),
-                                           lohngruppe="LG5")
+        self._arbeitsplaene(a)
+
+    def _arbeitsplaene(self, a):
+        """Arbeitsplätze und Arbeitspläne (Fertigartikel + Halbzeuge). Bestehende Pläne werden nur angepasst,
+        solange es noch keine Fertigungsaufträge gibt."""
+        from apps.produktion.models import Fertigungsauftrag
+        from apps.stammdaten.models import Arbeitsgang, Arbeitsplan, Arbeitsplatz, Lohnart
+
+        plaetze = {}
+        for code, bez, art, kst, satz in [
+            ("TS-2", "Tafelschere TS-2", "MASCHINE", "4100", "45.00"),
+            ("EP-63", "Exzenterpresse EP-63", "MASCHINE", "4200", "65.00"),
+            ("SP-1", "Schweißplatz SP-1", "HAND", "4300", "38.00"),
+            ("MP-3", "Montageplatz MP-3", "HAND", "4400", "25.00"),
+            ("DR-1", "CNC-Drehmaschine DR-1", "MASCHINE", "4500", "55.00"),
+            ("EG-1", "Entgratplatz EG-1", "HAND", "4100", "22.00"),
+        ]:
+            ap, _ = Arbeitsplatz.objects.get_or_create(code=code, defaults={"bezeichnung": bez})
+            if not ap.stundensatz:
+                ap.bezeichnung, ap.art, ap.kostenstelle, ap.stundensatz = bez, art, kst, Decimal(satz)
+                ap.save()
+            plaetze[code] = ap
+        if Fertigungsauftrag.objects.exists():
+            return
+        A, Z = Lohnart.AKKORD, Lohnart.ZEITLOHN
+        plaene = {
+            "F-5000": ("Standardfertigung", [
+                (10, "Bereitstellen & Ausrichten", "MP-3", "5", "0.30", "LG4", A),
+                (20, "Stanzen (Werkzeug W-3000)", "EP-63", "30", "0.35", "LG5", A),
+                (30, "Schweißen", "SP-1", "10", "2.50", "LG5", A),
+                (40, "Montage & Prüfung", "MP-3", "5", "1.20", "LG6", Z)]),
+            "H-2000": ("Zuschnitt", [
+                (10, "Zuschneiden", "TS-2", "10", "0.40", "LG4", A),
+                (20, "Entgraten", "EG-1", "0", "0.25", "LG4", A)]),
+            "H-2010": ("Welle drehen", [
+                (10, "Drehen", "DR-1", "20", "3.00", "LG6", A),
+                (20, "Maßprüfung", "MP-3", "0", "0.50", "LG6", Z)]),
+            "F-5010": ("Endmontage", [
+                (10, "Endmontage", "MP-3", "15", "6.00", "LG5", A)]),
+        }
+        for nr, (bez, gaenge) in plaene.items():
+            plan, _ = Arbeitsplan.objects.get_or_create(artikel=a[nr], version=1, defaults={"bezeichnung": bez})
+            plan.arbeitsgaenge.exclude(position__in=[g[0] for g in gaenge]).delete()
+            for pos, gbez, platz, ruest, stueck, lg, lohnart in gaenge:
+                Arbeitsgang.objects.update_or_create(arbeitsplan=plan, position=pos, defaults={
+                    "bezeichnung": gbez, "arbeitsplatz": plaetze[platz], "ruestzeit_min": Decimal(ruest),
+                    "stueckzeit_min": Decimal(stueck), "lohngruppe": lg, "lohnart": lohnart})
 
     def _belege(self, a, p):
         from apps.belege import services
@@ -268,3 +306,123 @@ class Command(BaseCommand):
                          einkauf)
             ek.banf_anlegen(a["B-3100"], Decimal("50"), heute + timedelta(days=10),
                             "Mehrbedarf Schweißerei Auftrag Weber", User.objects.get(username="produktion"))
+
+    def _produktion(self, a):
+        """Mitarbeiter, Fertigungsaufträge mit Stempelungen/Rückmeldungen der letzten Werktage (nur einmalig)."""
+        from datetime import datetime, time, timedelta
+
+        from django.utils import timezone
+
+        from apps.lager.models import Bestand, Lagerort
+        from apps.produktion import services as fs
+        from apps.produktion.models import Fertigungsauftrag, Stempelung
+        from apps.stammdaten.models import Mitarbeiter
+
+        User = get_user_model()
+        prod = User.objects.get(username="produktion")
+        mitarbeiter = {}
+        for nr, ausweis, vor, nach, lg, lohn, richt, user in [
+            ("P1001", "0001001", "Klaus", "Becker", "LG5", "17.50", "19.25", prod),
+            ("P1002", "0001002", "Ayşe", "Yılmaz", "LG5", "17.50", "19.25", None),
+            ("P1003", "0001003", "Jan", "Nowak", "LG4", "13.50", "16.00", None),
+            ("P1004", "0001004", "Sabine", "Krüger", "LG6", "19.00", "21.00", None),
+            ("P1005", "0001005", "Tobias", "Wagner", "LG4", "15.50", "17.00", None),
+        ]:
+            ma, _ = Mitarbeiter.objects.get_or_create(personalnummer=nr, defaults={
+                "ausweisnummer": ausweis, "vorname": vor, "nachname": nach, "lohngruppe": lg,
+                "stundenlohn": Decimal(lohn), "akkordrichtsatz": Decimal(richt), "benutzer": user})
+            mitarbeiter[nr] = ma
+        if Fertigungsauftrag.objects.exists():
+            return
+        jetzt = timezone.localtime()
+        heute = jetzt.date()
+        tage = []  # die letzten vier Werktage vor heute
+        tag = heute
+        while len(tage) < 4:
+            tag -= timedelta(days=1)
+            if tag.weekday() < 5:
+                tage.insert(0, tag)
+        tz = timezone.get_current_timezone()
+
+        def t(tag_idx, hhmm):
+            h, m = map(int, hhmm.split(":"))
+            return timezone.make_aware(datetime.combine(tage[tag_idx], time(h, m)), tz)
+
+        def schicht(nr, tag_idx, von="06:00", bis="14:30"):
+            fs.kommen(mitarbeiter[nr], t(tag_idx, von))
+            return lambda: fs.gehen(mitarbeiter[nr], t(tag_idx, bis))
+
+        def arbeit(nr, ag, tag_idx, von, bis, gut=0, ausschuss=0, grund="", ruesten=False, ende=False):
+            ma = mitarbeiter[nr]
+            fs.stempel_start(ma, ag, Stempelung.Taetigkeit.RUESTEN if ruesten else Stempelung.Taetigkeit.FERTIGEN,
+                             zeit=t(tag_idx, von))
+            fs.stempel_beenden(ma, Stempelung.EndeArt.ENDE if ende else Stempelung.EndeArt.UNTERBRECHUNG,
+                               zeit=t(tag_idx, bis), gut=gut, ausschuss=ausschuss, grund=grund, benutzer=prod)
+
+        def ag(fa, pos):
+            return fa.arbeitsgaenge.get(position=pos)
+
+        fl = Lagerort.objects.get(code="FL")
+        with transaction.atomic():
+            # FA 1: Halbzeug H-2000 (200 Stk) – komplett gefertigt und eingelagert
+            fa1 = fs.fa_anlegen(a["H-2000"], 200, starttermin=tage[0], termin=tage[0], ziel_lagerort=fl,
+                                bemerkung="Zuschnitte für Lagerbock-Serie", benutzer=prod)
+            fa1, _ = fs.freigeben(fa1, prod)
+            blech = Bestand.objects.filter(artikel=a["R-1000"], charge__chargennummer="CH-2026-0001",
+                                           bestandsart="FREI").first()
+            fs.material_entnehmen(fa1, fa1.materialien.get(), fa1.materialien.get().soll_menge, bestand=blech,
+                                  benutzer=prod)
+            g3, g5 = schicht("P1003", 0), schicht("P1005", 0)
+            arbeit("P1003", ag(fa1, 10), 0, "06:10", "06:22", ruesten=True)
+            arbeit("P1003", ag(fa1, 10), 0, "06:22", "07:20", gut=96, ausschuss=2, grund="MASS")
+            arbeit("P1003", ag(fa1, 10), 0, "07:35", "08:15", gut=104, ende=True)
+            arbeit("P1005", ag(fa1, 20), 0, "09:10", "09:52", gut=200, ende=True)
+            g3()
+            g5()
+            fs.fertigmelden(fa1, 200, lagerort=fl, abschliessen=True, benutzer=prod)
+
+            # FA 2: Lagerbock F-5000 (100 Stk) – in Arbeit, teilweise fertig gemeldet
+            fa2 = fs.fa_anlegen(a["F-5000"], 100, starttermin=tage[1], termin=heute + timedelta(days=3),
+                                bemerkung="Kundenauftrag Müller Maschinenbau", benutzer=prod)
+            fa2, _ = fs.freigeben(fa2, prod)
+            fs.restmaterial_entnehmen(fa2, prod)
+            g5, g1 = schicht("P1005", 1), schicht("P1001", 1)
+            arbeit("P1005", ag(fa2, 10), 1, "06:05", "06:35", gut=100, ende=True)
+            arbeit("P1001", ag(fa2, 20), 1, "06:45", "07:13", ruesten=True)
+            arbeit("P1001", ag(fa2, 20), 1, "07:13", "07:45", gut=99, ausschuss=1, grund="EINRICHTEN", ende=True)
+            g5()
+            g1()
+            g2 = schicht("P1002", 2)
+            arbeit("P1002", ag(fa2, 30), 2, "06:00", "06:09", ruesten=True)
+            arbeit("P1002", ag(fa2, 30), 2, "06:09", "07:15", gut=30)
+            arbeit("P1002", ag(fa2, 30), 2, "07:30", "08:40", gut=28, ausschuss=0)
+            g2()
+            g2, g4 = schicht("P1002", 3), schicht("P1004", 3)
+            arbeit("P1002", ag(fa2, 30), 3, "06:00", "07:05", gut=26, ausschuss=1, grund="BEARBEITUNG")
+            arbeit("P1004", ag(fa2, 40), 3, "08:00", "09:05", gut=40)
+            g2()
+            fs.fertigmelden(fa2, 40, lagerort=fl, benutzer=prod)
+
+            # FA 3: Welle H-2010 (20 Stk) – Drehen läuft, Nacharbeit gemeldet
+            fa3 = fs.fa_anlegen(a["H-2010"], 20, starttermin=tage[3], termin=heute + timedelta(days=5),
+                                benutzer=prod)
+            fa3, _ = fs.freigeben(fa3, prod)
+            rund = Bestand.objects.filter(artikel=a["R-1010"], bestandsart="FREI", menge__gt=0).order_by("pk").first()
+            if rund:
+                m = fa3.materialien.get()
+                fs.material_entnehmen(fa3, m, m.soll_menge, bestand=rund, benutzer=prod)
+            arbeit("P1004", ag(fa3, 10), 3, "09:20", "09:45", ruesten=True)
+            arbeit("P1004", ag(fa3, 10), 3, "09:45", "10:20", gut=12)
+            g4()
+            fs.rueckmelden(ag(fa3, 10), 0, 0, "", 1, mitarbeiter=mitarbeiter["P1004"], benutzer=prod,
+                           bemerkung="Durchmesser an Oberkante – nacharbeiten", zeitpunkt=t(3, "10:21"))
+
+            # FA 4: Antriebseinheit F-5010 – Entwurf (zeigt Fehlteile/Unteraufträge)
+            fs.fa_anlegen(a["F-5010"], 20, termin=heute + timedelta(days=14), benutzer=prod,
+                          bemerkung="Rahmenauftrag Autoteile Weber")
+
+            # heute: zwei Mitarbeiter angemeldet, einer am Arbeitsgang angestempelt
+            beginn = jetzt - timedelta(minutes=40)
+            fs.kommen(mitarbeiter["P1002"], beginn - timedelta(minutes=20))
+            fs.stempel_start(mitarbeiter["P1002"], ag(fa2, 30), zeit=beginn)
+            fs.kommen(mitarbeiter["P1004"], beginn - timedelta(minutes=10))

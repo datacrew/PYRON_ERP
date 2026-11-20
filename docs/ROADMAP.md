@@ -1,4 +1,4 @@
-# Roadmap – Phasen 2 bis 6
+# Roadmap – Phasen 2 bis 6 (Produktion vorgezogen)
 
 Die Aufwände sind **grobe Schätzungen** in Personentagen (PT) für eine erfahrene Django-Entwicklerin bzw.
 einen erfahrenen Django-Entwickler. Enthalten sind Umsetzung, Tests und Doku, **nicht** enthalten sind
@@ -9,15 +9,16 @@ Steuerberatung. Realistisch sind ±30 %, je nach Tiefe der Anforderungen.
 |---|---|---|
 | 1 | Fundament (abgeschlossen): core, Stammdaten, Belege/GoBD/PDF, UI, API | – |
 | 2 | Einkauf + Wareneingang + Lagerbestand (**abgeschlossen**) | – |
-| 3 | Vertrieb, CRM, E-Rechnung, EDIFACT, Versand | 40–55 PT |
+| 3 | Produktion mit Zeiterfassung und Akkord (**abgeschlossen**, vorgezogen) | – |
 | 4 | Finanzbuchhaltung | 45–60 PT |
-| 5 | Produktion mit Zeiterfassung und Akkord | 40–55 PT |
+| 5 | Vertrieb, CRM, E-Rechnung, EDIFACT, Versand | 40–55 PT |
 | 6 | Reporting, Betrieb, Härtung | 20–30 PT |
-| | **Summe offene Phasen 3–6** | **ca. 145–200 PT** |
+| | Produktion-Ausbau (Kapazitätsplanung, Reservierung, Lohnexport-Formate) | 10–20 PT |
+| | **Summe offene Phasen** | **ca. 115–165 PT** |
 
 Die Reihenfolge ist ein Vorschlag: Einkauf/Lager zuerst, weil Produktion und Versand Bestände brauchen;
-Fibu vor Produktion, weil festgeschriebene Rechnungen sonst nicht gebucht werden. Produktion kann bei Bedarf
-vor die Fibu gezogen werden.
+Die Produktion wurde auf Wunsch vor Fibu und Vertrieb gezogen und ist als **Phase 3** umgesetzt. Die bisherigen
+Abschnitte „Phase 3 – Vertrieb …“ und „Phase 5 – Produktion“ sind entsprechend umnummeriert.
 
 ---
 
@@ -39,10 +40,53 @@ Bewusst verschoben:
 - Eingangsrechnungsprüfung (Bestellung ↔ Wareneingang ↔ Rechnung) und WE/RE-Verrechnung → **Phase 4** (Fibu
   abonniert `wareneingang.gebucht`)
 - Lieferanten-Preislisten/-Artikelnummern als Stammdaten, Bestellvorschlag aus Stücklisten-Rohstoffbedarf
-  → mit **Phase 5** (Produktion)
-- Rückverfolgbarkeit Charge → Verwendung in Fertigungsaufträgen → **Phase 5**; Lieferant → Charge ist vorhanden
+  → offen (Produktion-Ausbau)
+- Rückverfolgbarkeit Charge → Verwendung in Fertigungsaufträgen: Daten liegen seit Phase 3 vor
+  (Materialentnahme je Charge, Fertigungscharge); eine eigene Rückverfolgungsansicht fehlt noch
 
-## Phase 3 – Vertrieb, CRM, E-Rechnung, EDIFACT, Versand (40–55 PT)
+## Phase 3 – Produktion mit Betriebsdatenerfassung und Akkord ✅ abgeschlossen
+Umgesetzt (Details im README, Abschnitt „Phase 3: Produktion“):
+- [x] Stammdaten: Arbeitsplätze mit Stundensatz/Kostenstelle, Mitarbeiter (Personal-/Ausweisnummer, Lohngruppe,
+      Stundenlohn, Akkordrichtsatz, Benutzer), Arbeitsgang mit Arbeitsplatz und Lohnart Akkord/Zeitlohn
+- [x] Fertigungsaufträge (Nummernkreis `FA-`), Statusmodell, Freigabe mit Kopie von Material und Arbeitsgängen,
+      Fehlteilliste gegen freien Bestand, optional Unteraufträge für Halbzeuge, Storno mit Grund
+- [x] Laufkarte/Arbeitsbegleitschein als PDF mit Code-128-Barcodes und Klartext
+- [x] BDE: Kommen/Gehen, Auftragsstempelung (Rüsten/Fertigen, Unterbrechung, Ende), keine Überlappung
+      (Code + Partial-Unique-Constraint), Stempel-Terminal für Tastatur/Scanner, Korrektur/Nachtrag mit Recht
+      und Audit-Log
+- [x] Rückmeldungen Gut/Ausschuss (mit Grund)/Nacharbeit
+- [x] Zeitakkord: Vorgabezeit, Leistungsgrad, Akkordverdienst, Garantie (Stundenlohn/Mindestlohn), Zeitlohn
+      separat; Auswertung je Mitarbeiter/Auftrag/Zeitraum als Liste, PDF und CSV
+- [x] Materialentnahme chargengenau, Fertigmeldung mit Fertigungscharge zu Herstellkosten, Nachkalkulation
+- [x] Events `produktion.*`, Dashboard/Kacheln, Rechte `produktion`/`bde`/`akkord`, REST-API, Demodaten,
+      18 neue Tests (gesamt 66)
+
+Offen / bewusst verschoben:
+- Kapazitätsplanung je Arbeitsplatz (Plantafel), Materialreservierung bei Freigabe
+- Geld- und Gruppenakkord, Prämienlohn; Exportformate für konkrete Lohnprogramme (z. B. DATEV LODAS)
+- RFID-Terminals (heute: Tastatur/Barcodescanner bzw. REST-API für externe Terminals)
+- Fibu-Buchung von Materialverbrauch/Fertigmeldung → **Phase 4** (Events sind vorhanden)
+- Hinweis: Zeiterfassung und Akkord sind mitbestimmungspflichtig (Betriebsrat, Betriebsvereinbarung) und
+  datenschutzrelevant.
+
+## Phase 4 – Finanzbuchhaltung (45–60 PT)
+- Doppelte Buchführung: Buchungsjournal (unveränderbar, Festschreibung je Periode), Soll/Haben,
+  Debitoren/Kreditoren (OP-Verwaltung), Steuerschlüssel, Buchungsperioden und Jahresabschluss-Sperre
+- Automatische Buchung festgeschriebener Belege über das bestehende Event `beleg.festgeschrieben`
+  (Abonnent `apps/fibu/ereignisse.py` existiert bereits)
+- Eingangsrechnungsprüfung (Bestellung ↔ Wareneingang ↔ Rechnung) und WE/RE-Verrechnung über das Event
+  `wareneingang.gebucht` (aus Phase 2 verschoben), Bestandsbuchung zum gleitenden Durchschnittspreis
+- Buchung von Materialverbrauch und Fertigmeldungen (Bestandsveränderung/Herstellkosten) über die Events
+  `produktion.material_entnommen` und `produktion.fertiggemeldet` (aus Phase 3)
+- Vollständiger Kontenrahmen SKR03/SKR04 (Import), Kontenzuordnung je Artikel/Partner
+- Bankimport **CAMT.053/CAMT.054** und **MT940**, automatischer Zahlungsabgleich (Betrag, Referenz,
+  Belegnummer) mit manueller Nachbearbeitung, SEPA-Zahlungs-/Lastschriftdateien (pain.001/pain.008)
+- **Mahnwesen**: Mahnstufen, Mahngebühren/-zinsen, Mahnbriefe als PDF-Belege, Mahnsperren
+- Auswertungen: Summen-/Saldenliste, BWA, **Bilanz und GuV**, Umsatzsteuer-Voranmeldung (Werte),
+  DATEV-Export (Buchungsstapel)
+- GoBD: Verfahrensdokumentation (Vorlage), Datenexport für Betriebsprüfung (GDPdU/IDEA-Beschreibungsstandard)
+
+## Phase 5 – Vertrieb, CRM, E-Rechnung, EDIFACT, Versand (40–55 PT)
 - CRM: Kontakthistorie, Aktivitäten/Wiedervorlagen, Verkaufschancen
 - Belegfluss Angebot → Auftrag → Lieferschein → Rechnung (Übernahme von Positionen, Teilmengen),
   Preislisten, Kundenrabatte, Verfügbarkeitsprüfung
@@ -56,32 +100,6 @@ Bewusst verschoben:
   mit Kartenansicht, optional Routenoptimierung über externen Dienst), Etiketten/Versanddienstleister
 - **LVS-Schnittstelle** (Lagerverwaltungssystem): Auftrags- und Rückmeldeschnittstelle (Datei/REST),
   Spezifikation abhängig vom eingesetzten LVS
-
-## Phase 4 – Finanzbuchhaltung (45–60 PT)
-- Doppelte Buchführung: Buchungsjournal (unveränderbar, Festschreibung je Periode), Soll/Haben,
-  Debitoren/Kreditoren (OP-Verwaltung), Steuerschlüssel, Buchungsperioden und Jahresabschluss-Sperre
-- Automatische Buchung festgeschriebener Belege über das bestehende Event `beleg.festgeschrieben`
-  (Abonnent `apps/fibu/ereignisse.py` existiert bereits)
-- Eingangsrechnungsprüfung (Bestellung ↔ Wareneingang ↔ Rechnung) und WE/RE-Verrechnung über das Event
-  `wareneingang.gebucht` (aus Phase 2 verschoben), Bestandsbuchung zum gleitenden Durchschnittspreis
-- Vollständiger Kontenrahmen SKR03/SKR04 (Import), Kontenzuordnung je Artikel/Partner
-- Bankimport **CAMT.053/CAMT.054** und **MT940**, automatischer Zahlungsabgleich (Betrag, Referenz,
-  Belegnummer) mit manueller Nachbearbeitung, SEPA-Zahlungs-/Lastschriftdateien (pain.001/pain.008)
-- **Mahnwesen**: Mahnstufen, Mahngebühren/-zinsen, Mahnbriefe als PDF-Belege, Mahnsperren
-- Auswertungen: Summen-/Saldenliste, BWA, **Bilanz und GuV**, Umsatzsteuer-Voranmeldung (Werte),
-  DATEV-Export (Buchungsstapel)
-- GoBD: Verfahrensdokumentation (Vorlage), Datenexport für Betriebsprüfung (GDPdU/IDEA-Beschreibungsstandard)
-
-## Phase 5 – Produktion (40–55 PT)
-- Fertigungsaufträge aus Stückliste + Arbeitsplan (Versionierung besteht bereits), Materialreservierung und
-  -entnahme (Bestandsbuchung aus Phase 2), Rückmeldung von Stückzahlen (Gut/Ausschuss)
-- **Stempelzeiten**: Kommen/Gehen und Auftrags-/Arbeitsgangstempelung, Terminal-Oberfläche
-  (Touch/Barcode/RFID), Korrekturen mit Protokoll
-- **Akkord**: Vorgabezeiten aus Arbeitsgängen (Rüst-/Stückzeit, Lohngruppe, Akkordfähigkeit sind bereits im
-  Modell), Leistungsgrad, Akkordlohnberechnung, Export an die Lohnabrechnung
-- Kapazitätsplanung je Arbeitsplatz (Grobplanung, Plantafel), Nachkalkulation Soll/Ist
-- Hinweis: Zeiterfassung und Akkord sind mitbestimmungspflichtig (Betriebsrat, Betriebsvereinbarung) und
-  datenschutzrelevant – früh einbinden.
 
 ## Phase 6 – Reporting, Betrieb, Härtung (20–30 PT)
 - Reporting-Modul: Kennzahlen-Dashboard (Umsatz, Deckungsbeitrag, Bestände, OP, Produktivität),

@@ -1,12 +1,15 @@
-# ERP-System Mittelstand – Phase 1 (Fundament) + Phase 2 (Warenfluss)
+# ERP-System Mittelstand – Phase 1 (Fundament) + Phase 2 (Warenfluss) + Phase 3 (Produktion)
 
 Modulares ERP für einen mittelständischen Industriebetrieb – **Django 5.2 · Django REST Framework · PostgreSQL ·
 WeasyPrint**. Phase 1 liefert das Fundament: Mandant, Modul-Registry, Rechte, Nummernkreise, Audit-Log,
 Events, Stammdaten, Belegwesen mit GoBD-Festschreibung und PDF-Erzeugung, deutsche Weboberfläche, REST-API.
 Phase 2 ergänzt den **Warenfluss**: Lager (Bestände, Chargen, Journal, Inventur, gleitender Durchschnittspreis),
 Einkauf (Bestellanforderung, Anfrage, Bestellung, Bestellvorschlag, Bestell-PDF) und Wareneingang (gegen Bestellung,
-Qualitätsprüfung mit Sperrbestand, WE-Beleg-PDF). Produktion, Vertrieb, Versand, Fibu und Reporting sind als
-Gerüste registriert und folgen ab Phase 3 (siehe [docs/ROADMAP.md](docs/ROADMAP.md)).
+Qualitätsprüfung mit Sperrbestand, WE-Beleg-PDF). Phase 3 bringt die **Produktion**: Fertigungsaufträge aus
+Stückliste und Arbeitsplan, Fehlteilliste, Laufkarte mit Barcode, Betriebsdatenerfassung (Kommen/Gehen,
+Auftragsstempelung am Terminal), Rückmeldungen, Zeitakkord mit Mindestlohngarantie, Materialentnahme,
+Fertigmeldung zu Herstellkosten und Nachkalkulation. Vertrieb, Versand, Fibu und Reporting sind als Gerüste
+registriert (siehe [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ---
 
@@ -65,6 +68,8 @@ und `erp_grunddaten` aus; mit `ERP_DEMODATEN=1` (in `docker-compose.yml` voreing
 | `einkauf`     | `Demo!2026`  | Einkauf                                   |
 | `vertrieb`    | `Demo!2026`  | Vertrieb                                  |
 | `produktion`  | `Demo!2026`  | Produktion                                |
+| `meister`     | `Demo!2026`  | Fertigungsleitung (inkl. Akkord, Stempelkorrektur) |
+| `terminal`    | `Demo!2026`  | Nur Stempel-Terminal (Kiosk)              |
 | `lager`       | `Demo!2026`  | Lager                                     |
 | `buchhaltung` | `Demo!2026`  | Buchhaltung (darf freigeben/festschreiben)|
 | `gast`        | `Demo!2026`  | Nur Lesen                                 |
@@ -84,7 +89,11 @@ Phase 2 ergänzt Tests für Bestandsbuchung und gleitenden Durchschnittspreis, u
 (Code + Trigger), Inventur, Melde-/Mindestbestand, Bestellfreigabe/Nummernkreis, Storno, Bestellerfassung über
 die Weboberfläche, Bestellvorschlag, Bestell- und WE-PDF, Teil-/Rest-/Überlieferung mit Bestellstatus,
 Preisdifferenzen, Chargenpflicht, QS-Sperre/-Freigabe und Reklamation mit Rücksendung sowie Rechte in Web und API
-(Stand: **48 Tests, alle grün**).
+Phase 3 ergänzt 18 Tests für Bedarfsermittlung, Fehlteile und Unteraufträge, Freigabe/Storno, Stempellogik
+(keine Überlappung, Unterbrechung, Gehen beendet laufende Stempelung, DB-Constraint), Terminal-Buchung,
+Korrektur mit Audit-Log, Akkordberechnung (Leistungsgrad, Verdienst, Mindestlohngarantie, Zeitlohn, CSV),
+chargengenaue Materialentnahme, Fertigmeldung zu Herstellkosten inkl. Teilmeldung und Nachkalkulation, Events,
+Seiten/PDF, Web-Ablauf, Rechte und REST-API (Stand: **66 Tests, alle grün**).
 
 ---
 
@@ -103,7 +112,8 @@ erp_system/
 │   ├── lager/         Lagerorte/-plätze, Chargen, Bestände, Bewegungsjournal, Inventur, Bewertung   (Phase 2)
 │   ├── einkauf/       Bestellanforderung, Anfrage, Bestellung, Bestellvorschlag, Bestell-PDF          (Phase 2)
 │   ├── wareneingang/  Wareneingang gegen Bestellung, Qualitätsprüfung, WE-PDF                        (Phase 2)
-│   ├── produktion/ vertrieb/ versand/ fibu/ reporting/   (Gerüste, Phase 3+)
+│   ├── produktion/ bde/ akkord/   Fertigung, Terminal-Recht, Akkord-Recht (Phase 3)
+│   ├── vertrieb/ versand/ fibu/ reporting/   (Gerüste)
 ├── templates/         Bootstrap-5-Oberfläche (CDN), PDF-Vorlage belege/pdf/standard.html
 ├── docker/            Entrypoint
 ├── docs/              DATENMODELL.md, ROADMAP.md
@@ -203,7 +213,7 @@ Artikel (Rohstoff, Halbzeug, Werkzeug, Betriebsmittel, Fertigartikel, Handelswar
 Steuersatz, EAN, Zolltarifnummer), Geschäftspartner (Kunde und/oder Lieferant, automatische Nummer, Adressen,
 Ansprechpartner, USt-ID-Prüfung des Formats, Leitweg-ID, Zahlungsbedingung, Debitoren-/Kreditorenkonto),
 mehrstufige Stücklisten (Auflösung mit Zykluserkennung, Rohstoffbedarf), Arbeitspläne mit Arbeitsgängen
-(Rüst-/Stückzeit, Lohngruppe, akkordfähig), Kontenrahmen SKR03/SKR04 (**Grundbestand** von 107 Konten –
+(Rüst-/Stückzeit, Lohngruppe, Arbeitsplatz, Lohnart Akkord/Zeitlohn – seit Phase 3), Kontenrahmen SKR03/SKR04 (**Grundbestand** von 107 Konten –
 vor Produktivnutzung mit Steuerberatung abgleichen bzw. vollständigen Kontenrahmen importieren),
 Steuersätze, Einheiten, Zahlungsbedingungen.
 
@@ -286,6 +296,111 @@ Anfrage, eine BANF sowie einen Bestellvorschlag (R-1010 unter Meldebestand).
 
 ---
 
+## Phase 3: Produktion mit Betriebsdatenerfassung und Akkord
+
+Module: `apps/produktion` (Menü **Produktion**), Rechte-Module `bde` (Stempel-Terminal) und `akkord`
+(Lohnauswertung, vertraulich). Stammdaten-Ergänzungen unter **Stammdaten → Arbeitsplätze** und
+**Produktion → Mitarbeiter**.
+
+### Stammdaten
+- **Arbeitsplatz** (Maschine/Handarbeitsplatz): Code, Bezeichnung, Art, Kostenstelle, **Stundensatz €/h**
+  (Platzkosten für Kalkulation).
+- **Mitarbeiter** (Personal): Personalnummer, Ausweis-/Stempelkartennummer, Lohngruppe, **Stundenlohn**
+  (Grundlohn, Basis für Zeitlohn und Garantie), **Akkordrichtsatz €/h**, optional verknüpfter Benutzer.
+- **Arbeitsgang** im Arbeitsplan: Position, Arbeitsplatz (FK), Rüstzeit tr (min), Stückzeit te (min/Stk),
+  Lohngruppe, **Lohnart** Akkord oder Zeitlohn.
+
+### Fertigungsaufträge
+- Anlegen aus Fertigartikel/Halbzeug/Werkzeug mit aktiver Stückliste und aktivem Arbeitsplan, Menge, Start-/
+  Endtermin, Ziel-Lagerort. Nummer `FA-2026-00001` aus dem Nummernkreis `FERTIGUNGSAUFTRAG`.
+- Status: **Entwurf → Freigegeben → In Arbeit → Rückgemeldet/teilgefertigt → Abgeschlossen**, Storno mit Grund
+  (nur ohne Entnahme/Fertigmeldung).
+- **Freigabe** kopiert Materialbedarf (Stückliste, eine Ebene) und Arbeitsgänge in den Auftrag. Optional
+  (Häkchen „Unteraufträge“) werden für fehlende Eigenfertigungsteile (Halbzeuge) eigene Unteraufträge angelegt;
+  die Fehlteilliste (Bedarf gegen **freien** Bestand) zeigt diese Vorschläge mehrstufig an.
+- **Laufkarte/Arbeitsbegleitschein (PDF)**: Kopf mit Barcode der Auftragsnummer, Arbeitsgänge mit Vorgaben und
+  Code-128-Barcode samt Klartext je Arbeitsgang (`FA-2026-00001-10`), Materialliste mit Fehlmengen, Felder für
+  Gut/Ausschuss.
+
+### Stempel-Terminal (Menü **Produktion → Terminal**)
+Großflächige Seite für Tastatur und Barcodescanner (Scanner im Tastaturmodus, schließt mit Enter ab):
+1. **Personalnummer oder Ausweisnummer** scannen/eintippen → Enter springt ins Feld Arbeitsgang.
+2. **Arbeitsgang-Code** von der Laufkarte scannen → Enter bucht automatisch:
+   - ohne Code und nicht anwesend → **Kommen**;
+   - mit Code → **Start** (Fertigen) an diesem Arbeitsgang; fehlt das Kommen, wird es automatisch gebucht.
+     Ist der Mitarbeiter noch an einem anderen Arbeitsgang angestempelt, lehnt das Terminal ab – erst
+     „Unterbrechung“ oder „Ende“ buchen (keine überlappenden Auftragsstempelungen, zusätzlich per DB-Constraint).
+3. Schaltflächen für gezielte Aktionen: **Kommen**, **Gehen** (unterbricht eine laufende Stempelung),
+   **Rüsten**, **Start**, **Unterbrechung**, **Ende**. Bei Unterbrechung/Ende können Gutmenge, Ausschuss (mit
+   Ausschussgrund – Pflicht bei Ausschuss) und Nacharbeit gleich mit zurückgemeldet werden.
+4. Die Codes `KOMMEN` bzw. `GEHEN` können als Barcode am Terminal hängen und statt eines Arbeitsgangs
+   gescannt werden.
+
+Für einen Kiosk-PC einen eigenen Benutzer mit Rolle **Terminal** anlegen (Demo: `terminal`); diese Rolle darf
+nur stempeln. Rückmeldungen ohne Stempelung erfasst man unter **Produktion → Rückmeldungen**.
+**Korrekturen und Nachträge** von Stempelungen (Produktion → Stempelungen) erfordern das Recht `bde.ändern`
+(Rolle Fertigungsleitung), verlangen einen Grund und werden mit Vorher/Nachher im Audit-Log protokolliert.
+
+### Zeitakkord (Menü **Produktion → Akkord**, Recht `akkord`)
+Je Mitarbeiter und Zeitraum (optional je Auftrag), nur Arbeitsgänge mit Lohnart Akkord:
+
+| Größe | Formel |
+|---|---|
+| Vorgabezeit (min) | Σ ( Gutmenge × te ) + tr (Rüstzeit einmal je Arbeitsgang, beim Mitarbeiter mit der ersten Rüst-Stempelung) |
+| Ist-Zeit (min) | Σ Dauer der abgeschlossenen Akkord-Stempelungen |
+| **Leistungsgrad** | Vorgabezeit ÷ Ist-Zeit × 100 % |
+| Minutenfaktor | Akkordrichtsatz ÷ 60 |
+| **Akkordverdienst** | Vorgabezeit × Akkordrichtsatz ÷ 60 |
+| Garantiesatz | max( Stundenlohn, gesetzlicher Mindestlohn ) |
+| Garantie | Ist-Zeit ÷ 60 × Garantiesatz |
+| Ausgleich | max( Garantie − Akkordverdienst, 0 ) |
+| Akkordlohn | Akkordverdienst + Ausgleich |
+| Zeitlohn | Ist-Zeit der Zeitlohn-Arbeitsgänge ÷ 60 × Garantiesatz (separat ausgewiesen) |
+
+Beispiel: Vorgabe 480 min, Ist 450 min, Richtsatz 18 €/h → Leistungsgrad 106,7 %, Verdienst 144,00 €.
+Der Mindestlohn steht in `settings.ERP_MINDESTLOHN` (Vorgabe **13,90 €/h**, per Umgebungsvariable änderbar –
+bitte den aktuell gültigen gesetzlichen Wert prüfen). Ausgabe als Bildschirmliste, **PDF** (Lohnübersicht,
+A4 quer) und **CSV** (Semikolon, Dezimalkomma) für die Lohnbuchhaltung – **keine Lohnabrechnung**.
+Hinweis: Zeiterfassung und Akkord sind mitbestimmungspflichtig (Betriebsrat) und datenschutzrelevant; das
+Produktions-Dashboard zeigt Leistungsgrade deshalb nur je Arbeitsgang, nicht je Person.
+
+### Material, Fertigmeldung, Kalkulation
+- **Materialentnahme** (Produktion → Auftrag → Entnahme): Lagerabgang `ABGANG` zum Auftrag über
+  `lager.services.buchen()`, chargengenau (bei Chargenpflicht Bestand/Charge wählen), „Rest entnehmen“ für
+  alle nicht chargenpflichtigen Materialien (FIFO über Bestände). Wert = gleitender Durchschnittspreis.
+- **Fertigmeldung**: Lagerzugang `ZUGANG` des Artikels mit **Fertigungscharge** `FC-2026-00001` (oder eigener
+  Nummer) zu **Herstellkosten** = Material (Entnahmewerte) + Lohn (Ist-Zeit × Richtsatz bzw. Stundenlohn) +
+  Arbeitsplatzkosten (Ist-Zeit × Stundensatz). Teilmeldungen aktivieren die bis dahin angefallenen Kosten
+  anteilig, die Schlussmeldung den Rest; ohne Ist-Kosten wird zu Soll-Herstellkosten bewertet.
+- **Nachkalkulation** Soll/Ist je Kostenart, Material und Arbeitsgang (inkl. Leistungsgrad je AG). Soll für
+  Auftragsmenge und Gutmenge; Abweichung bei abgeschlossenen Aufträgen gegen die Gutmenge.
+- Events `produktion.freigegeben`, `produktion.material_entnommen`, `produktion.rueckmeldung`,
+  `produktion.fertiggemeldet` – die Fibu (`apps/fibu/ereignisse.py`) protokolliert sie nur, Buchungen folgen
+  mit Phase 4.
+
+### Rechte (Standardrollen Produktion)
+| Rolle | produktion | bde (Terminal) | akkord (Lohn) | lager |
+|---|---|---|---|---|
+| Produktion | alle | lesen, anlegen (stempeln) | – | lesen, anlegen |
+| Fertigungsleitung | alle | alle (inkl. Korrektur) | alle | lesen, anlegen |
+| Terminal | – | lesen, anlegen | – | – |
+| Buchhaltung | lesen | – | lesen | lesen |
+| Nur Lesen | lesen | lesen | – | lesen |
+
+### Demo-Ablauf Produktion
+1. Als `produktion` anmelden → **Produktion → Neuer Auftrag**, z. B. H-2000 (Blechzuschnitt), 50 Stk →
+   **Freigeben** → **Laufkarte (PDF)**.
+2. **Entnahme**: Charge `CH-2026-0001` für R-1000 wählen → entnehmen.
+3. **Terminal**: `P1005` + `FA-2026-0000x-10` scannen (Start), danach „Ende“ mit Gutmenge.
+4. **Fertigmelden** → Bestand unter Lager, Kosten unter **Nachkalkulation**.
+5. Als `meister` → **Akkord**: Leistungsgrad, Verdienst, Garantie; PDF/CSV.
+
+Die Demodaten enthalten Arbeitsplätze, fünf Mitarbeiter (P1001–P1005, darunter P1003 mit Stundenlohn unter
+Mindestlohn), Arbeitspläne für F-5000/H-2000/H-2010/F-5010 und vier Fertigungsaufträge (abgeschlossen,
+teilgefertigt, in Arbeit mit Nacharbeit, Entwurf) mit Stempelungen über die letzten Werktage.
+
+---
+
 ## REST-API
 
 Basis: `/api/v1/` – Authentifizierung per Session, Basic-Auth oder Token. Alle Endpunkte prüfen die
@@ -306,6 +421,11 @@ Modulrechte des Benutzers.
 | `GET /api/v1/bestaende/` (Filter `?artikel=`, `?lagerort=`, `?charge=`, `?bestandsart=`) | Bestände (nur lesen) |
 | `GET /api/v1/lagerbewegungen/` · `POST` (manuelle Buchung: `art`, `artikel`, `menge`, `von_lagerort`/`nach_lagerort` (+ Plätze), `bestandsart`, `chargennummer`, `preis`) | Bewegungsjournal |
 | `/api/v1/lagerorte/`, `/api/v1/chargen/` | Lagerorte (inkl. Plätze) und Chargen |
+| `/api/v1/fertigungsauftraege/` (Filter `?status=`, `?artikel=`) | Fertigungsaufträge inkl. Material und Arbeitsgängen (Anlegen; Ändern nur im Entwurf) |
+| `POST /api/v1/fertigungsauftraege/{id}/freigeben/` (`unterauftraege`) · `/stornieren/` (`grund`) · `GET …/fehlteile/` · `…/laufkarte/` · `…/nachkalkulation/` | Auftrags-Workflow, Fehlteile, Laufkarte-PDF, Nachkalkulation |
+| `GET /api/v1/stempelungen/` · `GET …/laufend/` · `POST /api/v1/stempelungen/` (`personalnummer`, `code`, `aktion` auto/kommen/gehen/ruesten/start/unterbrechung/ende, `gut`, `ausschuss`, `grund`, `nacharbeit`) | Stempelungen; POST für externe Terminals (Quelle `API`) |
+| `PATCH /api/v1/stempelungen/{id}/korrektur/` (`beginn`, `ende`, `grund`) | Korrektur (Recht `bde.ändern`, Audit-Log) |
+| `/api/v1/rueckmeldungen/` (GET, POST) | Rückmeldungen Gut/Ausschuss/Nacharbeit |
 
 Gesperrte Belege und fachlich unzulässige Buchungen (z. B. zu wenig Bestand, fehlende Charge, Bestellung nicht
 offen) liefern **409 Conflict** mit `{"fehler": "…"}`, fehlende Rechte **403**.
@@ -335,8 +455,11 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 - [docs/DATENMODELL.md](docs/DATENMODELL.md) – Datenmodell als Mermaid-ERD
 - [docs/ROADMAP.md](docs/ROADMAP.md) – Phasen 2–6 mit groben Aufwänden
 
-## Bekannte Grenzen (Stand Phase 2)
-- Fachmodule Produktion, Vertrieb, Versand, Fibu und Reporting sind nur als Gerüst mit Platzhalterseite vorhanden.
+## Bekannte Grenzen (Stand Phase 3)
+- Fachmodule Vertrieb, Versand, Fibu und Reporting sind nur als Gerüst mit Platzhalterseite vorhanden.
+- Produktion: keine Kapazitätsplanung/Plantafel, keine Materialreservierung (Verfügbarkeit gegen freien Bestand
+  zum Prüfzeitpunkt), nur Zeitakkord (kein Geldakkord/Gruppenakkord), Akkordauswertung ist keine
+  Lohnabrechnung; Material- und Fertigmeldungen erzeugen nur Events, noch keine Fibu-Buchungen.
 - Wareneingang erzeugt nur das Event `wareneingang.gebucht`; Eingangsrechnungsprüfung und WE/RE-Verrechnung
   folgen mit der Fibu (Phase 4).
 - Lieferantenspezifische Preise/Artikelnummern werden je Bestellposition erfasst, es gibt noch keine
@@ -344,5 +467,5 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 - Bestandsbewertung nur gleitender Durchschnitt (kein FIFO/Niederstwert).
 - Ein Mandant (Firma) pro Installation.
 - Kontenrahmen nur als Grundbestand.
-- Keine E-Rechnung (ZUGFeRD/XRechnung) – geplant für Phase 3.
+- Keine E-Rechnung (ZUGFeRD/XRechnung) – geplant mit dem Vertrieb (siehe Roadmap).
 - Docker-Compose-Setup ungetestet (siehe oben).

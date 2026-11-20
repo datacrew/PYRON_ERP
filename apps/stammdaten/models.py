@@ -1,6 +1,7 @@
 import re
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -297,15 +298,81 @@ class Arbeitsplan(models.Model):
         return sum((ag.ruestzeit_min + ag.stueckzeit_min * Decimal(menge)) for ag in self.arbeitsgaenge.all())
 
 
+class Lohnart(models.TextChoices):
+    AKKORD = "AKKORD", "Akkord (Zeitakkord)"
+    ZEITLOHN = "ZEITLOHN", "Zeitlohn"
+
+
+class Arbeitsplatz(models.Model):
+    """Arbeitsplatz / Kostenstelle (Maschine oder Handarbeitsplatz) mit Platzkostensatz je Stunde."""
+
+    class Art(models.TextChoices):
+        MASCHINE = "MASCHINE", "Maschine / Anlage"
+        HAND = "HAND", "Handarbeitsplatz"
+
+    code = models.CharField("Code", max_length=20, unique=True)
+    bezeichnung = models.CharField("Bezeichnung", max_length=100)
+    art = models.CharField("Art", max_length=10, choices=Art.choices, default=Art.MASCHINE)
+    kostenstelle = models.CharField("Kostenstelle", max_length=20, blank=True)
+    stundensatz = models.DecimalField("Platzkostensatz (€/h)", max_digits=10, decimal_places=2, default=0,
+                                      help_text="Maschinen-/Platzkosten je Stunde ohne Lohn (für die Herstellkosten)")
+    aktiv = models.BooleanField("Aktiv", default=True)
+
+    class Meta:
+        verbose_name = "Arbeitsplatz"
+        verbose_name_plural = "Arbeitsplätze"
+        ordering = ["code"]
+
+    def __str__(self):
+        return f"{self.code} {self.bezeichnung}"
+
+
+class Mitarbeiter(models.Model):
+    """Personalstamm für BDE und Akkordlohn (keine Lohnabrechnung)."""
+
+    personalnummer = models.CharField("Personalnummer", max_length=20, unique=True)
+    ausweisnummer = models.CharField("Ausweis-/Stempelkarten-Nr.", max_length=30, blank=True)
+    vorname = models.CharField("Vorname", max_length=60)
+    nachname = models.CharField("Nachname", max_length=60)
+    lohngruppe = models.CharField("Lohngruppe", max_length=20, blank=True)
+    stundenlohn = models.DecimalField("Grund-/Stundenlohn (€/h)", max_digits=8, decimal_places=2, default=0,
+                                      help_text="Zeitlohn und garantierter Mindestverdienst im Akkord")
+    akkordrichtsatz = models.DecimalField("Akkordrichtsatz (€/h)", max_digits=8, decimal_places=2, default=0,
+                                          help_text="Verdienst bei Normalleistung (Leistungsgrad 100 %)")
+    benutzer = models.OneToOneField(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="mitarbeiter", verbose_name="Benutzerkonto")
+    aktiv = models.BooleanField("Aktiv", default=True)
+
+    class Meta:
+        verbose_name = "Mitarbeiter"
+        verbose_name_plural = "Mitarbeiter"
+        ordering = ["personalnummer"]
+        constraints = [models.UniqueConstraint(fields=["ausweisnummer"], condition=~models.Q(ausweisnummer=""),
+                                               name="stammdaten_mitarbeiter_ausweis_eindeutig")]
+
+    def __str__(self):
+        return f"{self.personalnummer} {self.vorname} {self.nachname}"
+
+    @property
+    def name(self):
+        return f"{self.vorname} {self.nachname}"
+
+    @property
+    def minutenfaktor(self):
+        """Akkordrichtsatz / 60 – Verdienst je Vorgabeminute."""
+        return (self.akkordrichtsatz / 60).quantize(Decimal("0.0001"))
+
+
 class Arbeitsgang(models.Model):
     arbeitsplan = models.ForeignKey(Arbeitsplan, on_delete=models.CASCADE, related_name="arbeitsgaenge")
     position = models.PositiveIntegerField("AG-Nr.", default=10)
     bezeichnung = models.CharField("Arbeitsgang", max_length=200)
-    arbeitsplatz = models.CharField("Arbeitsplatz/Maschine", max_length=100, blank=True)
+    arbeitsplatz = models.ForeignKey(Arbeitsplatz, null=True, blank=True, on_delete=models.PROTECT,
+                                     related_name="arbeitsgaenge", verbose_name="Arbeitsplatz")
     ruestzeit_min = models.DecimalField("Rüstzeit (min)", max_digits=8, decimal_places=2, default=0)
-    stueckzeit_min = models.DecimalField("Vorgabezeit je Stück (min)", max_digits=8, decimal_places=3, default=0)
+    stueckzeit_min = models.DecimalField("Vorgabezeit te je Stück (min)", max_digits=8, decimal_places=3, default=0)
     lohngruppe = models.CharField("Lohngruppe", max_length=20, blank=True)
-    akkordfaehig = models.BooleanField("Akkordfähig", default=True)
+    lohnart = models.CharField("Lohnart", max_length=10, choices=Lohnart.choices, default=Lohnart.AKKORD)
 
     class Meta:
         verbose_name = "Arbeitsgang"

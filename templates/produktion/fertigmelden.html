@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Fertigmeldung {{ fa.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-box-arrow-in-down"></i> Fertigmeldung {{ fa.nummer }}</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'produktion:detail' fa.pk %}"><i class="bi bi-arrow-left"></i> Auftrag</a></div>
+<div class="alert alert-light border small">{{ fa.artikel.artikelnummer }} {{ fa.artikel.bezeichnung }} · Auftrag {{ fa.menge|menge }} · bereits gemeldet {{ fa.gut_menge|menge }}{% if letzter %} · Gutmenge letzter AG ({{ letzter.position }}): {{ letzter.gut_menge|menge }}{% endif %}<br>
+  Bisherige Ist-Kosten: Material {{ ist.material|euro }} · Lohn {{ ist.lohn|euro }} · Arbeitsplatz {{ ist.platz|euro }} = <b>{{ ist.summe|euro }}</b>.
+  Bewertung des Zugangs: noch nicht aktivierte Ist-Kosten ÷ Menge (ohne Ist-Kosten: Soll-Herstellkosten).</div>
+<form method="post">{% csrf_token %}<div class="card mb-3"><div class="card-body">{% include "generic/_formfelder.html" %}</div></div>
+  <button class="btn btn-success"><i class="bi bi-box-arrow-in-down"></i> Einlagern</button></form>
+{% endblock %}

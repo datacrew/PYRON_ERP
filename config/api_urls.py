@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.belege.api import BelegViewSet
 from apps.einkauf.api import BestellungViewSet
+from apps.produktion.api import FertigungsauftragViewSet, RueckmeldungViewSet, StempelungViewSet
 from apps.lager.api import BestandViewSet, ChargeViewSet, LagerbewegungViewSet, LagerortViewSet
 from apps.stammdaten.api import (
     ArtikelViewSet,
@@ -28,6 +29,9 @@ router.register("bestaende", BestandViewSet, basename="bestand")
 router.register("lagerbewegungen", LagerbewegungViewSet, basename="lagerbewegung")
 router.register("lagerorte", LagerortViewSet, basename="lagerort")
 router.register("chargen", ChargeViewSet, basename="charge")
+router.register("fertigungsauftraege", FertigungsauftragViewSet, basename="fertigungsauftrag")
+router.register("stempelungen", StempelungViewSet, basename="stempelung")
+router.register("rueckmeldungen", RueckmeldungViewSet, basename="rueckmeldung")
 
 urlpatterns = [
     path("token/", obtain_auth_token, name="api-token"),

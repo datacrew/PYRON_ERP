@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<style>
+  @page { size: A4 landscape; margin: 12mm 12mm 14mm 12mm;
+    @bottom-left { content: "{{ mandant.name }} · Akkord-Lohnübersicht (Vorlage für die Lohnbuchhaltung, keine Lohnabrechnung) · {{ jetzt|date:'d.m.Y H:i' }}";
+      font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7pt; color: #555; }
+    @bottom-right { content: "Seite " counter(page) " von " counter(pages); font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7pt; color: #555; } }
+  body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 8pt; color: #111; }
+  h1 { font-size: 13pt; margin: 0 0 1mm; } .sub { color: #555; margin-bottom: 3mm; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: right; font-size: 7.5pt; border-bottom: .6pt solid #111; padding: 1mm; } th.l, td.l { text-align: left; }
+  td { text-align: right; border-bottom: .3pt solid #bbb; padding: 1mm; white-space: nowrap; }
+  tr.summe td { font-weight: bold; border-top: .8pt solid #111; }
+  .det td { font-size: 7pt; color: #444; border-bottom: none; padding: .3mm 1mm; }
+  .warn { color: #b00; }
+</style></head><body>
+<h1>Akkord-Lohnübersicht</h1>
+<div class="sub">Zeitraum {{ a.von|date:"d.m.Y" }} – {{ a.bis|date:"d.m.Y" }} · Mindestlohn (Garantie) {{ a.mindestlohn|euro }}/h ·
+  Vorgabe = Gut × te + Rüstzeit · Leistungsgrad = Vorgabe / Ist · Akkordverdienst = Vorgabe × Richtsatz / 60</div>
+<table>
+  <thead><tr><th class="l">Pers.-Nr.</th><th class="l">Name</th><th class="l">LG</th><th>Ist Akkord</th><th>Vorgabe</th><th>Leistungsgrad</th>
+    <th>Richtsatz</th><th>Akkordverdienst</th><th>Garantie</th><th>Ausgleich</th><th>Akkordlohn</th><th>Ist Zeitlohn</th><th>Zeitlohn</th><th>Gesamt</th><th>Ø €/h</th><th>Anwesend</th></tr></thead>
+  <tbody>{% for z in a.zeilen %}
+    <tr><td class="l">{{ z.mitarbeiter.personalnummer }}</td><td class="l">{{ z.mitarbeiter.name }}</td><td class="l">{{ z.mitarbeiter.lohngruppe }}</td>
+      <td>{{ z.ist_akkord_min|zahl }} min</td><td>{{ z.vorgabe_min|zahl }} min</td><td>{% if z.leistungsgrad is not None %}{{ z.leistungsgrad|zahl:1 }} %{% else %}–{% endif %}</td>
+      <td>{{ z.mitarbeiter.akkordrichtsatz|euro }}</td><td>{{ z.akkordverdienst|euro }}</td><td>{{ z.garantie|euro }}</td>
+      <td class="{% if z.ausgleich %}warn{% endif %}">{{ z.ausgleich|euro }}</td><td>{{ z.akkordlohn|euro }}</td>
+      <td>{{ z.ist_zeit_min|zahl }} min</td><td>{{ z.zeitlohn|euro }}</td><td><b>{{ z.gesamt|euro }}</b></td>
+      <td>{{ z.stundenverdienst|euro }}</td><td>{{ z.anwesend_min|zahl:0 }} min</td></tr>
+    {% for p in z.positionen %}<tr class="det"><td></td><td class="l" colspan="2">{{ p.ag.code }} {{ p.ag.bezeichnung|truncatechars:28 }}</td>
+      <td>{{ p.ist_min|zahl }}</td><td>{% if p.akkord %}{{ p.vorgabe_min|zahl }}{% else %}Zeitlohn{% endif %}</td>
+      <td>{% if p.leistungsgrad is not None %}{{ p.leistungsgrad|zahl:1 }} %{% endif %}</td><td colspan="10" class="l">Gut {{ p.gut|menge }}{% if p.ruest_min %} · Rüstvorgabe {{ p.ruest_min|zahl }} min{% endif %}</td></tr>{% endfor %}
+  {% empty %}<tr><td colspan="16" class="l">Keine Stempelungen im Zeitraum.</td></tr>{% endfor %}
+  <tr class="summe"><td class="l" colspan="3">Summe</td><td>{{ a.summe.ist_akkord_min|zahl }} min</td><td>{{ a.summe.vorgabe_min|zahl }} min</td>
+    <td>{% if a.summe.leistungsgrad is not None %}{{ a.summe.leistungsgrad|zahl:1 }} %{% endif %}</td><td></td><td>{{ a.summe.akkordverdienst|euro }}</td><td></td>
+    <td>{{ a.summe.ausgleich|euro }}</td><td>{{ a.summe.akkordlohn|euro }}</td><td>{{ a.summe.ist_zeit_min|zahl }} min</td><td>{{ a.summe.zeitlohn|euro }}</td>
+    <td>{{ a.summe.gesamt|euro }}</td><td></td><td>{{ a.summe.anwesend_min|zahl:0 }} min</td></tr>
+  </tbody></table>
+</body></html>

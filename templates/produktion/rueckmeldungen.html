@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Rückmeldungen{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-clipboard-check"></i> Rückmeldungen{% if auftrag %} {{ auftrag.nummer }}{% endif %}</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% if auftrag %}{% url 'produktion:detail' auftrag.pk %}{% else %}{% url 'produktion:index' %}{% endif %}"><i class="bi bi-arrow-left"></i> Zurück</a></div>
+{% if form %}<form method="post" class="card mb-3">{% csrf_token %}<div class="card-header bg-white fw-semibold">Neue Rückmeldung (ohne Stempelung, z. B. Nacherfassung)</div>
+  <div class="card-body">{% include "generic/_formfelder.html" %}<button class="btn btn-primary btn-sm mt-3"><i class="bi bi-save"></i> Rückmelden</button></div></form>{% endif %}
+<div class="card"><div class="table-responsive"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Zeit</th><th>Arbeitsgang</th><th>Mitarbeiter</th><th class="text-end">Gut</th><th class="text-end">Ausschuss</th><th>Grund</th><th class="text-end">Nacharbeit</th><th>Bemerkung</th><th>Erfasst von</th></tr></thead>
+  <tbody>{% for r in page_obj %}<tr><td>{{ r.zeitpunkt|date:"d.m.Y H:i" }}</td><td><a href="{% url 'produktion:detail' r.arbeitsgang.auftrag_id %}">{{ r.arbeitsgang.code }}</a></td><td>{{ r.mitarbeiter.name|default:"–" }}</td>
+    <td class="text-end">{{ r.gut_menge|menge }}</td><td class="text-end">{{ r.ausschuss_menge|menge }}</td><td>{{ r.get_ausschuss_grund_display }}</td><td class="text-end">{{ r.nacharbeit_menge|menge }}</td>
+    <td>{{ r.bemerkung }}</td><td>{{ r.erfasst_von|default:"Terminal" }}</td></tr>
+  {% empty %}<tr><td colspan="9" class="text-muted text-center">Keine Rückmeldungen.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="mt-2">{% include "generic/_seiten.html" %}</div>
+{% endblock %}

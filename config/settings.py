@@ -20,7 +20,8 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = _env_liste("DJANGO_ALLOWED_HOSTS", "*")
 CSRF_TRUSTED_ORIGINS = _env_liste(
     "DJANGO_CSRF_TRUSTED_ORIGINS",
-    "http://localhost:8000,http://127.0.0.1:8000,https://*.abacusai.app",
+    "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000,"
+    "https://*.abacusai.app,https://*.preview.abacusai.app",
 )
 
 # ERP-Fachmodule (Reihenfolge = Ladereihenfolge)
@@ -32,6 +33,8 @@ ERP_APPS = [
     "apps.einkauf",
     "apps.wareneingang",
     "apps.produktion",
+    "apps.bde",
+    "apps.akkord",
     "apps.vertrieb",
     "apps.versand",
     "apps.fibu",
@@ -106,6 +109,14 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Lokalisierung Deutschland
+# Gesetzlicher Mindestlohn (€/h) als Untergrenze der Akkord-/Zeitlohngarantie.
+# Stand 01.01.2026: 13,90 € (ab 01.01.2027 voraussichtlich 14,60 €) – vor Produktivbetrieb prüfen.
+from decimal import Decimal as _Decimal  # noqa: E402
+
+ERP_MINDESTLOHN = _Decimal(os.environ.get("ERP_MINDESTLOHN", "13.90"))
+# Lohnsatz für die Soll-Kalkulation, falls zur Lohngruppe kein Mitarbeiter mit Akkordrichtsatz existiert
+ERP_STANDARD_LOHNSATZ = _Decimal(os.environ.get("ERP_STANDARD_LOHNSATZ", "18.00"))
+
 LANGUAGE_CODE = "de"
 LANGUAGES = [("de", "Deutsch")]
 TIME_ZONE = "Europe/Berlin"

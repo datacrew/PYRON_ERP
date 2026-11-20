@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404, render
 
 from apps.core.permissions import recht_erforderlich
 
-from .models import Artikel, Arbeitsplan, Geschaeftspartner, Konto, Stueckliste, StuecklistenFehler
+from .models import Artikel, Arbeitsplan, Arbeitsplatz, Geschaeftspartner, Konto, Stueckliste, StuecklistenFehler
 
 
 @recht_erforderlich("stammdaten")
@@ -14,6 +14,7 @@ def index(request):
         ("Geschäftspartner", "stammdaten:partner_liste", Geschaeftspartner.objects.count(), "bi-people"),
         ("Stücklisten", "stammdaten:stueckliste_liste", Stueckliste.objects.count(), "bi-diagram-3"),
         ("Arbeitspläne", "stammdaten:arbeitsplan_liste", Arbeitsplan.objects.count(), "bi-tools"),
+        ("Arbeitsplätze", "stammdaten:arbeitsplatz_liste", Arbeitsplatz.objects.count(), "bi-hammer"),
         ("Kontenrahmen", "stammdaten:konto_liste", Konto.objects.count(), "bi-journal-text"),
         ("Steuersätze", "stammdaten:steuersatz_liste", None, "bi-percent"),
         ("Einheiten", "stammdaten:einheit_liste", None, "bi-rulers"),

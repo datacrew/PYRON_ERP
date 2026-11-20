@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Stempel-Terminal{% endblock %}
+{% block content %}
+{% hat_recht "bde" "anlegen" as darf_buchen %}
+<style>
+  .terminal .form-control-lg { font-size: 2rem; padding: .6rem 1rem; font-family: monospace; }
+  .terminal .btn-xl { font-size: 1.35rem; padding: 1rem .5rem; }
+  .terminal .uhr { font-size: 2.2rem; font-variant-numeric: tabular-nums; }
+  .terminal .meldung { font-size: 1.4rem; }
+</style>
+<div class="terminal">
+<div class="d-flex align-items-center mb-3"><h1 class="h3 m-0"><i class="bi bi-upc-scan"></i> Stempel-Terminal</h1>
+  <div class="ms-auto uhr" id="uhr">{{ jetzt|date:"H:i:s" }}</div></div>
+{% if meldung %}<div class="alert alert-success meldung" id="meldung"><i class="bi bi-check-circle"></i> {{ meldung }}</div>{% endif %}
+{% if fehler %}<div class="alert alert-danger meldung" id="meldung"><i class="bi bi-exclamation-triangle"></i> {{ fehler }}</div>{% endif %}
+{% if not darf_buchen %}<div class="alert alert-warning">Nur Anzeige – zum Buchen fehlt das Recht „BDE-Terminal: anlegen“.</div>{% endif %}
+<form method="post" id="tform" autocomplete="off">{% csrf_token %}<input type="hidden" name="aktion" id="aktion" value="auto">
+<div class="row g-3">
+  <div class="col-lg-5"><label class="form-label fw-semibold fs-5">1 · Personal- / Ausweisnummer</label>
+    <input class="form-control form-control-lg" name="kennung" id="kennung" value="{{ kennung }}" placeholder="z. B. P1001" autofocus></div>
+  <div class="col-lg-7"><label class="form-label fw-semibold fs-5">2 · Arbeitsgang-Code (Laufkarte)</label>
+    <input class="form-control form-control-lg" name="code" id="code" placeholder="z. B. FA-2026-00002-10"></div>
+</div>
+<div class="row g-2 mt-1">
+  <div class="col-4 col-lg-2"><label class="form-label small mb-0">Gutmenge</label><input class="form-control form-control-lg" name="gut" inputmode="decimal" placeholder="0"></div>
+  <div class="col-4 col-lg-2"><label class="form-label small mb-0">Ausschuss</label><input class="form-control form-control-lg" name="ausschuss" inputmode="decimal" placeholder="0"></div>
+  <div class="col-4 col-lg-2"><label class="form-label small mb-0">Nacharbeit</label><input class="form-control form-control-lg" name="nacharbeit" inputmode="decimal" placeholder="0"></div>
+  <div class="col-12 col-lg-6"><label class="form-label small mb-0">Ausschussgrund</label><select class="form-select form-select-lg" name="grund"><option value="">–</option>{% for k, v in gruende %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+</div>
+<div class="row g-2 mt-2">
+  <div class="col-6 col-md-4 col-xl-2"><button type="submit" class="btn btn-success btn-xl w-100" data-aktion="kommen"><i class="bi bi-door-open"></i> Kommen</button></div>
+  <div class="col-6 col-md-4 col-xl-2"><button type="submit" class="btn btn-secondary btn-xl w-100" data-aktion="gehen"><i class="bi bi-door-closed"></i> Gehen</button></div>
+  <div class="col-6 col-md-4 col-xl-2"><button type="submit" class="btn btn-info btn-xl w-100" data-aktion="ruesten"><i class="bi bi-tools"></i> Rüsten</button></div>
+  <div class="col-6 col-md-4 col-xl-2"><button type="submit" class="btn btn-primary btn-xl w-100" data-aktion="start"><i class="bi bi-play-fill"></i> Start</button></div>
+  <div class="col-6 col-md-4 col-xl-2"><button type="submit" class="btn btn-warning btn-xl w-100" data-aktion="unterbrechung"><i class="bi bi-pause-fill"></i> Unterbrechung</button></div>
+  <div class="col-6 col-md-4 col-xl-2"><button type="submit" class="btn btn-danger btn-xl w-100" data-aktion="ende"><i class="bi bi-stop-fill"></i> Ende</button></div>
+</div>
+</form>
+<p class="small text-muted mt-2">Bedienung: Ausweis scannen (Enter springt zum Code) → Arbeitsgang-Code scannen (Enter = automatisch: ohne Code „Kommen“, mit Code „Start“). Für Unterbrechung/Ende Mengen eintragen und Taste drücken. Code „KOMMEN“/„GEHEN“ wird ebenfalls erkannt.</p>
+<div class="row g-3 mt-1">
+  <div class="col-lg-7"><div class="card"><div class="card-header bg-white fw-semibold">Laufende Arbeitsgänge</div>{% include "produktion/_laufend.html" %}</div></div>
+  <div class="col-lg-5"><div class="card"><div class="card-header bg-white fw-semibold">Anwesend</div><ul class="list-group list-group-flush">
+    {% for a in anwesend %}<li class="list-group-item py-1 d-flex"><span>{{ a.mitarbeiter.name }}</span><span class="ms-auto small">seit {{ a.kommen|date:"H:i" }}</span></li>
+    {% empty %}<li class="list-group-item text-muted">Niemand angemeldet.</li>{% endfor %}</ul></div></div>
+</div>
+</div>
+<script>
+(function () {
+  const f = document.getElementById("tform"), k = document.getElementById("kennung"), c = document.getElementById("code");
+  k.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); c.focus(); } });
+  f.querySelectorAll("button[data-aktion]").forEach(b => b.addEventListener("click", () => {
+    document.getElementById("aktion").value = b.dataset.aktion; }));
+  const uhr = document.getElementById("uhr");
+  setInterval(() => { uhr.textContent = new Date().toLocaleTimeString("de-DE"); }, 1000);
+  const m = document.getElementById("meldung");
+  if (m) setTimeout(() => { m.style.display = "none"; }, 8000);
+  if (k.value) c.focus();
+})();
+</script>
+{% endblock %}

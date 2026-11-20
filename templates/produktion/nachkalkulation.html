@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Nachkalkulation {{ fa.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-calculator"></i> Nachkalkulation {{ fa.nummer }}</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'produktion:detail' fa.pk %}"><i class="bi bi-arrow-left"></i> Auftrag</a></div>
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="card"><div class="card-body"><div class="small text-muted">Auftragsmenge / gemeldet</div><div class="fs-5">{{ fa.menge|menge }} / {{ fa.gut_menge|menge }} {{ fa.artikel.einheit.code }}</div></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body"><div class="small text-muted">HK Soll je Einheit</div><div class="fs-5">{{ k.hk_soll|zahl:4 }} €</div></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body"><div class="small text-muted">HK Ist je Gut-Einheit</div><div class="fs-5">{% if k.hk_ist is not None %}{{ k.hk_ist|zahl:4 }} €{% else %}–{% endif %}</div></div></div></div>
+  <div class="col-md-3"><div class="card"><div class="card-body"><div class="small text-muted">Im Lager aktiviert</div><div class="fs-5">{{ k.aktiviert|euro }}</div></div></div></div>
+</div>
+<div class="card mb-3"><div class="card-header bg-white fw-semibold">Kostenarten Soll/Ist</div><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Kostenart</th><th class="text-end">Soll (Auftragsmenge)</th><th class="text-end">Soll (Gutmenge)</th><th class="text-end">Ist</th><th class="text-end">Abweichung*</th><th class="text-end">%</th></tr></thead>
+  <tbody>{% for z in k.zeilen %}<tr class="{% if forloop.last %}fw-bold{% endif %}"><td>{{ z.name }}</td><td class="text-end">{{ z.soll_plan|euro }}</td><td class="text-end">{{ z.soll_gut|euro }}</td><td class="text-end">{{ z.ist|euro }}</td>
+    <td class="text-end {% if z.abweichung > 0 %}text-danger{% elif z.abweichung < 0 %}text-success{% endif %}">{{ z.abweichung|euro }}</td><td class="text-end">{% if z.prozent is not None %}{{ z.prozent|zahl:1 }} %{% endif %}</td></tr>{% endfor %}</tbody></table>
+  <div class="card-footer small text-muted">* Abweichung Ist gegen Soll auf Basis {{ k.basis }}. Soll: Stücklistenmenge × Ø-Preis; Lohn = Vorgabezeit × Ø-Lohnsatz der Lohngruppe; Arbeitsplatz = Vorgabezeit × Stundensatz. Ist: Entnahmewerte, gestempelte Zeit × Lohnsatz (Akkord: Richtsatz, sonst Stundenlohn) bzw. × Platzkostensatz.</div></div>
+<div class="row g-3">
+  <div class="col-xl-6"><div class="card"><div class="card-header bg-white fw-semibold">Material</div><table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th>Artikel</th><th class="text-end">Soll-Menge</th><th class="text-end">Entnommen</th><th class="text-end">Soll-Wert</th><th class="text-end">Ist-Wert</th></tr></thead>
+    <tbody>{% for z in k.materialien %}<tr><td>{{ z.m.artikel.artikelnummer }}</td><td class="text-end">{{ z.m.soll_menge|menge }} {{ z.m.artikel.einheit.code }}</td><td class="text-end">{{ z.m.entnommen_menge|menge }}</td><td class="text-end">{{ z.soll_wert|euro }}</td><td class="text-end">{{ z.ist_wert|euro }}</td></tr>
+    {% empty %}<tr><td colspan="5" class="text-muted text-center">Kein Material (Auftrag noch nicht freigegeben?).</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="col-xl-6"><div class="card"><div class="card-header bg-white fw-semibold">Arbeitsgänge (Zeiten in min)</div><table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th>AG</th><th class="text-end">Vorgabe Plan</th><th class="text-end">Vorgabe Gut</th><th class="text-end">Ist</th><th class="text-end">Leistungsgrad</th></tr></thead>
+    <tbody>{% for g in k.gaenge %}<tr><td>{{ g.ag.position }} {{ g.ag.bezeichnung }}</td><td class="text-end">{{ g.vorgabe_plan|zahl }}</td><td class="text-end">{{ g.vorgabe_gut|zahl }}</td><td class="text-end">{{ g.ist|zahl }}</td><td class="text-end">{% include "produktion/_lg.html" with lg=g.leistungsgrad %}</td></tr>
+    {% empty %}<tr><td colspan="5" class="text-muted text-center">Keine Arbeitsgänge.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+{% endblock %}

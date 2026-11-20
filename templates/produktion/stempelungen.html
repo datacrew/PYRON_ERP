@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Stempelungen{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-clock-history"></i> Stempelungen</h1>
+  <div class="ms-auto d-flex gap-2">{% if nachtrag_form %}<button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#nachtrag"><i class="bi bi-plus"></i> Nachtrag</button>{% endif %}
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'produktion:terminal' %}"><i class="bi bi-upc-scan"></i> Terminal</a></div></div>
+{% if nachtrag_form %}<div class="collapse mb-3" id="nachtrag"><form method="post" action="{% url 'produktion:stempel_nachtrag' %}" class="card card-body">{% csrf_token %}
+  {% include "generic/_formfelder.html" with form=nachtrag_form %}<button class="btn btn-sm btn-primary mt-3">Nachtragen (protokolliert)</button></form></div>{% endif %}
+<form class="row g-2 mb-3" method="get">
+  <div class="col-auto"><select class="form-select form-select-sm" name="mitarbeiter"><option value="">alle Mitarbeiter</option>{% for m in mitarbeiter %}<option value="{{ m.pk }}" {% if request.GET.mitarbeiter == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.personalnummer }} {{ m.name }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><input type="date" class="form-control form-control-sm" name="datum" value="{{ request.GET.datum }}"></div>
+  <div class="col-auto form-check mt-1 ms-2"><input class="form-check-input" type="checkbox" name="korrigiert" value="1" id="korr" {% if request.GET.korrigiert %}checked{% endif %}><label class="form-check-label small" for="korr">nur korrigierte</label></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Filtern</button></div></form>
+<div class="card"><div class="table-responsive"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Mitarbeiter</th><th>Arbeitsgang</th><th>Tätigkeit</th><th>Beginn</th><th>Ende</th><th class="text-end">min</th><th>Quelle</th><th>Korrektur</th><th></th></tr></thead>
+  <tbody>{% for st in page_obj %}<tr><td>{{ st.mitarbeiter.name }}</td><td><a href="{% url 'produktion:detail' st.arbeitsgang.auftrag_id %}">{{ st.arbeitsgang.code }}</a></td><td>{{ st.get_taetigkeit_display }}</td>
+    <td>{{ st.beginn|date:"d.m.Y H:i" }}</td><td>{% if st.ende %}{{ st.ende|date:"H:i" }} <small class="text-muted">{{ st.get_ende_art_display }}</small>{% else %}<span class="badge bg-primary">läuft</span>{% endif %}</td>
+    <td class="text-end">{{ st.dauer_min|zahl:0 }}</td><td>{{ st.get_quelle_display }}</td><td class="small">{% if st.korrigiert %}<i class="bi bi-pencil-square text-warning"></i> {{ st.korrektur_grund|truncatechars:60 }}{% endif %}</td>
+    <td>{% if darf_aendern %}<a class="btn btn-sm btn-outline-secondary py-0" href="{% url 'produktion:stempel_korrektur' st.pk %}" title="Korrigieren"><i class="bi bi-pencil"></i></a>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="9" class="text-muted text-center">Keine Stempelungen.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="mt-2">{% include "generic/_seiten.html" %}</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Produktion{% endblock %}
+{% block content %}
+{% hat_recht "produktion" "anlegen" as darf_anlegen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-gear-wide-connected"></i> Produktion</h1>
+  <div class="ms-auto d-flex gap-2">
+    {% if darf_bde %}<a class="btn btn-sm btn-outline-primary" href="{% url 'produktion:terminal' %}"><i class="bi bi-upc-scan"></i> Terminal</a>{% endif %}
+    {% if darf_anlegen %}<a class="btn btn-sm btn-primary" href="{% url 'produktion:neu' %}"><i class="bi bi-plus"></i> Neuer Fertigungsauftrag</a>{% endif %}</div></div>
+<div class="row g-3 mb-4">
+  {% for titel, urlname, icon, text in kacheln %}{% url urlname as u %}{% include "core/_kachel.html" with url=u icon=icon titel=titel text=text %}{% endfor %}
+</div>
+<div class="row g-3">
+  <div class="col-xl-7"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Offene Fertigungsaufträge</div>
+    <div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead class="table-light"><tr><th>Auftrag</th><th>Artikel</th><th class="text-end">Menge</th><th>Fortschritt</th><th>Termin</th><th>Status</th></tr></thead>
+    <tbody>{% for fa in auftraege %}<tr class="{% if fa.ueberfaellig %}table-danger{% endif %}"><td><a href="{% url 'produktion:detail' fa.pk %}">{{ fa.nummer }}</a></td>
+      <td>{{ fa.artikel.artikelnummer }} <small class="text-muted">{{ fa.artikel.bezeichnung|truncatechars:30 }}</small></td><td class="text-end">{{ fa.menge|menge }}</td>
+      <td style="min-width:110px"><div class="progress" style="height:14px"><div class="progress-bar" style="width:{{ fa.fortschritt_prozent|stringformat:'d' }}%">{{ fa.fortschritt_prozent|stringformat:'d' }} %</div></div></td>
+      <td>{{ fa.termin|date:"d.m.Y"|default:"–" }}</td><td>{% include "produktion/_status.html" with s=fa.status text=fa.get_status_display %}</td></tr>
+    {% empty %}<tr><td colspan="6" class="text-muted text-center">Keine offenen Aufträge.</td></tr>{% endfor %}</tbody></table></div></div>
+    <div class="card"><div class="card-header bg-white fw-semibold">Leistungsgrade je Arbeitsgang (letzte 14 Tage, Akkord)</div>
+    <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Arbeitsgang</th><th class="text-end">Gut</th><th class="text-end">Vorgabe</th><th class="text-end">Ist</th><th class="text-end">Leistungsgrad</th></tr></thead>
+    <tbody>{% for e in leistungsgrade %}<tr><td>{{ e.ag.code }} <small class="text-muted">{{ e.ag.bezeichnung }}</small></td><td class="text-end">{{ e.ag.gut_menge|menge }}</td>
+      <td class="text-end">{{ e.vorgabe|zahl }} min</td><td class="text-end">{{ e.ist|zahl }} min</td><td class="text-end">{% include "produktion/_lg.html" with lg=e.leistungsgrad %}</td></tr>
+    {% empty %}<tr><td colspan="5" class="text-muted text-center">Noch keine Daten.</td></tr>{% endfor %}</tbody></table></div></div>
+  </div>
+  <div class="col-xl-5"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Laufende Arbeitsgänge</div>{% include "produktion/_laufend.html" %}</div>
+    <div class="card"><div class="card-header bg-white fw-semibold">Anwesend ({{ anwesend|length }})</div>
+    <ul class="list-group list-group-flush">{% for a in anwesend %}<li class="list-group-item py-1 d-flex"><span>{{ a.mitarbeiter.name }} <small class="text-muted">{{ a.mitarbeiter.personalnummer }}</small></span><span class="ms-auto small">seit {{ a.kommen|date:"d.m. H:i" }}</span></li>
+    {% empty %}<li class="list-group-item text-muted">Niemand angemeldet.</li>{% endfor %}</ul></div></div>
+</div>
+{% endblock %}

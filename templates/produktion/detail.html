@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ fa.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+  <h1 class="h4 m-0">{{ fa.nummer }}</h1>{% include "produktion/_status.html" with s=fa.status text=fa.get_status_display %}
+  <div class="ms-auto d-flex gap-2 flex-wrap">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'produktion:laufkarte' fa.pk %}" target="_blank"><i class="bi bi-upc"></i> Laufkarte (PDF)</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'produktion:nachkalkulation' fa.pk %}"><i class="bi bi-calculator"></i> Nachkalkulation</a>
+    {% if darf_freigeben and fa.status == "ENTWURF" %}
+      <form method="post" action="{% url 'produktion:aktion' fa.pk 'freigeben' %}" class="d-flex gap-2 align-items-center border rounded px-2">{% csrf_token %}
+        <div class="form-check m-0"><input class="form-check-input" type="checkbox" name="unterauftraege" id="ua" value="1"><label class="form-check-label small" for="ua">Unteraufträge für fehlende Halbzeuge</label></div>
+        <button class="btn btn-sm btn-primary"><i class="bi bi-send-check"></i> Freigeben</button></form>{% endif %}
+    {% if darf_anlegen and fa.status != "ENTWURF" %}
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'produktion:entnahme' fa.pk %}"><i class="bi bi-box-arrow-up"></i> Material entnehmen</a>
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'produktion:rueckmeldungen' %}?auftrag={{ fa.pk }}"><i class="bi bi-clipboard-check"></i> Rückmelden</a>
+      <a class="btn btn-sm btn-success" href="{% url 'produktion:fertigmelden' fa.pk %}"><i class="bi bi-box-arrow-in-down"></i> Fertigmelden</a>{% endif %}
+    {% if darf_freigeben and offen %}<button class="btn btn-sm btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#storno"><i class="bi bi-x-octagon"></i> Stornieren</button>{% endif %}
+    {% if darf_loeschen %}<form method="post" action="{% url 'produktion:loeschen' fa.pk %}" onsubmit="return confirm('Entwurf löschen?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>{% endif %}
+  </div>
+</div>
+<div class="collapse mb-3" id="storno"><div class="card card-body border-danger">
+  <form method="post" action="{% url 'produktion:aktion' fa.pk 'stornieren' %}">{% csrf_token %}{{ storno_form.grund.label_tag }} {{ storno_form.grund }}
+    <button class="btn btn-sm btn-danger mt-2">Storno ausführen</button></form></div></div>
+{% if fa.status == "STORNIERT" %}<div class="alert alert-danger">Storniert: {{ fa.storno_grund }}</div>{% endif %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-6"><div class="card h-100"><div class="card-body"><dl class="row mb-0 small">
+    <dt class="col-4">Artikel</dt><dd class="col-8">{{ fa.artikel.artikelnummer }} {{ fa.artikel.bezeichnung }} <span class="badge bg-light text-dark border">{{ fa.artikel.get_art_display }}</span></dd>
+    <dt class="col-4">Menge</dt><dd class="col-8">{{ fa.menge|menge }} {{ fa.artikel.einheit.code }} · gemeldet {{ fa.gut_menge|menge }} · offen {{ fa.offen_menge|menge }}</dd>
+    <dt class="col-4">Start / Termin</dt><dd class="col-8">{{ fa.starttermin|date:"d.m.Y"|default:"–" }} / <span class="{% if fa.ueberfaellig %}text-danger fw-bold{% endif %}">{{ fa.termin|date:"d.m.Y"|default:"–" }}</span></dd>
+    <dt class="col-4">Stückliste</dt><dd class="col-8">{{ fa.stueckliste|default:"–" }}</dd>
+    <dt class="col-4">Arbeitsplan</dt><dd class="col-8">{{ fa.arbeitsplan|default:"–" }}</dd>
+    <dt class="col-4">Ziel-Lager</dt><dd class="col-8">{{ fa.ziel_lagerort|default:"–" }}</dd>
+    {% if fa.bemerkung %}<dt class="col-4">Bemerkung</dt><dd class="col-8">{{ fa.bemerkung }}</dd>{% endif %}
+  </dl></div></div></div>
+  <div class="col-lg-6"><div class="card h-100"><div class="card-body"><dl class="row mb-0 small">
+    <dt class="col-4">Angelegt</dt><dd class="col-8">{{ fa.erstellt_am|date:"d.m.Y H:i" }} · {{ fa.erstellt_von|default:"–" }}</dd>
+    <dt class="col-4">Freigegeben</dt><dd class="col-8">{% if fa.freigegeben_am %}{{ fa.freigegeben_am|date:"d.m.Y H:i" }} · {{ fa.freigegeben_von|default:"–" }}{% else %}–{% endif %}</dd>
+    <dt class="col-4">Abgeschlossen</dt><dd class="col-8">{{ fa.abgeschlossen_am|date:"d.m.Y H:i"|default:"–" }}</dd>
+    <dt class="col-4">Fortschritt</dt><dd class="col-8"><div class="progress" style="height:14px"><div class="progress-bar" style="width:{{ fa.fortschritt_prozent|stringformat:'d' }}%">{{ fa.fortschritt_prozent|stringformat:'d' }} %</div></div></dd>
+    {% if fa.uebergeordnet %}<dt class="col-4">Für Auftrag</dt><dd class="col-8"><a href="{% url 'produktion:detail' fa.uebergeordnet_id %}">{{ fa.uebergeordnet.nummer }}</a></dd>{% endif %}
+    {% if unterauftraege %}<dt class="col-4">Unteraufträge</dt><dd class="col-8">{% for u in unterauftraege %}<a href="{% url 'produktion:detail' u.pk %}">{{ u.nummer }}</a> ({{ u.artikel.artikelnummer }}, {{ u.get_status_display }}){% if not forloop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+  </dl></div></div></div>
+</div>
+
+<div class="card mb-3"><div class="card-header bg-white fw-semibold">Material / Fehlteile {% if fa.status == "ENTWURF" %}<small class="text-muted fw-normal">(Vorschau aus Stückliste – wird bei Freigabe übernommen)</small>{% endif %}</div>
+<div class="table-responsive"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Material</th><th class="text-end">Soll</th><th class="text-end">Entnommen</th><th class="text-end">Offen</th><th class="text-end">Frei verfügbar</th><th class="text-end">Fehlmenge</th><th>Hinweis</th></tr></thead>
+  <tbody>{% for z in fehlteile %}<tr class="{% if z.fehlmenge %}table-warning{% endif %}"><td>{{ z.artikel.artikelnummer }} <small class="text-muted">{{ z.artikel.bezeichnung }}</small></td>
+    <td class="text-end">{{ z.bedarf|menge }} {{ z.artikel.einheit.code }}</td><td class="text-end">{% if z.material %}{{ z.material.entnommen_menge|menge }}{% else %}–{% endif %}</td>
+    <td class="text-end">{{ z.offen|menge }}</td><td class="text-end">{{ z.frei|menge }}</td><td class="text-end {% if z.fehlmenge %}text-danger fw-bold{% endif %}">{% if z.fehlmenge %}{{ z.fehlmenge|menge }}{% else %}–{% endif %}</td>
+    <td>{% if z.unterauftrag %}<a href="{% url 'produktion:detail' z.unterauftrag.pk %}">Unterauftrag {{ z.unterauftrag.nummer }}</a>{% elif z.fehlmenge and z.eigenfertigung %}<span class="badge bg-info text-dark">Eigenfertigung möglich</span>{% elif z.fehlmenge %}<span class="badge bg-warning text-dark">Fehlteil – beschaffen</span>{% endif %}
+      {% if z.artikel.chargenpflicht %}<span class="badge bg-light text-dark border">Charge</span>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="7" class="text-muted text-center">Kein Material.</td></tr>{% endfor %}</tbody></table></div></div>
+
+{% if arbeitsgaenge %}<div class="card mb-3"><div class="card-header bg-white fw-semibold">Arbeitsgänge</div>
+<div class="table-responsive"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Stempelcode</th><th>Arbeitsgang</th><th>Arbeitsplatz</th><th>Lohnart</th><th class="text-end">Rüsten</th><th class="text-end">te</th><th class="text-end">Vorgabe</th><th class="text-end">Gut</th><th class="text-end">Ausschuss</th><th class="text-end">Nacharb.</th><th>Status</th></tr></thead>
+  <tbody>{% for ag in arbeitsgaenge %}<tr><td><code>{{ ag.code }}</code></td><td>{{ ag.bezeichnung }}</td><td>{{ ag.arbeitsplatz|default:"–" }}</td><td>{{ ag.get_lohnart_display }}</td>
+    <td class="text-end">{{ ag.ruestzeit_min|zahl }}</td><td class="text-end">{{ ag.stueckzeit_min|zahl:3 }}</td><td class="text-end">{{ ag.vorgabe_min|zahl }} min</td>
+    <td class="text-end">{{ ag.gut_menge|menge }}</td><td class="text-end">{{ ag.ausschuss_menge|menge }}</td><td class="text-end">{{ ag.nacharbeit_menge|menge }}</td>
+    <td>{% include "produktion/_status.html" with s=ag.status text=ag.get_status_display %}</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
+
+<div class="row g-3">
+  <div class="col-xl-6"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Stempelungen {% if darf_bde %}<a class="small fw-normal float-end" href="{% url 'produktion:stempelungen' %}">alle</a>{% endif %}</div>
+  <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Mitarbeiter</th><th>AG</th><th>Tätigkeit</th><th>Beginn</th><th>Ende</th><th class="text-end">min</th></tr></thead>
+  <tbody>{% for st in stempelungen %}<tr><td>{{ st.mitarbeiter.name }}</td><td>{{ st.arbeitsgang.position }}</td><td>{{ st.get_taetigkeit_display }}</td><td>{{ st.beginn|date:"d.m. H:i" }}</td>
+    <td>{% if st.ende %}{{ st.ende|date:"H:i" }} <small class="text-muted">{{ st.get_ende_art_display }}</small>{% else %}<span class="badge bg-primary">läuft</span>{% endif %}{% if st.korrigiert %} <i class="bi bi-pencil-square text-warning" title="{{ st.korrektur_grund }}"></i>{% endif %}</td>
+    <td class="text-end">{{ st.dauer_min|zahl:0 }}</td></tr>
+  {% empty %}<tr><td colspan="6" class="text-muted text-center">Keine Stempelungen.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-xl-6"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Rückmeldungen</div>
+  <div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Zeit</th><th>AG</th><th>Mitarbeiter</th><th class="text-end">Gut</th><th class="text-end">Ausschuss</th><th>Grund</th><th class="text-end">Nacharb.</th></tr></thead>
+  <tbody>{% for r in rueckmeldungen %}<tr><td>{{ r.zeitpunkt|date:"d.m. H:i" }}</td><td>{{ r.arbeitsgang.position }}</td><td>{{ r.mitarbeiter.name|default:"–" }}</td><td class="text-end">{{ r.gut_menge|menge }}</td>
+    <td class="text-end">{{ r.ausschuss_menge|menge }}</td><td>{{ r.get_ausschuss_grund_display }}</td><td class="text-end">{{ r.nacharbeit_menge|menge }}</td></tr>
+  {% empty %}<tr><td colspan="7" class="text-muted text-center">Keine Rückmeldungen.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-xl-6"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Materialentnahmen</div>
+  <table class="table table-sm mb-0"><thead class="table-light"><tr><th>Zeit</th><th>Artikel</th><th>Charge</th><th>Lager</th><th class="text-end">Menge</th><th class="text-end">Wert</th></tr></thead>
+  <tbody>{% for e in entnahmen %}<tr><td>{{ e.zeitpunkt|date:"d.m. H:i" }}</td><td>{{ e.artikel.artikelnummer }}</td><td>{{ e.charge|default:"–" }}</td><td>{{ e.lagerort.code }}{% if e.lagerplatz %}/{{ e.lagerplatz.code }}{% endif %}</td>
+    <td class="text-end">{{ e.menge|menge }}</td><td class="text-end">{{ e.wert|euro }}</td></tr>
+  {% empty %}<tr><td colspan="6" class="text-muted text-center">Noch nichts entnommen.</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="col-xl-6"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Fertigmeldungen</div>
+  <table class="table table-sm mb-0"><thead class="table-light"><tr><th>Zeit</th><th>Charge</th><th>Lager</th><th class="text-end">Menge</th><th class="text-end">HK/Einheit</th><th class="text-end">HK gesamt</th></tr></thead>
+  <tbody>{% for f in fertigmeldungen %}<tr><td>{{ f.zeitpunkt|date:"d.m. H:i" }}</td><td>{{ f.charge|default:"–" }}</td><td>{{ f.lagerort.code }}{% if f.lagerplatz %}/{{ f.lagerplatz.code }}{% endif %}</td>
+    <td class="text-end">{{ f.menge|menge }}</td><td class="text-end">{{ f.herstellkosten_stueck|zahl:4 }} €</td><td class="text-end">{{ f.herstellkosten|euro }}</td></tr>
+  {% empty %}<tr><td colspan="6" class="text-muted text-center">Noch nichts fertig gemeldet.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+{% endblock %}

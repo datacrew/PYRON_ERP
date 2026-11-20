@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Materialentnahme {{ fa.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-box-arrow-up"></i> Materialentnahme {{ fa.nummer }}</h1>
+  <div class="ms-auto d-flex gap-2">
+    <form method="post" onsubmit="return confirm('Offene Mengen aller nicht chargenpflichtigen Materialien entnehmen (FIFO)?')">{% csrf_token %}<button class="btn btn-sm btn-outline-primary" name="alles" value="1"><i class="bi bi-check2-all"></i> Rest entnehmen (ohne Chargenpflicht)</button></form>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'produktion:detail' fa.pk %}"><i class="bi bi-arrow-left"></i> Auftrag</a></div></div>
+<p class="small text-muted">Lagerabgang zum Auftrag (Bewertung zum gleitenden Durchschnittspreis). Chargenpflichtige Artikel: Bestandszeile (Charge/Platz) wählen. Ohne Auswahl wird FIFO aus den freien Beständen entnommen.</p>
+{% for z in zeilen %}<div class="card mb-3"><div class="card-header bg-white d-flex">
+  <span class="fw-semibold">{{ z.m.artikel.artikelnummer }} {{ z.m.artikel.bezeichnung }}</span>{% if z.m.artikel.chargenpflicht %}<span class="badge bg-warning text-dark ms-2">chargenpflichtig</span>{% endif %}
+  <span class="ms-auto small">Soll {{ z.m.soll_menge|menge }} · entnommen {{ z.m.entnommen_menge|menge }} · <b>offen {{ z.m.offen_menge|menge }} {{ z.m.artikel.einheit.code }}</b></span></div>
+  <div class="card-body">{% if z.m.offen_menge > 0 %}
+  <form method="post" class="row g-2 align-items-end">{% csrf_token %}<input type="hidden" name="material" value="{{ z.m.pk }}">
+    <div class="col-md-7"><label class="form-label small mb-1">Bestand / Charge</label>
+      <select name="bestand" class="form-select form-select-sm" {% if z.m.artikel.chargenpflicht %}required{% endif %}>
+        {% if not z.m.artikel.chargenpflicht %}<option value="">automatisch (FIFO)</option>{% endif %}
+        {% for b in z.bestaende %}<option value="{{ b.pk }}">{{ b.lagerort.code }}{% if b.lagerplatz %}/{{ b.lagerplatz.code }}{% endif %}{% if b.charge %} · Charge {{ b.charge.chargennummer }}{% endif %} · {{ b.menge|menge }} frei</option>
+        {% empty %}<option value="">– kein freier Bestand –</option>{% endfor %}</select></div>
+    <div class="col-md-3"><label class="form-label small mb-1">Menge</label><input name="menge" class="form-control form-control-sm" inputmode="decimal" value="{{ z.m.offen_menge|menge }}"></div>
+    <div class="col-md-2"><button class="btn btn-sm btn-primary w-100">Entnehmen</button></div></form>
+  {% else %}<span class="text-success"><i class="bi bi-check-circle"></i> vollständig entnommen</span>{% endif %}</div></div>
+{% empty %}<div class="alert alert-info">Der Auftrag hat kein Material.</div>{% endfor %}
+{% if entnahmen %}<div class="card"><div class="card-header bg-white fw-semibold">Bisherige Entnahmen</div><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Zeit</th><th>Artikel</th><th>Charge</th><th class="text-end">Menge</th><th class="text-end">Wert</th></tr></thead>
+  <tbody>{% for e in entnahmen %}<tr><td>{{ e.zeitpunkt|date:"d.m.Y H:i" }}</td><td>{{ e.artikel.artikelnummer }}</td><td>{{ e.charge|default:"–" }}</td><td class="text-end">{{ e.menge|menge }}</td><td class="text-end">{{ e.wert|euro }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% endblock %}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm 16mm;
+    @bottom-left { content: "{{ mandant.name }} · Laufkarte {{ fa.nummer }} · gedruckt {{ jetzt|date:'d.m.Y H:i' }}";
+      font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7pt; color: #555; }
+    @bottom-right { content: "Seite " counter(page) " von " counter(pages);
+      font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7pt; color: #555; } }
+  body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 9pt; color: #111; }
+  h1 { font-size: 15pt; margin: 0; } h2 { font-size: 10.5pt; margin: 5mm 0 1.5mm; border-bottom: .8pt solid #111; }
+  .kopf { display: flex; justify-content: space-between; align-items: flex-start; }
+  .kopf .bc { text-align: center; }
+  .bc img { height: 15mm; } .klartext { font-family: "DejaVu Sans Mono", monospace; font-size: 11pt; font-weight: bold; letter-spacing: .5pt; }
+  table { width: 100%; border-collapse: collapse; }
+  table.info td { padding: .7mm 2mm .7mm 0; vertical-align: top; } table.info td.l { color: #555; width: 30mm; }
+  table.pos th { text-align: left; font-size: 8pt; border-bottom: .6pt solid #111; padding: 1mm; }
+  table.pos td { border-bottom: .3pt solid #aaa; padding: 1.2mm 1mm; vertical-align: middle; }
+  .r { text-align: right; white-space: nowrap; }
+  .ag td { height: 22mm; } .ag img { height: 11mm; } .feld { border: .5pt solid #777; height: 7mm; width: 18mm; }
+  .fehl { color: #b00; font-weight: bold; }
+  .wasserzeichen { position: fixed; top: 110mm; left: 10mm; font-size: 70pt; color: rgba(200,0,0,.12); transform: rotate(-30deg); }
+  .hinweis { font-size: 7.5pt; color: #444; margin-top: 3mm; }
+</style></head><body>
+{% if entwurf %}<div class="wasserzeichen">ENTWURF</div>{% endif %}{% if storniert %}<div class="wasserzeichen">STORNIERT</div>{% endif %}
+<div class="kopf">
+  <div><div style="font-size:8pt;color:#555">{{ mandant.name }}</div><h1>Laufkarte / Arbeitsbegleitschein</h1>
+    <table class="info" style="width:110mm;margin-top:2mm">
+      <tr><td class="l">Auftrag</td><td><b>{{ fa.nummer }}</b> ({{ fa.get_status_display }})</td></tr>
+      <tr><td class="l">Artikel</td><td><b>{{ fa.artikel.artikelnummer }}</b> {{ fa.artikel.bezeichnung }}</td></tr>
+      <tr><td class="l">Menge</td><td><b>{{ fa.menge|menge }} {{ fa.artikel.einheit.code }}</b></td></tr>
+      <tr><td class="l">Start / Ende</td><td>{{ fa.starttermin|date:"d.m.Y"|default:"–" }} / {{ fa.termin|date:"d.m.Y"|default:"–" }}</td></tr>
+      <tr><td class="l">Stückliste / Plan</td><td>{{ fa.stueckliste|default:"–" }} / {{ fa.arbeitsplan|default:"–" }}</td></tr>
+      <tr><td class="l">Ziel-Lager</td><td>{{ fa.ziel_lagerort|default:"–" }}</td></tr>
+      {% if fa.uebergeordnet %}<tr><td class="l">Für Auftrag</td><td>{{ fa.uebergeordnet.nummer }}</td></tr>{% endif %}
+      {% if fa.bemerkung %}<tr><td class="l">Bemerkung</td><td>{{ fa.bemerkung }}</td></tr>{% endif %}
+    </table></div>
+  <div class="bc"><img src="{{ barcode }}" alt=""><div class="klartext">{{ fa.nummer }}</div></div>
+</div>
+
+<h2>Arbeitsgänge</h2>
+<table class="pos ag">
+  <thead><tr><th>AG</th><th>Arbeitsgang / Arbeitsplatz</th><th class="r">Rüsten</th><th class="r">te/Stk</th><th class="r">Vorgabe</th><th>Lohnart</th><th>Stempelcode</th><th>Gut</th><th>Ausschuss</th><th>Kürzel</th></tr></thead>
+  <tbody>{% for g in gaenge %}<tr>
+    <td><b>{{ g.ag.position }}</b></td>
+    <td><b>{{ g.ag.bezeichnung }}</b><br><small>{{ g.ag.arbeitsplatz|default:"–" }}{% if g.ag.lohngruppe %} · {{ g.ag.lohngruppe }}{% endif %}</small></td>
+    <td class="r">{{ g.ag.ruestzeit_min|zahl }} min</td><td class="r">{{ g.ag.stueckzeit_min|zahl:3 }} min</td>
+    <td class="r">{{ g.vorgabe|zahl }} min</td><td>{{ g.ag.get_lohnart_display }}</td>
+    <td>{% if g.barcode %}<img src="{{ g.barcode }}" alt=""><div class="klartext" style="font-size:9pt">{{ g.ag.code }}</div>{% else %}<small>nach Freigabe</small>{% endif %}</td>
+    <td><div class="feld"></div></td><td><div class="feld"></div></td><td><div class="feld" style="width:12mm"></div></td>
+  </tr>{% empty %}<tr><td colspan="10">Keine Arbeitsgänge.</td></tr>{% endfor %}</tbody>
+</table>
+
+<h2>Materialliste</h2>
+<table class="pos">
+  <thead><tr><th>Artikel</th><th>Bezeichnung</th><th class="r">Bedarf</th><th class="r">noch offen</th><th class="r">frei verfügbar</th><th class="r">Fehlmenge</th><th>Hinweis</th></tr></thead>
+  <tbody>{% for z in material %}<tr>
+    <td>{{ z.artikel.artikelnummer }}</td><td>{{ z.artikel.bezeichnung }}</td>
+    <td class="r">{{ z.bedarf|menge }} {{ z.artikel.einheit.code }}</td><td class="r">{{ z.offen|menge }}</td>
+    <td class="r">{{ z.frei|menge }}</td><td class="r {% if z.fehlmenge %}fehl{% endif %}">{% if z.fehlmenge %}{{ z.fehlmenge|menge }}{% else %}–{% endif %}</td>
+    <td>{% if z.unterauftrag %}Unterauftrag {{ z.unterauftrag.nummer }}{% elif z.artikel.chargenpflicht %}chargenpflichtig{% endif %}</td>
+  </tr>{% empty %}<tr><td colspan="7">Kein Material.</td></tr>{% endfor %}</tbody>
+</table>
+<p class="hinweis">Stempeln am Terminal: Personalnummer bzw. Ausweis scannen, dann den Stempelcode des Arbeitsgangs. Vorgabe = Rüstzeit + Menge × te (Zeitakkord).</p>
+</body></html>
