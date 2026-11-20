@@ -1,0 +1,18 @@
+{% if form.non_field_errors %}<div class="alert alert-danger py-2">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+<div class="row g-3">
+{% for feld in form.visible_fields %}
+  {% if feld.widget_type == "checkbox" %}
+  <div class="col-sm-6 col-lg-3 d-flex align-items-end"><div class="form-check">{{ feld }}
+    <label class="form-check-label" for="{{ feld.id_for_label }}">{{ feld.label }}</label></div>
+    {% for e in feld.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+  {% else %}
+  <div class="{% if feld.widget_type == 'textarea' or feld.widget_type == 'checkboxselectmultiple' %}col-12{% else %}col-sm-6 col-lg-4{% endif %}">
+    <label class="form-label small mb-1" for="{{ feld.id_for_label }}">{{ feld.label }}{% if feld.field.required %} *{% endif %}</label>
+    {{ feld }}
+    {% if feld.help_text %}<div class="form-text">{{ feld.help_text }}</div>{% endif %}
+    {% for e in feld.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+  </div>
+  {% endif %}
+{% endfor %}
+{% for h in form.hidden_fields %}{{ h }}{% endfor %}
+</div>

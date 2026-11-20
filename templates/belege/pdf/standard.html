@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<style>
+  /* DIN-5008-nahes Layout (Form B): Anschriftfeld 45 mm von oben, 20 mm von links, 85 × 45 mm */
+  @page { size: A4; margin: 27mm 20mm 32mm 25mm;
+    @bottom-left { content: element(fuss); width: 147mm; }
+    @bottom-right { content: "Seite " counter(page) " von " counter(pages); width: 18mm; white-space: nowrap;
+      font-family: "DejaVu Sans", Arial, sans-serif; font-size: 7.5pt; color: #555; text-align: right; } }
+  body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 9.5pt; color: #111; }
+  .absender-kopf { position: absolute; top: -17mm; right: 0; text-align: right; font-size: 14pt; font-weight: bold; }
+  .anschrift { position: absolute; top: 18mm; left: -5mm; width: 85mm; height: 45mm; }
+  .ruecksende { font-size: 7pt; border-bottom: .3pt solid #555; padding-bottom: 1mm; margin-bottom: 3mm; color: #444; }
+  .info { position: absolute; top: 23mm; right: 0; width: 70mm; font-size: 8.5pt; }
+  .info td { padding: .4mm 0; } .info td:first-child { color: #555; padding-right: 3mm; }
+  .inhalt { margin-top: 78mm; }
+  h1 { font-size: 13pt; margin: 0 0 4mm; }
+  table.pos { width: 100%; border-collapse: collapse; margin-top: 4mm; }
+  table.pos th { border-bottom: .8pt solid #111; text-align: left; font-size: 8.5pt; padding: 1.2mm 1mm; }
+  table.pos td { border-bottom: .3pt solid #bbb; padding: 1.2mm 1mm; vertical-align: top; }
+  .r { text-align: right; white-space: nowrap; }
+  table.summen { width: 80mm; margin-left: auto; margin-top: 3mm; border-collapse: collapse; }
+  table.summen td { padding: .8mm 1mm; } .gesamt td { border-top: .8pt solid #111; font-weight: bold; font-size: 10.5pt; }
+  .fuss { position: running(fuss); font-size: 6.5pt; color: #555; width: 147mm; }
+  .fuss td { vertical-align: top; padding-right: 2.5mm; white-space: nowrap; }
+  .wasserzeichen { position: fixed; top: 110mm; left: 10mm; font-size: 70pt; color: rgba(200,0,0,.12); transform: rotate(-30deg); }
+</style></head>
+<body>
+{% if entwurf %}<div class="wasserzeichen">ENTWURF</div>{% endif %}
+{% if storniert %}<div class="wasserzeichen">STORNIERT</div>{% endif %}
+<div class="fuss"><table><tr>
+  <td>{{ mandant.name }}<br>{{ mandant.strasse }}<br>{{ mandant.plz }} {{ mandant.ort }}</td>
+  <td>{% if mandant.telefon %}Tel. {{ mandant.telefon }}<br>{% endif %}{{ mandant.email }}<br>{{ mandant.web }}</td>
+  <td>{% if mandant.geschaeftsfuehrer %}Geschäftsführung: {{ mandant.geschaeftsfuehrer }}<br>{% endif %}{{ mandant.handelsregister }}<br>{% if mandant.ust_id %}USt-IdNr.: {{ mandant.ust_id }}{% endif %}</td>
+  <td>{{ mandant.bank }}<br>{% if mandant.iban %}IBAN: {{ mandant.iban }}<br>BIC: {{ mandant.bic }}{% endif %}</td>
+</tr></table></div>
+
+<div class="absender-kopf">{{ mandant.name }}</div>
+<div class="anschrift">
+  <div class="ruecksende">{{ mandant.name }} · {{ mandant.strasse }} · {{ mandant.plz }} {{ mandant.ort }}</div>
+  {{ partner.name }}<br>{% if partner.name2 %}{{ partner.name2 }}<br>{% endif %}{% if partner.zusatz %}{{ partner.zusatz }}<br>{% endif %}
+  {{ partner.strasse }}<br>{{ partner.plz }} {{ partner.ort }}{% if partner.land and partner.land != "DE" %}<br>{{ partner.land }}{% endif %}
+</div>
+<table class="info">
+  <tr><td>{{ titel }}-Nr.</td><td><strong>{{ beleg.nummer|default:"(noch nicht vergeben)" }}</strong></td></tr>
+  <tr><td>Datum</td><td>{{ beleg.belegdatum|date:"d.m.Y" }}</td></tr>
+  {% if beleg.leistungsdatum %}<tr><td>Leistungsdatum</td><td>{{ beleg.leistungsdatum|date:"d.m.Y" }}</td></tr>{% endif %}
+  <tr><td>{% if beleg.ist_einkauf %}Lieferanten-Nr.{% else %}Kunden-Nr.{% endif %}</td><td>{{ partner.nummer }}</td></tr>
+  {% if beleg.ihre_referenz %}<tr><td>Ihre Referenz</td><td>{{ beleg.ihre_referenz }}</td></tr>{% endif %}
+  {% if partner.ust_id %}<tr><td>Ihre USt-IdNr.</td><td>{{ partner.ust_id }}</td></tr>{% endif %}
+</table>
+
+<div class="inhalt">
+  <h1>{{ titel }} {{ beleg.nummer|default:"" }}{% if beleg.betreff %} – {{ beleg.betreff }}{% endif %}</h1>
+  {% if beleg.kopftext %}<p>{{ beleg.kopftext|linebreaksbr }}</p>{% endif %}
+  <table class="pos">
+    <thead><tr><th>Pos.</th><th>Art.-Nr.</th><th>Bezeichnung</th><th class="r">Menge</th><th class="r">Einzelpreis</th><th class="r">USt</th><th class="r">Gesamt</th></tr></thead>
+    <tbody>{% for p in positionen %}
+      <tr><td>{{ p.position }}</td><td>{{ p.artikel.artikelnummer|default:"" }}</td><td>{{ p.bezeichnung }}{% if p.rabatt_prozent %}<br><small>abzgl. {{ p.rabatt_prozent|zahl }} % Rabatt</small>{% endif %}</td>
+        <td class="r">{{ p.menge|menge }} {{ p.einheit }}</td><td class="r">{{ p.einzelpreis|euro }}</td><td class="r">{{ p.steuersatz|zahl:0 }} %</td><td class="r">{{ p.betrag_netto|euro }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  <table class="summen">
+    <tr><td>Summe netto</td><td class="r">{{ beleg.summe_netto|euro }}</td></tr>
+    {% for satz, werte in steuer_aufstellung %}<tr><td>zzgl. {{ satz|zahl:0 }} % USt auf {{ werte.0|euro }}</td><td class="r">{{ werte.1|euro }}</td></tr>{% endfor %}
+    <tr class="gesamt"><td>Gesamtbetrag</td><td class="r">{{ beleg.summe_brutto|euro }}</td></tr>
+  </table>
+  {% if beleg.zahlungsbedingung and not beleg.ist_einkauf %}<p>Zahlungsbedingung: {{ beleg.zahlungsbedingung.bezeichnung }}</p>{% endif %}
+  {% if beleg.fusstext %}<p>{{ beleg.fusstext|linebreaksbr }}</p>{% endif %}
+</div>
+</body></html>

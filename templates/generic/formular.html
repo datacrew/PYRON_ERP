@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ titel }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <h1 class="h4 m-0">{% if object.pk %}{{ titel }}: {{ object }}{% else %}{{ titel }} anlegen{% endif %}</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url liste_url %}"><i class="bi bi-arrow-left"></i> Zur Liste</a>
+</div>
+{% if zusatz_template and object.pk %}{% include zusatz_template %}{% endif %}
+<form method="post">{% csrf_token %}
+  <fieldset {% if object.pk and not kann_aendern %}disabled{% endif %}>
+  <div class="card mb-3"><div class="card-body">{% include "generic/_formfelder.html" %}</div></div>
+  {% for titel_fs, formset in formsets %}
+  <div class="card mb-3"><div class="card-header bg-white fw-semibold">{{ titel_fs }}</div>
+    <div class="card-body">{% include "generic/_formset.html" %}</div></div>
+  {% endfor %}
+  </fieldset>
+  <div class="d-flex gap-2">
+    {% if not object.pk or kann_aendern %}<button class="btn btn-primary"><i class="bi bi-save"></i> Speichern</button>{% endif %}
+    {% if object.pk and kann_loeschen %}<a class="btn btn-outline-danger ms-auto" href="{% url loeschen_url object.pk %}"><i class="bi bi-trash"></i> Löschen</a>{% endif %}
+  </div>
+</form>
+{% endblock %}

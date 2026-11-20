@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}GoBD-Prüfung{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3"><i class="bi bi-link-45deg"></i> GoBD-Prüfung der Belegkette</h1>
+<p class="text-muted">Alle festgeschriebenen Belege werden neu gehasht und mit der gespeicherten Prüfsumme, der Verkettung zum Vorgänger und der Prüfsumme des Archiv-PDFs verglichen.</p>
+{% if fehler %}
+  <div class="alert alert-danger"><strong>{{ fehler|length }} Auffälligkeit(en)</strong> bei {{ anzahl }} geprüften Belegen:
+    <ul class="mb-0">{% for f in fehler %}<li>{{ f }}</li>{% endfor %}</ul></div>
+{% else %}
+  <div class="alert alert-success"><i class="bi bi-check-circle"></i> Kette intakt – {{ anzahl }} festgeschriebene Belege geprüft, keine Abweichungen.</div>
+{% endif %}
+{% endblock %}

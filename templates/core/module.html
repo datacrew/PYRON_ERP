@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Module{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Module</h1>
+<p class="text-muted small">Deaktivierte Module sind für alle Benutzer (auch Administratoren) ausgeblendet und gesperrt. Pflichtmodule können nicht deaktiviert werden.</p>
+<div class="card"><table class="table table-sm align-middle mb-0">
+  <thead class="table-light"><tr><th>Modul</th><th>Code</th><th>Beschreibung</th><th>Status</th><th></th></tr></thead>
+  <tbody>{% for m in module %}
+  <tr><td><i class="bi {{ m.icon }} me-1"></i>{{ m.name }}</td><td><code>{{ m.code }}</code></td><td class="small text-muted">{{ m.beschreibung }}</td>
+    <td>{% if m.aktiv %}<span class="badge bg-success">aktiv</span>{% else %}<span class="badge bg-secondary">deaktiviert</span>{% endif %}
+        {% if m.pflicht %}<span class="badge bg-light text-dark border">Pflicht</span>{% endif %}</td>
+    <td class="text-end">{% if not m.pflicht %}<form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="modul" value="{{ m.pk }}">
+      <button class="btn btn-sm {% if m.aktiv %}btn-outline-danger{% else %}btn-outline-success{% endif %}">{% if m.aktiv %}Deaktivieren{% else %}Aktivieren{% endif %}</button></form>{% endif %}</td></tr>
+  {% endfor %}</tbody></table></div>
+{% endblock %}

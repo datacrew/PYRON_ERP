@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ titel_plural }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3 gap-2">
+  <h1 class="h4 m-0">{{ titel_plural }}</h1>
+  {% if suche %}
+  <form class="ms-auto d-flex" method="get"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Suchen …"></form>
+  {% endif %}
+  {% if kann_anlegen %}<a class="btn btn-sm btn-primary {% if not suche %}ms-auto{% endif %}" href="{% url neu_url %}"><i class="bi bi-plus-lg"></i> Neu</a>{% endif %}
+</div>
+<div class="card">
+<table class="table table-sm table-hover mb-0">
+  <thead class="table-light"><tr>{% for label, _ in spalten %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for obj in object_list %}
+    <tr>{% for _, pfad in spalten %}{% with wert=obj|attr:pfad %}
+      <td>{% if forloop.first %}<a href="{% url bearbeiten_url obj.pk %}">{% endif %}
+        {% if wert|ist_bool %}{% if wert %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-dash text-muted"></i>{% endif %}
+        {% else %}{{ wert|default_if_none:"" }}{% endif %}
+      {% if forloop.first %}</a>{% endif %}</td>{% endwith %}{% endfor %}</tr>
+  {% empty %}
+    <tr><td colspan="{{ spalten|length }}" class="text-muted text-center py-4">Keine Einträge vorhanden.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% include "generic/_seiten.html" %}
+{% endblock %}

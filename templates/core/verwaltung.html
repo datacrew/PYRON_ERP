@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Verwaltung{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3"><i class="bi bi-gear"></i> Verwaltung</h1>
+<div class="row g-3">
+  {% url 'core:benutzer_liste' as u1 %}{% url 'core:rollen_liste' as u2 %}{% url 'core:module' as u3 %}
+  {% url 'core:nummernkreis_liste' as u4 %}{% url 'belege:vorlage_liste' as u5 %}{% url 'core:mandant' as u6 %}
+  {% url 'core:audit' as u7 %}{% url 'belege:kette' as u8 %}
+  {% include "core/_kachel.html" with url=u1 icon="bi-people" titel="Benutzer" text=anzahl_benutzer|stringformat:"s"|add:" Benutzerkonten" %}
+  {% include "core/_kachel.html" with url=u2 icon="bi-shield-check" titel="Rollen & Rechte" text="Rechte-Matrix je Modul und Aktion" %}
+  {% include "core/_kachel.html" with url=u3 icon="bi-toggles" titel="Module" text="Module aktivieren / deaktivieren" %}
+  {% include "core/_kachel.html" with url=u4 icon="bi-123" titel="Nummernkreise" text="Lückenlose Belegnummern" %}
+  {% include "core/_kachel.html" with url=u5 icon="bi-file-earmark-code" titel="Belegvorlagen" text="PDF-Vorlagen je Belegart (HTML/CSS)" %}
+  {% include "core/_kachel.html" with url=u6 icon="bi-building" titel="Firmendaten" text="Anschrift, Bank, Steuerdaten, Kontenrahmen" %}
+  {% include "core/_kachel.html" with url=u7 icon="bi-clock-history" titel="Audit-Log" text="Lückenlose Änderungshistorie" %}
+  {% include "core/_kachel.html" with url=u8 icon="bi-link-45deg" titel="GoBD-Prüfung" text="Prüfsummenkette der Belege verifizieren" %}
+</div>
+{% endblock %}

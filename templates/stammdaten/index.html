@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Stammdaten{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3"><i class="bi bi-database"></i> Stammdaten</h1>
+<div class="row g-3">
+  {% for titel, urlname, anzahl, icon in bereiche %}{% url urlname as u %}
+    {% if anzahl is not None %}{% include "core/_kachel.html" with url=u icon=icon titel=titel text=anzahl|stringformat:"s"|add:" Einträge" %}
+    {% else %}{% include "core/_kachel.html" with url=u icon=icon titel=titel text="Pflegen" %}{% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

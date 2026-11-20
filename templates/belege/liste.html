@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Belege{% endblock %}
+{% block content %}
+{% hat_recht "belege" "anlegen" as darf_anlegen %}
+<div class="d-flex align-items-center mb-3 gap-2"><h1 class="h4 m-0">Belege</h1>
+  {% if darf_anlegen %}<div class="dropdown ms-auto"><button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> Neuer Beleg</button>
+    <ul class="dropdown-menu dropdown-menu-end">{% for c, l in belegarten %}<li><a class="dropdown-item" href="{% url 'belege:neu' %}?belegart={{ c }}">{{ l }}</a></li>{% endfor %}</ul></div>{% endif %}
+</div>
+<form class="row g-2 mb-3" method="get">
+  <div class="col-auto"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Nummer, Partner, Betreff"></div>
+  <div class="col-auto"><select class="form-select form-select-sm" name="belegart"><option value="">alle Belegarten</option>
+    {% for c, l in belegarten %}<option value="{{ c }}" {% if request.GET.belegart == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><select class="form-select form-select-sm" name="status"><option value="">alle Status</option>
+    {% for c, l in stati %}<option value="{{ c }}" {% if request.GET.status == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Filtern</button></div>
+</form>
+<div class="card"><table class="table table-sm table-hover mb-0">
+  <thead class="table-light"><tr><th>Belegart</th><th>Nummer</th><th>Datum</th><th>Partner</th><th>Betreff</th><th>Status</th><th class="text-end">Netto</th><th class="text-end">Brutto</th><th></th></tr></thead>
+  <tbody>{% for b in seite %}
+  <tr><td>{{ b.get_belegart_display }}</td><td><a href="{% url 'belege:detail' b.pk %}">{{ b.nummer|default:"(Entwurf)" }}</a></td>
+    <td>{{ b.belegdatum|date:"d.m.Y" }}</td><td>{{ b.partner.name }}</td><td class="small">{{ b.betreff }}</td>
+    <td><span class="badge status-{{ b.status }}">{{ b.get_status_display }}</span></td>
+    <td class="text-end">{{ b.summe_netto|euro }}</td><td class="text-end">{{ b.summe_brutto|euro }}</td>
+    <td><a href="{% url 'belege:pdf' b.pk %}" target="_blank" title="PDF"><i class="bi bi-file-earmark-pdf"></i></a></td></tr>
+  {% empty %}<tr><td colspan="9" class="text-center text-muted py-4">Keine Belege gefunden.</td></tr>{% endfor %}</tbody></table></div>
+{% include "generic/_seiten.html" %}
+{% endblock %}

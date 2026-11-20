@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Stücklistenauflösung{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0">Stücklistenauflösung: {{ stueckliste }}</h1>
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'stammdaten:stueckliste_bearbeiten' stueckliste.pk %}"><i class="bi bi-arrow-left"></i> Zur Stückliste</a></div>
+<form class="d-flex gap-2 mb-3" method="get" style="max-width:320px">
+  <input class="form-control form-control-sm" name="menge" value="{{ menge|menge }}"><button class="btn btn-sm btn-primary text-nowrap">Menge berechnen</button></form>
+{% if fehler %}<div class="alert alert-danger">{{ fehler }}</div>{% endif %}
+<div class="row g-3">
+  <div class="col-lg-7"><div class="card"><div class="card-header bg-white fw-semibold">Struktur (mehrstufig)</div>
+    <table class="table table-sm mb-0"><thead class="table-light"><tr><th>Ebene</th><th>Artikel</th><th>Art</th><th class="text-end">Menge</th></tr></thead>
+    <tbody>{% for ebene, artikel, bedarf, unter in zeilen %}
+      <tr><td>{{ ebene }}</td><td style="padding-left:{{ ebene }}rem">{% if unter %}<i class="bi bi-caret-down-fill small"></i>{% endif %} {{ artikel }}</td>
+        <td>{{ artikel.get_art_display }}</td><td class="text-end">{{ bedarf|menge }} {{ artikel.einheit }}</td></tr>
+    {% endfor %}</tbody></table></div></div>
+  <div class="col-lg-5"><div class="card"><div class="card-header bg-white fw-semibold">Summierter Bedarf unterste Ebene</div>
+    <table class="table table-sm mb-0"><tbody>{% for artikel, summe in bedarf.items %}
+      <tr><td>{{ artikel }}</td><td class="text-end">{{ summe|menge }} {{ artikel.einheit }}</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Benutzer{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0">Benutzer</h1>
+  <a class="btn btn-sm btn-primary ms-auto" href="{% url 'core:benutzer_neu' %}"><i class="bi bi-person-plus"></i> Neuer Benutzer</a></div>
+<div class="card"><table class="table table-sm table-hover mb-0">
+  <thead class="table-light"><tr><th>Benutzername</th><th>Name</th><th>E-Mail</th><th>Rollen</th><th>Admin</th><th>Aktiv</th><th>Letzte Anmeldung</th></tr></thead>
+  <tbody>{% for b in benutzer %}
+  <tr><td><a href="{% url 'core:benutzer_bearbeiten' b.pk %}">{{ b.username }}</a></td><td>{{ b.get_full_name }}</td><td>{{ b.email }}</td>
+    <td>{% for r in b.erp_rollen.all %}<span class="badge bg-secondary-subtle text-secondary-emphasis border">{{ r }}</span> {% endfor %}</td>
+    <td>{% if b.is_superuser %}<i class="bi bi-star-fill text-warning"></i>{% endif %}</td>
+    <td>{% if b.is_active %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle text-danger"></i>{% endif %}</td>
+    <td>{{ b.last_login|date:"d.m.Y H:i"|default:"–" }}</td></tr>
+  {% endfor %}</tbody></table></div>
+{% endblock %}

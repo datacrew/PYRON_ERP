@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Audit-Log{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Audit-Log</h1>
+<form class="row g-2 mb-3" method="get">
+  <div class="col-auto"><input class="form-control form-control-sm" name="objekt" value="{{ request.GET.objekt }}" placeholder="Objekt enthält …"></div>
+  <div class="col-auto"><input class="form-control form-control-sm" name="benutzername" value="{{ request.GET.benutzername }}" placeholder="Benutzer"></div>
+  <div class="col-auto"><select class="form-select form-select-sm" name="aktion"><option value="">alle Aktionen</option>
+    {% for c, l in aktionen %}<option value="{{ c }}" {% if request.GET.aktion == c %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-primary">Filtern</button></div>
+</form>
+<div class="card"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Zeitpunkt</th><th>Benutzer</th><th>Aktion</th><th>Objekttyp</th><th>Objekt</th><th>Änderungen</th></tr></thead>
+  <tbody>{% for e in seite %}
+  <tr><td class="text-nowrap">{{ e.zeitpunkt|date:"d.m.Y H:i:s" }}</td><td>{{ e.benutzername }}</td><td>{{ e.get_aktion_display }}</td>
+    <td>{{ e.modell }}</td><td>{{ e.objekt_text }}</td>
+    <td class="small"><details><summary>{{ e.aenderungen|length }} Feld(er)</summary>
+      <table class="table table-sm table-borderless mb-0">{% for feld, werte in e.aenderungen.items %}
+        <tr><td class="text-muted">{{ feld }}</td><td>{{ werte }}</td></tr>{% endfor %}</table></details></td></tr>
+  {% empty %}<tr><td colspan="6" class="text-center text-muted py-3">Keine Einträge.</td></tr>{% endfor %}</tbody></table></div>
+{% include "generic/_seiten.html" %}
+{% endblock %}
