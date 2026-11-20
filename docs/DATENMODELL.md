@@ -559,3 +559,40 @@ stateDiagram-v2
     IN_ARBEIT --> STORNIERT: dto.
     ENTWURF --> [*]: löschen
 ```
+
+## Phase 4 – Finanzbuchhaltung (`apps/fibu`)
+
+```mermaid
+erDiagram
+    Geschaeftsjahr ||--|{ Periode : "12 Monate"
+    Periode ||--o{ Buchung : enthaelt
+    Buchung ||--|{ Buchungszeile : "Soll = Haben"
+    Buchungszeile }o--|| Konto : "SKR03/SKR04"
+    Buchungszeile }o--o| Steuerschluessel : "USt/VSt/igE/13b"
+    Buchungszeile ||--o{ Buchungszeile : "Steuerzeilen"
+    Buchung |o--o| Buchung : "storno_von"
+    Buchung ||--o{ OffenerPosten : erzeugt
+    OffenerPosten }o--|| Geschaeftspartner : Personenkonto
+    OffenerPosten ||--o{ Ausgleich : "Zahlung/Skonto"
+    Eingangsrechnung ||--|{ ERPosition : enthaelt
+    ERPosition }o--o| BestellPosition : "Rechnungspruefung"
+    Eingangsrechnung |o--o| Buchung : gebucht
+    Bankkonto ||--o{ Bankimport : "CAMT/MT940"
+    Bankimport ||--|{ Bankumsatz : enthaelt
+    Bankumsatz }o--o| Buchung : "Zuordnung"
+    Mahnlauf ||--|{ Mahnung : "je Partner"
+    Mahnung }o--|| Mahnstufe : stufe
+    Mahnung ||--|{ MahnPosition : enthaelt
+    MahnPosition }o--|| OffenerPosten : op
+    Kontierungsregel }o--|| Konto : "Vorgang x Artikelart x Schluessel"
+```
+
+Regeln:
+- `Buchung`: Nummer aus dem Kreis `FIBU_BUCHUNG`, `quelle`/`quelle_id` sind eindeutig, damit Automatikbuchungen
+  idempotent sind. Ab `status = FESTGESCHRIEBEN` gelten `ketten_index`, `pruefsumme` und `vorgaenger_pruefsumme`
+  (SHA-256-Kette). PG-Trigger `fibu_buchung_gobd`/`fibu_zeile_gobd` verbieten UPDATE/DELETE.
+- `Periode.gesperrt`: Danach sind keine Buchungen mit einem Belegdatum in dieser Periode mehr möglich.
+- `OffenerPosten.offen`: Restbetrag. `steuer_aufteilung` (Schlüssel, netto, Steuer) dient der Skonto-Steuerkorrektur.
+- `Bankumsatz.dubletten_schluessel`: SHA-256 über IBAN, Datum, Betrag, Referenz, Zweck und Name.
+- `Konto`: zusätzlich `kontoart`, `bilanz_position`, `guv_position`, `steuerschluessel` (Automatikkonto), `automatik`
+  (Code) und `partner` (Personenkonten). `Geschaeftspartner`: `iban`, `mahnsperre`, `debitorenkonto`, `kreditorenkonto`.

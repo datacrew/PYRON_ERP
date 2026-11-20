@@ -10,11 +10,11 @@ Steuerberatung. Realistisch sind ±30 %, je nach Tiefe der Anforderungen.
 | 1 | Fundament (abgeschlossen): core, Stammdaten, Belege/GoBD/PDF, UI, API | – |
 | 2 | Einkauf + Wareneingang + Lagerbestand (**abgeschlossen**) | – |
 | 3 | Produktion mit Zeiterfassung und Akkord (**abgeschlossen**, vorgezogen) | – |
-| 4 | Finanzbuchhaltung | 45–60 PT |
+| 4 | Finanzbuchhaltung (**abgeschlossen**) | – |
 | 5 | Vertrieb, CRM, E-Rechnung, EDIFACT, Versand | 40–55 PT |
 | 6 | Reporting, Betrieb, Härtung | 20–30 PT |
 | | Produktion-Ausbau (Kapazitätsplanung, Reservierung, Lohnexport-Formate) | 10–20 PT |
-| | **Summe offene Phasen** | **ca. 115–165 PT** |
+| | **Summe offene Phasen** | **ca. 70–105 PT** |
 
 Die Reihenfolge ist ein Vorschlag: Einkauf/Lager zuerst, weil Produktion und Versand Bestände brauchen;
 Die Produktion wurde auf Wunsch vor Fibu und Vertrieb gezogen und ist als **Phase 3** umgesetzt. Die bisherigen
@@ -69,7 +69,10 @@ Offen / bewusst verschoben:
 - Hinweis: Zeiterfassung und Akkord sind mitbestimmungspflichtig (Betriebsrat, Betriebsvereinbarung) und
   datenschutzrelevant.
 
-## Phase 4 – Finanzbuchhaltung (45–60 PT)
+## Phase 4 – Finanzbuchhaltung (**erledigt**, siehe README „Phase 4: Finanzbuchhaltung“)
+Offen/Ausbau: Anlagenbuchhaltung, Kostenrechnung, ELSTER, E-Mail-Mahnversand, Steuerberater-Abnahme.
+
+Ursprünglicher Umfang:
 - Doppelte Buchführung: Buchungsjournal (unveränderbar, Festschreibung je Periode), Soll/Haben,
   Debitoren/Kreditoren (OP-Verwaltung), Steuerschlüssel, Buchungsperioden und Jahresabschluss-Sperre
 - Automatische Buchung festgeschriebener Belege über das bestehende Event `beleg.festgeschrieben`

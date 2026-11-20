@@ -401,6 +401,104 @@ teilgefertigt, in Arbeit mit Nacharbeit, Entwurf) mit Stempelungen über die let
 
 ---
 
+## Phase 4: Finanzbuchhaltung
+
+Menü **Finanzbuchhaltung** (`apps/fibu`, Rechte-Module `fibu`, `fibu_bank`, `fibu_mahnwesen`, `fibu_abschluss`).
+
+> **Wichtig:** Kontenrahmen, Steuerschlüssel, Kontierungsregeln, UStVA-Kennziffern, Bilanz-/GuV-Gliederung und
+> DATEV-Export sind fachlich sorgfältig, aber **nicht von einem Steuerberater abgenommen**. Vor dem produktiven
+> Einsatz müssen Kontenzuordnung, Steuerlogik und Verfahrensdokumentation (GoBD) durch den Steuerberater bzw.
+> Wirtschaftsprüfer geprüft und freigegeben werden. Kein ELSTER-Versand.
+
+### Funktionen
+- **Hauptbuch (HGB):** Geschäftsjahre mit 12 Monatsperioden, Periodensperre (schreibt offene Buchungen fest),
+  Splitbuchungen mit erzwungenem Soll = Haben, Nummernkreis `FIBU_BUCHUNG`.
+- **Steuerschlüssel:** U19/U7 (USt), V19/V7 (VSt), IGL/AUS (steuerfrei), IGE19/IGE7 (innergem. Erwerb) und
+  RC19 (§ 13b) – automatische Steuerzeile; igE/§ 13b zweiseitig (VSt und USt, saldoneutral).
+- **GoBD:** Festschreibung mit SHA-256-Hash-Kette (Seite *Hash-Kette prüfen*), Code-Sperre im Modell und
+  PostgreSQL-Trigger gegen UPDATE/DELETE festgeschriebener Buchungen und Zeilen. Korrektur nur per Storno.
+- **Kontenrahmen SKR03/SKR04** (je Mandant wählbar) mit Bilanz-/GuV-Zuordnung, Automatik- und Sammelkonten.
+- **Nebenbücher:** Personenkonten (Debitoren 10000 ff., Kreditoren 70000 ff., automatisch je Partner),
+  offene Posten, vollständiger/teilweiser Ausgleich, Skonto mit anteiliger Steuerkorrektur.
+- **Eingangsrechnungen** (`ER-…`): Erfassung frei oder aus Wareneingang, Rechnungsprüfung gegen Bestellung
+  und Wareneingang (Menge, Preis mit Toleranz `ERP_RECHNUNGSPRUEFUNG_TOLERANZ_PROZENT`), bei Abweichung
+  ist eine Freigabe nötig.
+- **Bankimport** CAMT.053 und MT940: Dubletten werden über Datei-Hash und Umsatz-Schlüssel erkannt. Danach
+  bewertete Zuordnungsvorschläge (Belegnummer, Betrag inkl. Skonto, IBAN, Name), automatische Zuordnung
+  eindeutiger Treffer, Gebühren auf Nebenkosten des Geldverkehrs, Rest auf Sachkonto oder Verrechnungskonto
+  „ungeklärt“ (spätere Umbuchung möglich). Beispiel-Dateien: `docs/beispiele/camt053_demo.xml` und
+  `docs/beispiele/mt940_demo.sta`.
+- **Mahnwesen:** Stufen (Zahlungserinnerung, 1.–3. Mahnung) mit Fristen, Gebühren und Zinsen (§ 288 BGB:
+  Basiszins + 9 Prozentpunkte B2B bzw. + 5 Prozentpunkte B2C; Basiszinssätze als Einstellung). Ablauf:
+  Vorschlagslauf → Ausführen (Mahnhistorie an den OPs). Mahnsperre je Partner und je OP, Mahn-PDF.
+- **Auswertungen** (Ansicht, PDF, CSV): Summen- und Saldenliste, Kontoblatt, Journal, OP-Listen mit
+  Fälligkeitsraster, Bilanz (§ 266) und GuV (§ 275 GKV) in vereinfachter Gliederung, UStVA-Kennziffern,
+  DATEV-Buchungsstapel (EXTF 700, cp1252).
+- **Jahresabschluss:** Saldenvortrag ins Folgejahr (GuV-Ergebnis → Gewinnvortrag), Geschäftsjahr abschließen.
+- **REST-API:** `/api/v1/fibu/konten/` (mit Salden), `/api/v1/buchungen/` (GET/POST, Aktionen `festschreiben`,
+  `stornieren`), `/api/v1/offene-posten/`, `/api/v1/bankumsaetze/`.
+
+### Kontierungslogik (Automatikbuchungen, idempotent über Quelle + ID)
+| Vorgang (Event) | Buchung (SKR03) |
+|---|---|
+| Ausgangsrechnung festgeschrieben (`beleg.festgeschrieben`) | Debitor an 8400 Erlöse 19 % + 1776 USt, OP |
+| Beleg storniert | Stornobuchung |
+| Wareneingang (`wareneingang.gebucht`) | Bestand (3970 RHB / 7000 unfertige / 7110 fertige Erzeugnisse) an 1595 WE/RE |
+| Eingangsrechnung mit Bestellbezug | 1595 WE/RE (WE-Wert) + Preisdifferenz auf Aufwand + 1576 VSt an Kreditor, OP |
+| Eingangsrechnung ohne Bestellbezug | Aufwandskonto (Position bzw. Regel) + VSt an Kreditor |
+| Materialentnahme (`produktion.material_entnommen`) | 3000 Materialaufwand an Bestand |
+| Fertigmeldung (`produktion.fertiggemeldet`) | Bestand Erzeugnisse an 8980/8960 Bestandsveränderung |
+| Zahlungseingang/-ausgang | Bank an Debitor bzw. Kreditor an Bank; Skonto 8736/3736 mit Steuerkorrektur |
+
+Die Konten werden über **Kontierungsregeln** (Vorgang × Artikelart × Steuerschlüssel, je Kontenrahmen) ermittelt.
+Sie sind unter *Finanzbuchhaltung → Einstellungen* pflegbar. Schlägt eine Automatikbuchung fehl (z. B. weil kein
+Geschäftsjahr angelegt oder die Periode gesperrt ist), läuft der Vorgang im Vorsystem trotzdem durch. Der Fehler
+steht im Automatik-Protokoll und lässt sich über „Nachbuchen“ erneut versuchen.
+
+### Rechte
+Die Rolle **Buchhaltung** hat alle Fibu-Rechte. Die Rechte sind getrennt:
+
+| Modul | Recht | Erlaubt |
+|---|---|---|
+| `fibu` | anlegen | Buchen |
+| `fibu` | freigeben | Festschreiben |
+| `fibu_abschluss` | anlegen | Periodenabschluss / Saldenvortrag |
+| `fibu_mahnwesen` | anlegen | Mahnvorschlag |
+| `fibu_mahnwesen` | freigeben | Mahnlauf ausführen |
+| `fibu_bank` | anlegen | Bankimport / Zuordnung |
+
+**Nur Lesen** darf ansehen.
+
+### Demodaten Fibu
+Inhalt:
+- Geschäftsjahr 2026 mit Eröffnungsbilanz.
+- Ausgangsrechnungen RE-2026-00001…00005:
+  - 00001 bezahlt
+  - 00002 überfällig, bereits erinnert
+  - 00003 mit Skonto bezahlt
+  - 00004 teilbezahlt und überfällig
+  - 00005 offen
+- Eingangsrechnungen von Becker (bezahlt) und Schmidt (offen).
+- Eine Rechnung zum Wareneingang ist erfasst und noch nicht gebucht.
+- Der MT940-Auszug Juli–November ist abgearbeitet.
+- Die Perioden 01–09/2026 sind gesperrt.
+
+### Demo-Ablauf Fibu (Login `buchhaltung` / `Demo!2026`)
+1. **Dashboard Fibu:** offene Forderungen/Verbindlichkeiten, Überfälliges, Bankstand.
+2. **Bank → Kontoauszug importieren:** `docs/beispiele/camt053_demo.xml` mit „automatisch zuordnen“ hochladen.
+   - RE-2026-00005 (Müller) wird mit 2 % Skonto ausgeglichen, inklusive USt-Korrektur.
+   - Die Zahlung an Schmidt gleicht ER-2026-00002 aus.
+   - Die Gebühr wird gebucht.
+   - Die Gutschrift „Hans Mustermann“ bleibt offen; über den Umsatz auf „ungeklärt“ buchen.
+3. **OP-Liste:** RE-2026-00005 ist ausgeglichen (Ausgleichshistorie im OP).
+4. **Mahnwesen → Vorschlag:** Stichtag heute ergibt eine Mahnung an Autoteile Weber (Stufe 1. Mahnung, Zinsen
+   nach § 288 BGB, 5 € Gebühr) → PDF ansehen → Lauf ausführen.
+5. **Eingangsrechnungen → SH-RE-2026-4471:** „Prüfen“ (gegen Wareneingang WEB-2026-00001) → „Buchen“. Danach ist
+   das WE/RE-Konto ausgeglichen.
+6. **Auswertungen:** Bilanz und GuV 2026, UStVA 11/2026 und DATEV-Export (Zeitraum wählen), jeweils als PDF oder CSV.
+
+---
+
 ## REST-API
 
 Basis: `/api/v1/` – Authentifizierung per Session, Basic-Auth oder Token. Alle Endpunkte prüfen die
@@ -455,17 +553,17 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 - [docs/DATENMODELL.md](docs/DATENMODELL.md) – Datenmodell als Mermaid-ERD
 - [docs/ROADMAP.md](docs/ROADMAP.md) – Phasen 2–6 mit groben Aufwänden
 
-## Bekannte Grenzen (Stand Phase 3)
-- Fachmodule Vertrieb, Versand, Fibu und Reporting sind nur als Gerüst mit Platzhalterseite vorhanden.
+## Bekannte Grenzen (Stand Phase 4)
+- Fachmodule Vertrieb, Versand und Reporting sind nur als Gerüst mit Platzhalterseite vorhanden.
+- Fibu: keine Steuerberater-Abnahme, kein ELSTER-Versand, keine Anlagenbuchhaltung/AfA, keine Kostenrechnung,
+  Bilanz/GuV in vereinfachter Gliederung, nur Euro, Mahnwesen ohne Serienversand per E-Mail.
 - Produktion: keine Kapazitätsplanung/Plantafel, keine Materialreservierung (Verfügbarkeit gegen freien Bestand
   zum Prüfzeitpunkt), nur Zeitakkord (kein Geldakkord/Gruppenakkord), Akkordauswertung ist keine
-  Lohnabrechnung; Material- und Fertigmeldungen erzeugen nur Events, noch keine Fibu-Buchungen.
-- Wareneingang erzeugt nur das Event `wareneingang.gebucht`; Eingangsrechnungsprüfung und WE/RE-Verrechnung
-  folgen mit der Fibu (Phase 4).
+  Lohnabrechnung.
 - Lieferantenspezifische Preise/Artikelnummern werden je Bestellposition erfasst, es gibt noch keine
   Lieferanten-Preisliste; Bestellvorschlag nur aus Meldebestand (noch nicht aus Stücklistenbedarf).
 - Bestandsbewertung nur gleitender Durchschnitt (kein FIFO/Niederstwert).
 - Ein Mandant (Firma) pro Installation.
-- Kontenrahmen nur als Grundbestand.
+- Kontenrahmen SKR03/SKR04 als erweiterter Grundbestand (kein vollständiger DATEV-Kontenrahmen).
 - Keine E-Rechnung (ZUGFeRD/XRechnung) – geplant mit dem Vertrieb (siehe Roadmap).
 - Docker-Compose-Setup ungetestet (siehe oben).
