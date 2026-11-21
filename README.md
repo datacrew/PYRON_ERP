@@ -48,19 +48,30 @@ Die Einstellungen werden aus Umgebungsvariablen gelesen (siehe `.env.example`):
 `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, `DJANGO_SECRET_KEY`,
 `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, `ERP_MEDIA_ROOT`, `ERP_LOG_LEVEL`.
 
-### Variante B: Docker Compose
+### Variante B: Docker Compose (Entwicklung/Test)
 
 ```bash
 docker compose up --build
 ```
 
-Startet PostgreSQL 16 und die Anwendung auf Port 8000. Der Entrypoint führt Migrationen, `collectstatic`
-und `erp_grunddaten` aus; mit `ERP_DEMODATEN=1` (in `docker-compose.yml` voreingestellt) zusätzlich
-`erp_demodaten`. Für den Produktivbetrieb `ERP_DEMODATEN` entfernen, `DJANGO_SECRET_KEY` setzen und
-`DJANGO_DEBUG=0` verwenden.
+Startet PostgreSQL 17 und die Anwendung (Gunicorn) auf Port 8000 – **mit Demodaten** (`ERP_DEMODATEN=1`) und
+unsicheren Test-Einstellungen. Nur für Test/Schulung auf dem eigenen Rechner.
 
-> Hinweis: Die Compose-Konfiguration wurde in der Entwicklungsumgebung **nicht** ausgeführt (dort steht kein
-> Docker zur Verfügung). Der lokale Weg (Variante A) ist getestet.
+### Produktivbetrieb auf eigenem Server
+
+Für den Betrieb auf einem eigenen Linux-Server (Ubuntu 22.04/24.04) gibt es ein Installationspaket unter
+[`deploy/`](deploy/) mit Anleitung **[deploy/INSTALLATION.md](deploy/INSTALLATION.md)**:
+
+- **Docker-Weg (empfohlen):** `deploy/docker-compose.prod.yml` – PostgreSQL 17, Gunicorn, Caddy mit
+  automatischem HTTPS (Let's Encrypt), täglicher Backup-Dienst (Rotation 7/4/12, optional rclone/rsync).
+- **Nativer Weg:** `deploy/install.sh --domain … --email …` – PostgreSQL 17 (PGDG), venv, systemd, Caddy,
+  Backup-Timer; Trockenlauf mit `--trocken`.
+- Betriebsskripte in `deploy/scripts/`: `backup.sh`, `restore.sh`, `update.sh`, `erstbenutzer.sh`, `gesundheit.sh`;
+  Health-Endpoint `/gesundheit/`; Integritätsprüfung `python manage.py erp_pruefen` (GoBD-Trigger, Hash-Ketten).
+
+> Hinweis: Docker war in der Entwicklungsumgebung nicht verfügbar – die Compose-Dateien und `install.sh` wurden
+> statisch geprüft (YAML, `bash -n`, shellcheck, Trockenlauf), aber nicht auf einem frischen Server ausgeführt.
+> Gunicorn mit Produktionseinstellungen sowie `backup.sh`/`restore.sh` wurden gegen PostgreSQL 17 real getestet.
 
 ### Demo-Zugänge (nur nach `erp_demodaten`)
 
@@ -122,7 +133,8 @@ erp_system/
 │   ├── produktion/ bde/ akkord/   Fertigung, Terminal-Recht, Akkord-Recht (Phase 3)
 │   ├── vertrieb/ versand/ fibu/ reporting/   (Gerüste)
 ├── templates/         Bootstrap-5-Oberfläche (CDN), PDF-Vorlage belege/pdf/standard.html
-├── docker/            Entrypoint
+├── docker/            Entrypoint des App-Containers
+├── deploy/            Produktivbetrieb: Compose, install.sh, Caddy, systemd, Skripte, INSTALLATION.md
 ├── docs/              DATENMODELL.md, ROADMAP.md
 └── media/             PDF-Archiv (archiv/belege/<Jahr>/<belegart>/…)
 ```
@@ -735,6 +747,7 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 ## Weitere Dokumentation
 - [docs/DATENMODELL.md](docs/DATENMODELL.md) – Datenmodell als Mermaid-ERD
 - [docs/ROADMAP.md](docs/ROADMAP.md) – Phasen 2–6 (alle erledigt) und nächste Schritte für den Produktivbetrieb
+- [deploy/INSTALLATION.md](deploy/INSTALLATION.md) – Installation, Datensicherung, Updates, Betrieb
 
 ## Bekannte Grenzen (Stand Phase 6)
 - Reporting: keine geplanten Berichte per E-Mail, kein freier Berichtsdesigner; Diagramme laden Chart.js per CDN
@@ -754,7 +767,7 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 - Bestandsbewertung nur gleitender Durchschnitt (kein FIFO/Niederstwert).
 - Ein Mandant (Firma) pro Installation.
 - Kontenrahmen SKR03/SKR04 als erweiterter Grundbestand (kein vollständiger DATEV-Kontenrahmen).
-- Docker-Compose-Setup ungetestet (siehe oben).
+- Docker-Weg und `install.sh` nicht auf einem frischen Server ausgeführt (siehe „Produktivbetrieb“ oben).
 
 ## Oberflächentest (Playwright)
 

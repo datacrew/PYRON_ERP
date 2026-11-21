@@ -1,0 +1,15 @@
+# ERP Mittelstand – Datensicherung (ausgelöst von erp-backup.timer; Vorlage, install.sh setzt das Installationsverzeichnis ein)
+[Unit]
+Description=ERP Mittelstand – tägliche Datensicherung
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=erp
+Group=erp
+Environment=ERP_ENV_DATEI=__BASIS__/app/.env
+ExecStart=__BASIS__/app/deploy/scripts/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

@@ -1,6 +1,7 @@
+# Entwicklung/Test mit Demodaten. Produktivbetrieb: deploy/docker-compose.prod.yml (siehe deploy/INSTALLATION.md)
 services:
   db:
-    image: postgres:16
+    image: postgres:17
     environment:
       POSTGRES_DB: erp
       POSTGRES_USER: erp
@@ -18,9 +19,10 @@ services:
       db:
         condition: service_healthy
     environment:
-      DJANGO_SECRET_KEY: bitte-aendern
-      DJANGO_DEBUG: "0"
+      # Testbetrieb über http://localhost:8000 – DEBUG an, kein HTTPS. NICHT für Produktion verwenden!
+      DJANGO_DEBUG: "1"
       DJANGO_ALLOWED_HOSTS: "*"
+      ERP_HTTPS: "0"
       DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:8000
       POSTGRES_DB: erp
       POSTGRES_USER: erp

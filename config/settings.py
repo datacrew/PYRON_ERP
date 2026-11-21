@@ -15,14 +15,58 @@ def _env_liste(name, standard=""):
     return [x.strip() for x in os.environ.get(name, standard).split(",") if x.strip()]
 
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "nur-fuer-entwicklung-bitte-aendern")
-DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
-ALLOWED_HOSTS = _env_liste("DJANGO_ALLOWED_HOSTS", "*")
+def _env_bool(name, standard=False):
+    wert = os.environ.get(name)
+    if wert is None or wert.strip() == "":
+        return standard
+    return wert.strip().lower() in ("1", "true", "ja", "yes", "on")
+
+
+# DEBUG ist nur für die Entwicklung voreingestellt; im Produktivbetrieb DJANGO_DEBUG=0 setzen.
+DEBUG = _env_bool("DJANGO_DEBUG", True)
+_ENTWICKLUNGS_SCHLUESSEL = "nur-fuer-entwicklung-bitte-aendern"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "" if not DEBUG else _ENTWICKLUNGS_SCHLUESSEL)
+if not DEBUG and (not SECRET_KEY or SECRET_KEY == _ENTWICKLUNGS_SCHLUESSEL or len(SECRET_KEY) < 40):
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        "Produktivbetrieb (DJANGO_DEBUG=0): DJANGO_SECRET_KEY muss gesetzt sein (zufällig, mindestens 40 Zeichen). "
+        "Erzeugen z. B. mit: python3 -c \"import secrets; print(secrets.token_urlsafe(50))\""
+    )
+
+ALLOWED_HOSTS = _env_liste("DJANGO_ALLOWED_HOSTS", "*" if DEBUG else "")
+if not DEBUG:
+    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured("Produktivbetrieb: DJANGO_ALLOWED_HOSTS muss die Domain(s) enthalten (kein „*“).")
+    # interne Namen für Healthchecks (Container/Systemd) – ändern nichts an der öffentlichen Erreichbarkeit
+    ALLOWED_HOSTS += [h for h in _env_liste("ERP_INTERNE_HOSTS", "localhost,127.0.0.1,app") if h not in ALLOWED_HOSTS]
 CSRF_TRUSTED_ORIGINS = _env_liste(
     "DJANGO_CSRF_TRUSTED_ORIGINS",
     "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000,"
-    "https://*.abacusai.app,https://*.preview.abacusai.app",
+    "https://*.abacusai.app,https://*.preview.abacusai.app" if DEBUG else "",
 )
+
+# ---------------------------------------------------------------- Sicherheit (Produktivbetrieb)
+# ERP_HTTPS=1: Anwendung läuft hinter einem Reverse Proxy mit HTTPS (Caddy). Standard: an, wenn DEBUG aus.
+ERP_HTTPS = _env_bool("ERP_HTTPS", not DEBUG)
+if ERP_HTTPS:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = _env_bool("DJANGO_SSL_REDIRECT", True)
+    # Healthcheck wird intern per HTTP aufgerufen
+    SECURE_REDIRECT_EXEMPT = [r"^gesundheit/$"]
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SEKUNDEN") or 0)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("DJANGO_HSTS_SUBDOMAINS", False)
+    SECURE_HSTS_PRELOAD = _env_bool("DJANGO_HSTS_PRELOAD", False)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = int(os.environ.get("ERP_SITZUNG_SEKUNDEN") or 10 * 3600)  # ein Arbeitstag
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
 
 # ERP-Fachmodule (Reihenfolge = Ladereihenfolge)
 ERP_APPS = [
@@ -104,7 +148,7 @@ DATABASES = {
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "erp"),
         "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-        "CONN_MAX_AGE": int(os.environ.get("POSTGRES_CONN_MAX_AGE", "60")),
+        "CONN_MAX_AGE": int(os.environ.get("POSTGRES_CONN_MAX_AGE") or 60),
     }
 }
 
@@ -133,7 +177,13 @@ DECIMAL_SEPARATOR = ","
 THOUSAND_SEPARATOR = "."
 
 STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = Path(os.environ.get("ERP_STATIC_ROOT", BASE_DIR / "staticfiles"))
+# Produktiv: komprimierte, versionierte Dateien (WhiteNoise); Caddy liefert /static/ zusätzlich direkt aus.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage" if DEBUG
+                    else "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 STATICFILES_DIRS = [BASE_DIR / "static"]
 # Belegarchiv – wird NICHT öffentlich ausgeliefert, sondern nur über rechtegeprüfte Views
 MEDIA_ROOT = Path(os.environ.get("ERP_MEDIA_ROOT", BASE_DIR / "media"))
@@ -169,12 +219,27 @@ SPECTACULAR_SETTINGS = {
 # EDI/EDIFACT: eigene GLN/ILN (Absender in UNB/NAD SU)
 ERP_EIGENE_GLN = os.environ.get("ERP_EIGENE_GLN", "4012345000016")
 
+_LOG_LEVEL = os.environ.get("ERP_LOG_LEVEL", "INFO")
+_LOG_DATEI = os.environ.get("ERP_LOG_DATEI", "")  # z. B. /var/log/erp/erp.log (leer = nur stdout)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
-    "loggers": {"apps": {"handlers": ["console"], "level": os.environ.get("ERP_LOG_LEVEL", "INFO")}},
+    "formatters": {"standard": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "standard"}},
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        "apps": {"handlers": ["console"], "level": _LOG_LEVEL, "propagate": False},
+        "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
+        "django.security": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+    },
 }
+if _LOG_DATEI:
+    LOGGING["handlers"]["datei"] = {
+        "class": "logging.handlers.RotatingFileHandler", "filename": _LOG_DATEI,
+        "maxBytes": 10 * 1024 * 1024, "backupCount": 10, "encoding": "utf-8", "formatter": "standard",
+    }
+    for _logger in [LOGGING["root"], *LOGGING["loggers"].values()]:
+        _logger["handlers"].append("datei")
 
 
 # ---------------------------------------------------------------- Phase 4: Finanzbuchhaltung

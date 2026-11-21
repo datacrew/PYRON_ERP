@@ -7,3 +7,9 @@ staticfiles/
 # Oberflächentest
 tests_ui/screenshots/
 tests_ui/crawl_ergebnis.json
+
+# Produktivbetrieb (Geheimnisse und Sicherungen nie einchecken)
+deploy/.env
+deploy/backups/
+deploy/rclone/
+deploy/ssh/

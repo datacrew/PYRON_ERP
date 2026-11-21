@@ -1,0 +1,121 @@
+# ERP Mittelstand – Produktivbetrieb mit Docker Compose
+#
+# Aufruf (im Verzeichnis deploy/, dort liegt auch die .env):
+#   cp .env.example .env   # anpassen!
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Dienste:
+#   postgres  PostgreSQL 17, Daten im benannten Volume „pgdata“
+#   app       Django + Gunicorn (migriert und sammelt Static-Dateien beim Start)
+#   caddy     Reverse Proxy mit automatischem HTTPS (Let's Encrypt) für DOMAIN
+#   backup    tägliche Sicherung (pg_dump + Belegarchiv), Rotation 7/4/12, optional extern
+#
+# Ausführliche Anleitung: deploy/INSTALLATION.md
+
+name: erp
+
+x-protokoll: &protokoll
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-erp}
+      POSTGRES_USER: ${POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD in .env setzen}
+      TZ: Europe/Berlin
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    # bewusst KEIN veröffentlichter Port – Datenbank nur im internen Netz erreichbar
+    <<: *protokoll
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: erp-mittelstand:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      ERP_STATIC_ROOT: /app/staticfiles
+      ERP_MEDIA_ROOT: /app/media
+      GUNICORN_BIND: 0.0.0.0:8000
+      TZ: Europe/Berlin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - media:/app/media          # Belegarchiv (GoBD-PDFs) – dauerhaft
+      - static:/app/staticfiles   # wird von Caddy direkt ausgeliefert
+    expose:
+      - "8000"
+    <<: *protokoll
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN in .env setzen}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL in .env setzen}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - static:/srv/static:ro
+      - caddy_data:/data          # Zertifikate – nicht löschen (Let's-Encrypt-Limits)
+      - caddy_config:/config
+    depends_on:
+      - app
+    <<: *protokoll
+
+  backup:
+    build:
+      context: .
+      dockerfile: backup/Dockerfile
+    image: erp-backup:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      BACKUP_VERZEICHNIS: /backups
+      MEDIA_VERZEICHNIS: /media
+      MEDIA_BESITZER: "1000:1000"   # App-Benutzer im app-Container (für restore.sh)
+      # libpq-Variablen: psql/dropdb im Container ohne weitere Angaben nutzbar
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-erp}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD in .env setzen}
+      PGDATABASE: ${POSTGRES_DB:-erp}
+      TZ: Europe/Berlin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ${BACKUP_HOST_VERZEICHNIS:-./backups}:/backups
+      - media:/media              # Lesen für die Sicherung, Schreiben nur bei restore.sh
+      - ./rclone:/root/.config/rclone:ro   # optional: rclone.conf für externe Kopie
+      - ./ssh:/root/.ssh:ro                # optional: SSH-Schlüssel für rsync-Ziel
+    <<: *protokoll
+
+volumes:
+  pgdata:
+  media:
+  static:
+  caddy_data:
+  caddy_config:

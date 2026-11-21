@@ -1,0 +1,29 @@
+# ERP Mittelstand – Gunicorn-Anwendungsserver (Vorlage; install.sh setzt das Installationsverzeichnis ein)
+[Unit]
+Description=ERP Mittelstand (Gunicorn)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=erp
+Group=erp
+WorkingDirectory=__BASIS__/app
+Environment=GUNICORN_BIND=127.0.0.1:8000
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__BASIS__/venv/bin/gunicorn config.wsgi:application -c deploy/gunicorn.conf.py
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=40
+# Härtung
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/erp /var/log/erp
+
+[Install]
+WantedBy=multi-user.target

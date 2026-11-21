@@ -295,3 +295,28 @@ def suche(request):
                 (str(f), reverse("produktion:detail", args=[f.pk]))
                 for f in Fertigungsauftrag.objects.filter(nummer__icontains=q)[:15]])
     return render(request, "core/suche.html", {"q": q, "gruppen": gruppen})
+
+
+def gesundheit(request):
+    """Healthcheck für Docker/Monitoring – ohne Anmeldung, ohne sensible Angaben.
+
+    HTTP 200 + {"status": "ok"} wenn die Datenbank erreichbar ist, sonst HTTP 503.
+    """
+    from django.db import connection
+    from django.http import JsonResponse
+    from django.utils import timezone
+
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        db_ok = True
+    except Exception:  # noqa: BLE001 – Fehlerdetails bewusst nicht ausgeben
+        db_ok = False
+    antwort = JsonResponse(
+        {"status": "ok" if db_ok else "fehler", "datenbank": "ok" if db_ok else "nicht erreichbar",
+         "zeit": timezone.now().isoformat(timespec="seconds")},
+        status=200 if db_ok else 503,
+    )
+    antwort["Cache-Control"] = "no-store"
+    return antwort

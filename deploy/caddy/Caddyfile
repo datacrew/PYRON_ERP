@@ -1,0 +1,42 @@
+# Caddy – Reverse Proxy für das ERP (Docker-Weg). DOMAIN und ACME_EMAIL kommen aus deploy/.env.
+# Caddy holt und erneuert das Let's-Encrypt-Zertifikat automatisch (Ports 80 und 443 müssen offen sein).
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Beleg-Uploads/Importe (CSV, EDI, Bankauszüge) begrenzen
+	request_body {
+		max_size 50MB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# Static-Dateien direkt aus dem Volume (von collectstatic befüllt)
+	handle_path /static/* {
+		root * /srv/static
+		header Cache-Control "public, max-age=604800"
+		file_server
+	}
+
+	# Das Belegarchiv (MEDIA) wird NIE direkt ausgeliefert – nur über rechtegeprüfte Ansichten der Anwendung
+	handle /media/* {
+		respond "Nicht gefunden" 404
+	}
+
+	handle {
+		reverse_proxy app:8000
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

@@ -1,0 +1,2 @@
+# shellcheck-Einstellungen: deutsche Anführungszeichen („…“) in Meldungstexten sind beabsichtigt
+disable=SC1111

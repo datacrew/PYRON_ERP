@@ -6,7 +6,10 @@ admin.site.site_header = "ERP Mittelstand – Administration"
 admin.site.site_title = "ERP Admin"
 admin.site.index_title = "Systemverwaltung"
 
+from apps.core.views import gesundheit
+
 urlpatterns = [
+    path("gesundheit/", gesundheit, name="gesundheit"),
     path("anmelden/", auth_views.LoginView.as_view(), name="login"),
     path("abmelden/", auth_views.LogoutView.as_view(), name="logout"),
     path("admin/", admin.site.urls),

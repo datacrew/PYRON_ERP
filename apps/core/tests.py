@@ -212,3 +212,52 @@ class OberflaechenTests(TestCase):
             return True
         except NoReverseMatch:
             return False
+
+
+class BetriebTests(TestCase):
+    """Installationspaket: Health-Endpoint und Betriebsbefehle."""
+
+    def test_gesundheit_ohne_anmeldung(self):
+        antwort = self.client.get("/gesundheit/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort["Content-Type"], "application/json")
+        self.assertEqual(antwort["Cache-Control"], "no-store")
+        daten = antwort.json()
+        self.assertEqual(daten["status"], "ok")
+        self.assertEqual(daten["datenbank"], "ok")
+        # keine sensiblen Angaben (Version, Hostnamen, Datenbankname, Benutzer)
+        self.assertEqual(set(daten), {"status", "datenbank", "zeit"})
+        self.assertEqual(reverse("gesundheit"), "/gesundheit/")
+
+    def test_gesundheit_db_fehler_503(self):
+        from unittest import mock
+
+        with mock.patch("django.db.backends.utils.CursorWrapper.execute", side_effect=Exception("weg")):
+            antwort = self.client.get("/gesundheit/")
+        self.assertEqual(antwort.status_code, 503)
+        self.assertEqual(antwort.json()["status"], "fehler")
+        self.assertNotIn("weg", antwort.content.decode())
+
+    def test_erstbenutzer_und_pruefen(self):
+        import os
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management.base import CommandError
+
+        call_command("erp_grunddaten", stdout=StringIO())
+        with mock.patch.dict(os.environ, {"ERP_ADMIN_PASSWORT": "kurz"}):
+            with self.assertRaises(CommandError):
+                call_command("erp_erstbenutzer", benutzername="chefin", ohne_abfrage=True, stdout=StringIO())
+        with mock.patch.dict(os.environ, {"ERP_ADMIN_PASSWORT": "Werkbank#Sicher2026"}):
+            call_command("erp_erstbenutzer", benutzername="chefin", email="c@firma.example",
+                         ohne_abfrage=True, stdout=StringIO())
+            with self.assertRaises(CommandError):  # existiert bereits
+                call_command("erp_erstbenutzer", benutzername="chefin", ohne_abfrage=True, stdout=StringIO())
+        user = get_user_model().objects.get(username="chefin")
+        self.assertTrue(user.is_superuser and user.check_password("Werkbank#Sicher2026"))
+        self.assertTrue(Rolle.objects.get(name="Administrator").benutzer.filter(pk=user.pk).exists())
+        ausgabe = StringIO()
+        call_command("erp_pruefen", stdout=ausgabe)
+        self.assertIn("Trigger: 5/5", ausgabe.getvalue())
+        self.assertIn("bestanden", ausgabe.getvalue())

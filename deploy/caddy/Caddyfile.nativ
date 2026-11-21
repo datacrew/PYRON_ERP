@@ -1,0 +1,39 @@
+# Caddy – Reverse Proxy für das ERP (nativer Weg). Vorlage: install.sh ersetzt die Platzhalter DOMAIN, EMAIL, STATIC (in doppelten Unterstrichen)
+# und schreibt das Ergebnis nach /etc/caddy/Caddyfile.
+{
+	email __EMAIL__
+}
+
+__DOMAIN__ {
+	encode zstd gzip
+
+	request_body {
+		max_size 50MB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	handle_path /static/* {
+		root * __STATIC__
+		header Cache-Control "public, max-age=604800"
+		file_server
+	}
+
+	# Belegarchiv nie direkt ausliefern
+	handle /media/* {
+		respond "Nicht gefunden" 404
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	log {
+		output file /var/log/caddy/erp.log
+	}
+}
