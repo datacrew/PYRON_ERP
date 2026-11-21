@@ -23,7 +23,7 @@
     <div class="text-muted mt-1">Geprüft offline: XSD (CII D16B / UBL 2.1) und Summen. Schematron (KoSIT) nicht geprüft.</div>{% else %}<div class="text-muted">erst nach Festschreibung</div>{% endif %}
     {% for h in pflicht %}<div class="text-warning mt-1"><i class="bi bi-info-circle"></i> {{ h }}</div>{% endfor %}</div></div></div>
   <div class="col-lg-4"><div class="card h-100"><div class="card-body small"><div class="fw-semibold mb-1">Offene Posten (Fibu)</div>
-    {% for op in ops %}<div><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a> fällig {{ op.faellig_am|date:"d.m.Y" }} – offen <strong>{{ op.offen|euro }}</strong></div>{% empty %}<div class="text-muted">Kein offener Posten.</div>{% endfor %}
+    {% hat_recht "fibu" as darf_fibu %}{% for op in ops %}<div>{% if darf_fibu %}<a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a>{% else %}{{ op.belegnr }}{% endif %} fällig {{ op.faellig_am|date:"d.m.Y" }} – offen <strong>{{ op.offen|euro }}</strong></div>{% empty %}<div class="text-muted">Kein offener Posten.</div>{% endfor %}
     {% if lieferungen %}<div class="fw-semibold mt-2">Lieferscheine</div>{% for lf in lieferungen %}<a href="{% url 'vertrieb:lieferschein' lf.pk %}">{{ lf.nummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
     {% if gutschriften %}<div class="fw-semibold mt-2">Gutschriften</div>{% for g in gutschriften %}<a href="{% url 'vertrieb:rechnung' g.pk %}">{{ g.nummer }}</a> {% endfor %}{% endif %}</div></div></div>
 </div>

@@ -10,6 +10,14 @@ class BootstrapMixin:
 
     def _bootstrap(self):
         for feld in self.fields.values():
+            # Django-Standard-Leerauswahl „---------“ durch deutschen Text ersetzen
+            if isinstance(feld, forms.ModelChoiceField) and feld.empty_label == "---------":
+                feld.empty_label = "– bitte wählen –"
+            elif isinstance(feld, forms.ChoiceField) and not isinstance(feld, forms.ModelChoiceField):
+                auswahl = list(feld.choices)
+                if any(wert == "" and text == "---------" for wert, text in auswahl):
+                    feld.choices = [(wert, "– bitte wählen –" if wert == "" and text == "---------" else text)
+                                    for wert, text in auswahl]
             w = feld.widget
             if isinstance(feld, (forms.DecimalField, forms.FloatField)):
                 feld.localize = True

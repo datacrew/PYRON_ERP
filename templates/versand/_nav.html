@@ -1,7 +1,7 @@
 <ul class="nav nav-tabs small mb-3">
   <li class="nav-item"><a class="nav-link {% if aktiv == 'index' %}active{% endif %}" href="{% url 'versand:index' %}">Übersicht</a></li>
   <li class="nav-item"><a class="nav-link {% if aktiv == 'touren' %}active{% endif %}" href="{% url 'versand:touren' %}">Touren</a></li>
-  <li class="nav-item"><a class="nav-link {% if aktiv == 'planen' %}active{% endif %}" href="{% url 'versand:planen' %}">Touren bilden</a></li>
+  {% hat_recht "versand" "anlegen" as darf_planen %}{% if darf_planen %}<li class="nav-item"><a class="nav-link {% if aktiv == 'planen' %}active{% endif %}" href="{% url 'versand:planen' %}">Touren bilden</a></li>{% endif %}
   <li class="nav-item"><a class="nav-link {% if aktiv == 'lvs' %}active{% endif %}" href="{% url 'versand:lvs' %}">LVS-Schnittstelle</a></li>
   <li class="nav-item"><a class="nav-link" href="{% url 'versand:regionen_liste' %}">Regionen</a></li>
   <li class="nav-item"><a class="nav-link" href="{% url 'versand:fahrzeuge_liste' %}">Fahrzeuge</a></li>

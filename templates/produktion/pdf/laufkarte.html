@@ -16,7 +16,8 @@
   table.pos th { text-align: left; font-size: 8pt; border-bottom: .6pt solid #111; padding: 1mm; }
   table.pos td { border-bottom: .3pt solid #aaa; padding: 1.2mm 1mm; vertical-align: middle; }
   .r { text-align: right; white-space: nowrap; }
-  .ag td { height: 22mm; } .ag img { height: 11mm; } .feld { border: .5pt solid #777; height: 7mm; width: 18mm; }
+  .ag td { height: 22mm; } .ag img { height: 11mm; width: 42mm; } .feld { border: .5pt solid #777; height: 7mm; width: 11mm; }
+  table.pos.ag th, table.pos.ag td { font-size: 8pt; padding-left: .6mm; padding-right: .6mm; }  /* alle Spalten innerhalb des Satzspiegels */
   .fehl { color: #b00; font-weight: bold; }
   .wasserzeichen { position: fixed; top: 110mm; left: 10mm; font-size: 70pt; color: rgba(200,0,0,.12); transform: rotate(-30deg); }
   .hinweis { font-size: 7.5pt; color: #444; margin-top: 3mm; }
@@ -39,14 +40,14 @@
 
 <h2>Arbeitsgänge</h2>
 <table class="pos ag">
-  <thead><tr><th>AG</th><th>Arbeitsgang / Arbeitsplatz</th><th class="r">Rüsten</th><th class="r">te/Stk</th><th class="r">Vorgabe</th><th>Lohnart</th><th>Stempelcode</th><th>Gut</th><th>Ausschuss</th><th>Kürzel</th></tr></thead>
+  <thead><tr><th>AG</th><th>Arbeitsgang / Arbeitsplatz</th><th class="r">Rüsten</th><th class="r">te/Stk</th><th class="r">Vorgabe</th><th>Lohnart</th><th>Stempelcode</th><th>Gut</th><th>Aussch.</th><th>Kürzel</th></tr></thead>
   <tbody>{% for g in gaenge %}<tr>
     <td><b>{{ g.ag.position }}</b></td>
     <td><b>{{ g.ag.bezeichnung }}</b><br><small>{{ g.ag.arbeitsplatz|default:"–" }}{% if g.ag.lohngruppe %} · {{ g.ag.lohngruppe }}{% endif %}</small></td>
     <td class="r">{{ g.ag.ruestzeit_min|zahl }} min</td><td class="r">{{ g.ag.stueckzeit_min|zahl:3 }} min</td>
     <td class="r">{{ g.vorgabe|zahl }} min</td><td>{{ g.ag.get_lohnart_display }}</td>
     <td>{% if g.barcode %}<img src="{{ g.barcode }}" alt=""><div class="klartext" style="font-size:9pt">{{ g.ag.code }}</div>{% else %}<small>nach Freigabe</small>{% endif %}</td>
-    <td><div class="feld"></div></td><td><div class="feld"></div></td><td><div class="feld" style="width:12mm"></div></td>
+    <td><div class="feld"></div></td><td><div class="feld"></div></td><td><div class="feld" style="width:8mm"></div></td>
   </tr>{% empty %}<tr><td colspan="10">Keine Arbeitsgänge.</td></tr>{% endfor %}</tbody>
 </table>
 

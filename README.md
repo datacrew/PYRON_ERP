@@ -100,7 +100,7 @@ Phase 4 ergänzt 20 Tests für die Finanzbuchhaltung (gesamt 86). Phase 5 ergän
 Versand (Kernfluss Angebot → Auftrag → Lieferschein → Rechnung mit Lagerabgang, Fibu-Buchung und OP,
 Teillieferung, Gutschrift, ZUGFeRD-/XRechnung-XML inkl. XSD und Summen, PDF/A-3-Einbettung, Shop-API mit Token
 und Idempotenz, EDIFACT-Parser/-Generator, Tourenbildung, Kapazitätsprüfung, LVS-Export/-Rückmeldung, Rechte).
-**Aktueller Stand: 119 Tests, alle grün** (gezählt mit `python manage.py test apps`).
+**Aktueller Stand: 125 Tests, alle grün** (gezählt mit `python manage.py test apps`).
 
 ---
 
@@ -755,3 +755,17 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 - Ein Mandant (Firma) pro Installation.
 - Kontenrahmen SKR03/SKR04 als erweiterter Grundbestand (kein vollständiger DATEV-Kontenrahmen).
 - Docker-Compose-Setup ungetestet (siehe oben).
+
+## Oberflächentest (Playwright)
+
+Voraussetzungen: Server läuft (`python3 manage.py runserver 0.0.0.0:3000`), Grund- und Demodaten sind geladen, `pip install playwright` und Chromium (`playwright install chromium`) sind vorhanden.
+
+```bash
+python3 tests_ui/ui_crawl.py                      # alle Rollen, Breitensuche über alle internen Links
+python3 tests_ui/ui_crawl.py --rollen admin,gast --max 50 --parallel 2
+python3 tests_ui/ui_klickpfade.py                 # zentrale Formular-Abläufe (verändert Daten!)
+```
+
+- `ui_crawl.py` meldet sich mit jeder Demo-Rolle an und prüft je Seite: HTTP-Status, JS-Fehler, fehlgeschlagene Requests, Template-Rückstände, englische Standardtexte, leere Tabellen, horizontales Überlaufen (1366 px und 390 px), kaputte Bilder sowie die Rechte (403 statt 500, keine Menüpunkte ohne Recht). Keine POST-Aktionen.
+- `ui_klickpfade.py` führt die Abläufe Artikel → Bestellung → Wareneingang/QS → FA/Laufkarte → Stempelterminal → Angebot bis ZUGFeRD-Rechnung → Bankimport → Mahnvorschlag → Bericht-Export → Suche aus. **Danach Demodaten neu laden** (DB neu anlegen, `migrate`, `erp_grunddaten`, `erp_demodaten`).
+- Ergebnis: `tests_ui/ui_bericht.md` (Teil A Crawl, Teil B Klickpfade, Teil C Korrekturen), Screenshots unter `tests_ui/screenshots/` (nicht versioniert). Exit-Code 1 bei Befunden hoch/mittel bzw. fehlgeschlagenen Schritten.

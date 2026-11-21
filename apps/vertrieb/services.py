@@ -283,7 +283,9 @@ def lieferung_anlegen(auftrag, mengen=None, benutzer=None, lieferdatum=None, lag
         zeilen = []
         for p in a.positionen.all():
             frei = p.offen_liefern - (geplant.get(p.pk) or NULL)
-            menge = _d(mengen.get(p.pk, mengen.get(str(p.pk), 0)) or 0) if mengen is not None else frei
+            # Wert None (leeres Mengenfeld im Formular) = komplette offene Menge
+            roh = frei if mengen is None else mengen.get(p.pk, mengen.get(str(p.pk), 0))
+            menge = frei if roh is None else _d(roh or 0)
             if menge <= 0:
                 continue
             if menge > frei:

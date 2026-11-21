@@ -165,3 +165,50 @@ class EreignisTests(TestCase):
         veroeffentlichen("test.ereignis", wert=42)
         veroeffentlichen("anderes.ereignis", wert=1)
         self.assertEqual(empfangen, [42])
+
+
+class OberflaechenTests(TestCase):
+    """Regressionen aus dem Playwright-Oberflächentest (tests_ui/)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command("erp_grunddaten", verbosity=0)
+        cls.user = User.objects.create_user("ohnerecht", password="Test!2026xy")
+
+    def test_403_seite_deutsch_mit_layout(self):
+        self.client.force_login(self.user)
+        r = self.client.get(reverse("core:benutzer_liste") if self._hat_url("core:benutzer_liste") else "/verwaltung/")
+        self.assertEqual(r.status_code, 403)
+        self.assertContains(r, "Keine Berechtigung", status_code=403)
+        self.assertContains(r, 'id="seitenmenue"', status_code=403)
+        self.assertNotContains(r, "Forbidden", status_code=403)
+
+    def test_404_seite_deutsch(self):
+        self.client.force_login(self.user)
+        r = self.client.get("/gibt-es-nicht/")
+        self.assertContains(r, "Seite nicht gefunden", status_code=404)
+
+    def test_mobilmenue_und_leerauswahl(self):
+        from apps.core.forms import BenutzerForm, ErpForm
+        from django import forms as djf
+
+        class F(ErpForm):
+            rolle = djf.ModelChoiceField(queryset=Rolle.objects.all())
+            art = djf.ChoiceField(choices=[("", "---------"), ("A", "A")])
+        f = F()
+        self.assertEqual(f.fields["rolle"].empty_label, "– bitte wählen –")
+        self.assertEqual(list(f.fields["art"].choices)[0], ("", "– bitte wählen –"))
+        self.assertNotIn("---------", str(f))
+        self.client.force_login(self.user)
+        r = self.client.get(reverse("core:dashboard"))
+        self.assertContains(r, 'data-bs-target="#seitenmenue"')
+        self.assertContains(r, "offcanvas-md")
+
+    @staticmethod
+    def _hat_url(name):
+        from django.urls import NoReverseMatch
+        try:
+            reverse(name)
+            return True
+        except NoReverseMatch:
+            return False

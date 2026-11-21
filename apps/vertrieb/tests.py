@@ -361,3 +361,34 @@ class RechteTests(Basis):
             r = self.client.get(reverse("vertrieb:rechnung_datei", args=[re.pk, art]))
             self.assertEqual(r.status_code, 200, art)
             self.assertIn(typ, r["Content-Type"])
+
+
+class OberflaechentestRegressionTests(Basis):
+    """Regressionen aus dem Playwright-Oberflächentest (tests_ui/)."""
+
+    def test_lieferschein_leere_mengenfelder_liefern_alles(self):
+        a = self.auftrag(self.mueller, [(self.f5000, 2), (self.f5010, 1)])
+        pos = list(a.positionen.order_by("position"))
+        self.client.force_login(self.admin)
+        r = self.client.post(reverse("vertrieb:auftrag_aktion", args=[a.pk, "liefern"]),
+                             {f"menge_{pos[0].pk}": "", f"menge_{pos[1].pk}": ""})
+        lf = Lieferung.objects.get(auftrag=a)
+        self.assertRedirects(r, reverse("vertrieb:lieferschein", args=[lf.pk]), fetch_redirect_response=False)
+        self.assertEqual(lf.positionen.count(), 2)
+
+    def test_lieferschein_teilmenge_und_ungueltige_eingabe(self):
+        a = self.auftrag(self.mueller, [(self.f5000, 5), (self.f5010, 1)])
+        pos = list(a.positionen.order_by("position"))
+        self.client.force_login(self.admin)
+        url = reverse("vertrieb:auftrag_aktion", args=[a.pk, "liefern"])
+        r = self.client.post(url, {f"menge_{pos[0].pk}": "abc"})
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(Lieferung.objects.filter(auftrag=a).exists())
+        self.client.post(url, {f"menge_{pos[0].pk}": "2", f"menge_{pos[1].pk}": "0"})
+        lf = Lieferung.objects.get(auftrag=a)
+        self.assertEqual([(p.menge) for p in lf.positionen.all()], [D(2)])
+
+    def test_links_ohne_recht_ausgeblendet(self):
+        self.client.force_login(self.gast)
+        self.assertNotContains(self.client.get(reverse("vertrieb:pipeline")), reverse("vertrieb:chancen_neu"))
+        self.assertNotContains(self.client.get(reverse("versand:index")), reverse("versand:planen"))

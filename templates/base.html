@@ -17,19 +17,29 @@
     .table-sm td, .table-sm th { vertical-align:middle; }
     .card { border:1px solid #e3e6ea; }
     .status-ENTWURF { background:#98a2b3; } .status-FREIGEGEBEN { background:#2e90fa; }
+    @media (max-width: 767.98px) {
+      /* Mobil: Seitenmenü als Offcanvas, breite Tabellen scrollen innerhalb ihres Containers */
+      .sidebar { min-height:auto; }
+      main .table { display:block; overflow-x:auto; white-space:nowrap; }
+      main .d-flex { flex-wrap:wrap; gap:.25rem; }
+      main .d-flex > * { max-width:100%; } main .btn { white-space:normal; }
+      main pre { white-space:pre-wrap; word-break:break-all; }
+      canvas { max-width:100%; }
+    }
     .status-FESTGESCHRIEBEN { background:#12b76a; } .status-STORNIERT { background:#f04438; }
   </style>
 </head>
 <body>
-<nav class="navbar navbar-expand navbar-dark bg-dark px-3">
-  <a class="navbar-brand" href="{% url 'core:dashboard' %}"><i class="bi bi-boxes"></i> ERP · {{ mandant.name|default:"Mittelstand" }}</a>
+<nav class="navbar navbar-expand navbar-dark bg-dark px-2 px-md-3">
+  {% if user.is_authenticated %}<button class="btn btn-sm btn-outline-light d-md-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#seitenmenue" aria-controls="seitenmenue" aria-label="Menü öffnen"><i class="bi bi-list"></i></button>{% endif %}
+  <a class="navbar-brand" href="{% url 'core:dashboard' %}"><i class="bi bi-boxes"></i> ERP<span class="d-none d-sm-inline"> · {{ mandant.name|default:"Mittelstand" }}</span></a>
   {% if user.is_authenticated %}
   <form class="d-none d-md-flex ms-4" method="get" action="{% url 'core:suche' %}" role="search" style="width:340px">
     <div class="input-group input-group-sm"><span class="input-group-text bg-secondary border-0 text-white"><i class="bi bi-search"></i></span>
       <input class="form-control border-0" type="search" name="q" value="{{ request.GET.q|default:'' }}" placeholder="Suche: Artikel, Partner, Belegnummer …" aria-label="Suche"></div>
   </form>
-  <div class="ms-auto d-flex align-items-center gap-3 text-white-50">
-    <span><i class="bi bi-person-circle"></i> {{ user.get_full_name|default:user.username }}</span>
+  <div class="ms-auto d-flex align-items-center gap-2 gap-md-3 text-white-50">
+    <span class="d-none d-sm-inline"><i class="bi bi-person-circle"></i> {{ user.get_full_name|default:user.username }}</span>
     <form method="post" action="{% url 'logout' %}" class="m-0">{% csrf_token %}
       <button class="btn btn-sm btn-outline-light">Abmelden</button></form>
   </div>
@@ -37,7 +47,11 @@
 </nav>
 <div class="d-flex">
   {% if user.is_authenticated %}
-  <aside class="sidebar p-2">
+  <aside class="sidebar offcanvas-md offcanvas-start p-2" tabindex="-1" id="seitenmenue" aria-label="Seitenmenü">
+    <div class="offcanvas-header d-md-none py-2"><span class="fw-semibold">Menü</span>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#seitenmenue" aria-label="Schließen"></button></div>
+    <form class="d-md-none mb-2 px-1" method="get" action="{% url 'core:suche' %}" role="search">
+      <input class="form-control form-control-sm" type="search" name="q" placeholder="Suche …" aria-label="Suche"></form>
     <nav class="nav flex-column gap-1">
       <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'core:dashboard' %}"><i class="bi bi-speedometer2 me-2"></i>Übersicht</a>
       {% for m in erp_module %}
@@ -49,7 +63,7 @@
     </nav>
   </aside>
   {% endif %}
-  <main class="flex-grow-1 p-4" style="min-width:0">
+  <main class="flex-grow-1 p-2 p-md-4" style="min-width:0">
     {% for m in messages %}
       <div class="alert alert-{% if m.tags == 'error' %}danger{% else %}{{ m.tags|default:'info' }}{% endif %} alert-dismissible fade show py-2">
         {{ m }}<button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button></div>

@@ -2,7 +2,7 @@
 {% block title %}Pipeline{% endblock %}
 {% block content %}
 <div class="d-flex align-items-center mb-3"><h1 class="h4 m-0">Verkaufschancen – Pipeline</h1>
-  <a class="btn btn-sm btn-primary ms-auto" href="{% url 'vertrieb:chancen_neu' %}"><i class="bi bi-plus"></i> Verkaufschance</a></div>
+  {% hat_recht "vertrieb" "anlegen" as darf %}{% if darf %}<a class="btn btn-sm btn-primary ms-auto" href="{% url 'vertrieb:chancen_neu' %}"><i class="bi bi-plus"></i> Verkaufschance</a>{% endif %}</div>
 {% include "vertrieb/_nav.html" with aktiv="pipeline" %}
 <div class="row g-2 flex-nowrap overflow-auto pb-2">
 {% for p, chancen in spalten %}

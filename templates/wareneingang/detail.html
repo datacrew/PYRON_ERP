@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ we }}{% endblock %}
 {% block content %}
+{% hat_recht "einkauf" as darf_ek %}
 <div class="d-flex align-items-center flex-wrap gap-2 mb-3"><h1 class="h4 m-0">{{ we }}</h1>
   {% if we.qs_offen %}<span class="badge bg-warning text-dark">{{ we.qs_offen }} Prüfung(en) offen</span>{% endif %}
   <div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-secondary" href="{% url 'wareneingang:pdf' we.pk %}" target="_blank"><i class="bi bi-file-earmark-pdf"></i> WE-Beleg (PDF)</a>
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'wareneingang:index' %}"><i class="bi bi-arrow-left"></i> Wareneingang</a></div></div>
 <div class="card mb-3"><div class="card-body"><dl class="row mb-0 small">
   <dt class="col-sm-2">Lieferant</dt><dd class="col-sm-4">{{ we.lieferant }}</dd>
-  <dt class="col-sm-2">Bestellung</dt><dd class="col-sm-4"><a href="{% url 'einkauf:detail' we.bestellung_id %}">{{ we.bestellung.nummer }}</a> ({{ we.bestellung.get_status_display }})</dd>
+  <dt class="col-sm-2">Bestellung</dt><dd class="col-sm-4">{% if darf_ek %}<a href="{% url 'einkauf:detail' we.bestellung_id %}">{{ we.bestellung.nummer }}</a>{% else %}{{ we.bestellung.nummer }}{% endif %} ({{ we.bestellung.get_status_display }})</dd>
   <dt class="col-sm-2">Lieferschein</dt><dd class="col-sm-4">{{ we.lieferschein_nr }}</dd>
   <dt class="col-sm-2">Eingang / Lager</dt><dd class="col-sm-4">{{ we.datum|date:"d.m.Y" }} · {{ we.lagerort }}</dd>
   <dt class="col-sm-2">Gebucht</dt><dd class="col-sm-4">{{ we.gebucht_am|date:"d.m.Y H:i" }} · {{ we.gebucht_von|default:"–" }}</dd>

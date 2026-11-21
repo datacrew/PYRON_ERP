@@ -39,6 +39,10 @@ def index(request):
                ("Regionen", "versand:regionen_liste", "bi-map", "PLZ-Gebiete und Liefertage"),
                ("Fahrzeuge", "versand:fahrzeuge_liste", "bi-truck-front", "Kapazität kg / Paletten"),
                ("PLZ-Koordinaten", "versand:plzkoordinaten_liste", "bi-geo-alt", "Optional für Entfernungssortierung")]
+    from apps.core.permissions import hat_recht
+    if not hat_recht(request.user, M, "anlegen"):
+        # „Touren bilden“ nur mit Anlegerecht anbieten (Seite selbst prüft ebenfalls)
+        kacheln = [x for x in kacheln if x[1] != "versand:planen"]
     return render(request, "versand/index.html", {"k": k, "kacheln": kacheln,
                                                   "offen": S.offene_lieferungen().order_by("lieferdatum", "plz")[:15]})
 

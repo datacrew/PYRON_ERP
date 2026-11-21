@@ -7,6 +7,8 @@ Rechte:
 * edi: lesen = Nachrichten, anlegen = ORDERS importieren/Nachrichten erzeugen, aendern = Partner pflegen
 * shopapi: lesen = Shops/Bestellungen, aendern = Shop anlegen und API-Token erzeugen
 """
+from decimal import Decimal
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
@@ -224,8 +226,14 @@ def auftrag_aktion(request, pk, aktion):
             mengen = {}
             for p in a.positionen.all():
                 wert = (request.POST.get(f"menge_{p.pk}") or "").replace(",", ".").strip()
+                # leeres Feld = komplette offene Menge (siehe Hinweis im Formular)
+                mengen[p.pk] = wert or None
                 if wert:
-                    mengen[p.pk] = wert
+                    try:
+                        Decimal(wert)
+                    except ArithmeticError:
+                        messages.error(request, f"Position {p.position}: „{wert}“ ist keine gültige Menge.")
+                        return redirect("vertrieb:auftrag", a.pk)
             lf = S.lieferung_anlegen(a, mengen, request.user, request.POST.get("lieferdatum") or None)
             messages.success(request, f"Lieferschein (Entwurf) für {lf.positionen.count()} Position(en) angelegt.")
             return redirect("vertrieb:lieferschein", lf.pk)
