@@ -111,7 +111,7 @@ Phase 4 ergänzt 20 Tests für die Finanzbuchhaltung (gesamt 86). Phase 5 ergän
 Versand (Kernfluss Angebot → Auftrag → Lieferschein → Rechnung mit Lagerabgang, Fibu-Buchung und OP,
 Teillieferung, Gutschrift, ZUGFeRD-/XRechnung-XML inkl. XSD und Summen, PDF/A-3-Einbettung, Shop-API mit Token
 und Idempotenz, EDIFACT-Parser/-Generator, Tourenbildung, Kapazitätsprüfung, LVS-Export/-Rückmeldung, Rechte).
-**Aktueller Stand: 125 Tests, alle grün** (gezählt mit `python manage.py test apps`).
+**Aktueller Stand: 128 Tests, alle grün** (gezählt mit `python manage.py test apps`).
 
 ---
 
