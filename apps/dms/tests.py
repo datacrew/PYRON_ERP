@@ -376,7 +376,8 @@ class EingangsordnerTests(DmsTestBasis):
         return pfad
 
     def test_hotfolder(self):
-        self._datei("rechnung.pdf", T.pdf())
+        rechnung = T.pdf()  # einmal erzeugen: fpdf schreibt einen Zeitstempel in jedes PDF
+        self._datei("rechnung.pdf", rechnung)
         self._datei("vertrag/mietvertrag.xml", b"<vertrag>Miete</vertrag>")
         self._datei("virus.exe", b"MZ")
         self._datei("noch_im_schreiben.pdf", T.pdf(T.beispiel(rechnungsnummer="X")), alt=False)
@@ -392,7 +393,7 @@ class EingangsordnerTests(DmsTestBasis):
         verarbeitet = os.listdir(os.path.join(self.ordner, "verarbeitet"))
         self.assertEqual(len(verarbeitet), 1)
         # Erneut eingeworfene identische Datei → „doppelt“
-        self._datei("rechnung_kopie.pdf", T.pdf())
+        self._datei("rechnung_kopie.pdf", rechnung)
         call_command("dms_eingang", ordner=self.ordner, stdout=io.StringIO())
         self.assertTrue(os.path.exists(os.path.join(self.ordner, "doppelt", "rechnung_kopie.pdf")))
         self.assertEqual(Dokument.objects.count(), 2)
@@ -402,3 +403,182 @@ class EingangsordnerTests(DmsTestBasis):
 
         with self.assertRaises(CommandError):
             call_command("dms_eingang", ordner=os.path.join(self.ordner, "gibtsnicht"))
+
+
+# ------------------------------------------------------------------ Belegerkennung Eingangsrechnungen
+
+from decimal import Decimal  # noqa: E402
+
+from apps.stammdaten.models import Geschaeftspartner  # noqa: E402
+
+from . import erkennung as E  # noqa: E402
+
+FREMDES_LAYOUT = """Elektro Huber KG
+Gewerbering 4, 93047 Regensburg
+Rechnungs-Nr.: 2026/00471   Datum: 05.02.2026
+Steuernummer 244/123/45678 · USt-ID DE 129 273 398
+Menge   Artikel   Preis   Summe
+3   Stk.   LED-Panel 60x60   49,90   149,70
+1   pauschal   Montage   1.250,00   1.250,00
+Summe netto   1.399,70 €
+MwSt 19 % auf 1.399,70   265,94 €
+Rechnungsbetrag   1.665,64 €
+2 % Skonto bei Zahlung innerhalb von 10 Tagen, 30 Tage netto.
+IBAN: AT61 1904 3002 3457 3201
+"""
+
+
+class ExtraktionTests(TestCase):
+    """Regelbasierte Extraktion ohne Datenbank."""
+
+    def werte(self, erg):
+        return {k: v["wert"] for k, v in erg["felder"].items()}
+
+    def test_hilfsfunktionen(self):
+        self.assertEqual(E.zahl("1.234,56"), Decimal("1234.56"))
+        self.assertEqual(E.zahl("12.50"), Decimal("12.50"))
+        self.assertEqual(E.datum("5.2.26"), date(2026, 2, 5))
+        self.assertTrue(E.iban_gueltig("DE89 3704 0044 0532 0130 00"))
+        self.assertFalse(E.iban_gueltig("DE89370400440532013001"))
+
+    def test_textlayer_kopf_und_positionen(self):
+        erg = E.extrahieren(O.analysieren(T.pdf(), "re.pdf").text)
+        w = self.werte(erg)
+        self.assertEqual(erg["quelle"], "text")
+        self.assertEqual(w["rechnungsnummer"], "RE-2026-0815")
+        self.assertEqual((w["rechnungsdatum"], w["faellig_am"]), ("2026-03-12", "2026-04-11"))
+        self.assertEqual((w["netto"], w["steuer"], w["brutto"]), ("283.00", "46.57", "329.57"))
+        self.assertEqual((w["ust_id"], w["iban"]), ("DE811569869", "DE89370400440532013000"))
+        self.assertEqual(w["zahlungsziel_tage"], 30)
+        self.assertEqual(len(erg["positionen"]), 3)
+        p = erg["positionen"][1]
+        self.assertEqual((p["menge"], p["beschreibung"], p["einzelpreis"], p["betrag"], p["steuersatz"]),
+                         ("2.000", "Toner schwarz HP 26A", "89.0000", "178.00", "19"))
+        self.assertEqual([s["satz"] for s in erg["steuersaetze"]], ["19", "7"])
+        self.assertGreaterEqual(erg["felder"]["rechnungsnummer"]["konfidenz"], 0.9)
+
+    def test_anderes_layout(self):
+        erg = E.extrahieren(FREMDES_LAYOUT)
+        w = self.werte(erg)
+        self.assertEqual(w["rechnungsnummer"], "2026/00471")
+        self.assertEqual(w["rechnungsdatum"], "2026-02-05")
+        self.assertEqual(w["ust_id"], "DE129273398")
+        self.assertEqual(w["iban"], "AT611904300234573201")
+        self.assertEqual((w["netto"], w["steuer"], w["brutto"]), ("1399.70", "265.94", "1665.64"))
+        self.assertEqual(w["faellig_am"], "2026-03-07")
+        self.assertIn("2 % Skonto innerhalb 10 Tagen", w["zahlungsbedingung"])
+        self.assertEqual(erg["steuersaetze"][0], {"satz": "19", "basis": "1399.70", "betrag": "265.94"})
+        self.assertEqual([p["betrag"] for p in erg["positionen"]], ["149.70", "1250.00"])
+        self.assertEqual({p["steuersatz"] for p in erg["positionen"]}, {"19"})  # einziger Satz der Rechnung
+
+    def test_eigene_firma_wird_ignoriert(self):
+        text = "USt-IdNr. DE111111125\nLieferant USt-IdNr. DE811569869"
+        self.assertEqual(self.werte(E.extrahieren(text, eigene={"ust_id": "DE111111125"}))["ust_id"], "DE811569869")
+
+    def test_e_rechnungen_konfidenz_eins(self):
+        for name, daten in (("z.pdf", T.zugferd_pdf()), ("x.xml", T.ubl_xml()), ("c.xml", T.cii_xml())):
+            with self.subTest(name=name):
+                e = O.analysieren(daten, name)
+                erg = E.extrahieren(e.text, e.xml)
+                w = self.werte(erg)
+                self.assertEqual(erg["quelle"], "xml")
+                self.assertEqual((w["rechnungsnummer"], w["brutto"], w["faellig_am"]),
+                                 ("RE-2026-0815", "329.57", "2026-04-11"))
+                self.assertEqual(len(erg["positionen"]), 3)
+                self.assertEqual(erg["felder"]["brutto"]["konfidenz"], 1.0)
+
+    @skipUnless(O.tesseract_verfuegbar(), "Tesseract nicht installiert")
+    def test_ocr_scan(self):
+        erg = E.extrahieren(O.analysieren(T.png(), "scan.png").text)
+        w = self.werte(erg)
+        self.assertEqual((w["rechnungsnummer"], w["brutto"], w["netto"]), ("RE-2026-0815", "329.57", "283.00"))
+        self.assertEqual(w["iban"], "DE89370400440532013000")
+        self.assertEqual(sum(Decimal(p["betrag"]) for p in erg["positionen"]), Decimal("283.00"))
+
+
+class BelegerkennungTests(DmsTestBasis):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.lieferant = Geschaeftspartner.objects.create(name="Bürobedarf Schneider GmbH", ist_lieferant=True,
+                                                         ust_id="DE811569869")
+
+    def er(self, daten=None, name="re.pdf"):
+        d = S.dokument_anlegen(daten or T.pdf(), name, art=Dokumentart.EINGANGSRECHNUNG, benutzer=self.user)
+        V.verarbeiten(d, self.user)
+        return d
+
+    def test_zuordnung_ust_id_und_status(self):
+        d = self.er()
+        self.assertEqual(d.status, Dokument.Status.ERKANNT, d.erkennung.get("plausibilitaet"))
+        self.assertEqual(d.partner, self.lieferant)
+        self.assertEqual(d.erkennung["lieferant"]["methode"], "USt-IdNr.")
+        self.assertEqual(d.belegdatum, date(2026, 3, 12))
+        self.assertGreaterEqual(d.konfidenz, E.SCHWELLE_ERKANNT)
+        self.assertTrue(d.protokoll.filter(aktion="Belegerkennung").exists())
+        # Kontierungsvorschlag: Standard-Aufwand mit Vorsteuerschlüssel
+        p = d.erkennung["positionen"][0]
+        self.assertEqual((p["konto"], p["steuerschluessel"], p["kontoquelle"]), ("3000", "V19", "Standard-Aufwand"))
+        self.assertEqual(d.erkennung["positionen"][2]["steuerschluessel"], "V7")
+
+    def test_zuordnung_iban_und_name(self):
+        self.lieferant.ust_id = ""
+        self.lieferant.iban = "DE89 3704 0044 0532 0130 00"
+        self.lieferant.save()
+        f = E.extrahieren(O.analysieren(T.pdf(), "re.pdf").text)["felder"]
+        self.assertEqual(E.lieferant_zuordnen(f)["methode"], "IBAN")
+        self.lieferant.iban = ""
+        self.lieferant.save()
+        z = E.lieferant_zuordnen(f, "Bürobedarf Schneider GmbH\n…")
+        self.assertEqual((z["partner_id"], z["methode"]), (self.lieferant.pk, "Name"))
+        self.assertEqual(E.lieferant_zuordnen({"lieferant_name": {"wert": "Ganz Anders AG"}}), {})
+
+    def test_lernregel_hat_vorrang(self):
+        from apps.fibu import services as F
+
+        from .models import Kontierungsregel
+
+        Kontierungsregel.objects.create(partner=self.lieferant, konto=F.konto("4930"))
+        Kontierungsregel.objects.create(partner=self.lieferant, stichwort="kaffee", konto=F.konto("4900"))
+        d = self.er()
+        konten = [(p["konto"], p["kontoquelle"]) for p in d.erkennung["positionen"]]
+        self.assertEqual(konten[0], ("4930", "Lernregel Lieferant"))
+        self.assertEqual(konten[2], ("4900", "Lernregel „kaffee“"))
+
+    def test_unbekannter_lieferant_zu_pruefen(self):
+        d = self.er(T.pdf(T.beispiel(ust_id="DE999999999", lieferant="Unbekannt & Co")))
+        self.assertEqual(d.status, Dokument.Status.PRUEFEN)
+        self.assertIsNone(d.partner)
+        self.assertTrue(any("Kein Lieferant" in m["text"] for m in d.erkennung["plausibilitaet"]))
+
+    def test_summenabweichung(self):
+        erg = E.extrahieren(O.analysieren(T.pdf(), "re.pdf").text)
+        erg["lieferant"] = {"partner_id": self.lieferant.pk, "konfidenz": 0.99}
+        erg["felder"]["brutto"]["wert"] = "330.00"
+        texte = [m["text"] for m in E.plausibilitaet(erg) if m["stufe"] == "fehler"]
+        self.assertTrue(any("Summen stimmen nicht" in t for t in texte), texte)
+        erg["felder"]["brutto"]["wert"] = "329.57"
+        erg["positionen"].pop()
+        texte = [m["text"] for m in E.plausibilitaet(erg) if m["stufe"] == "fehler"]
+        self.assertTrue(any("Summe der Positionen" in t for t in texte), texte)
+
+    def test_dublette_lieferant_und_rechnungsnummer(self):
+        erstes = self.er()
+        self.assertEqual(erstes.status, Dokument.Status.ERKANNT)
+        zweites = self.er(T.zugferd_pdf(), "zugferd.pdf")
+        self.assertEqual(zweites.status, Dokument.Status.PRUEFEN)
+        meldung = [m["text"] for m in zweites.erkennung["plausibilitaet"] if "Dublette" in m["text"]]
+        self.assertTrue(meldung and erstes.nummer in meldung[0])
+
+    def test_iban_abweichung_warnt(self):
+        self.lieferant.iban = "DE02120300000000202051"
+        self.lieferant.save()
+        d = self.er()
+        self.assertTrue(any("IBAN der Rechnung" in m["text"] and m["stufe"] == "warnung"
+                            for m in d.erkennung["plausibilitaet"]))
+
+    def test_andere_dokumentart_ohne_belegerkennung(self):
+        d = S.dokument_anlegen(T.pdf(), "re.pdf", art=Dokumentart.VERTRAG, benutzer=self.user)
+        V.verarbeiten(d)
+        self.assertEqual(d.status, Dokument.Status.ERKANNT)
+        self.assertEqual(d.erkennung, {})

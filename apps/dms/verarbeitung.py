@@ -8,10 +8,11 @@ import os
 
 from django.db import transaction
 
+from . import erkennung as E
 from . import ocr as O
 from . import services as S
 from . import trennung as T
-from .models import Dokument, DokumentVersion
+from .models import Dokument, Dokumentart, DokumentVersion
 
 log = logging.getLogger(__name__)
 
@@ -92,8 +93,12 @@ def _trennen_pruefen(dokument, original, daten, benutzer):
 
 
 def nachverarbeiten(dokument, erg, benutzer=None):
-    """Folgeschritte nach der Texterkennung (Belegerkennung wird hier eingehängt)."""
-    _status(dokument, Dokument.Status.ERKANNT)
+    """Folgeschritte nach der Texterkennung: Eingangsrechnungen durchlaufen die Belegerkennung
+    (Status ERKANNT oder ZU PRÜFEN), alle anderen Dokumentarten gelten mit dem Volltext als erkannt."""
+    if dokument.art == Dokumentart.EINGANGSRECHNUNG:
+        E.erkennen(dokument, erg, benutzer)
+    else:
+        _status(dokument, Dokument.Status.ERKANNT)
 
 
 def warteschlange_abarbeiten(limit=None, benutzer=None, stapel=None):
