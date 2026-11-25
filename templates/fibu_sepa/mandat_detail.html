@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}SEPA-Mandat {{ mandat.mandatsreferenz }}{% endblock %}
+{% block content %}
+{% hat_recht "fibu_sepa" "aendern" as darf %}
+{% include "fibu_sepa/_nav.html" %}
+<div class="d-flex align-items-center mb-2 flex-wrap gap-2"><h2 class="h5 m-0">Mandat {{ mandat.mandatsreferenz }} {% include "fibu_sepa/_status.html" with s=mandat.status text=mandat.get_status_display %}{% if mandat.status == "AKTIV" and mandat.ist_verfallen %} <span class="badge text-bg-warning">Verfallen</span>{% endif %}</h2>
+  <div class="ms-auto d-flex gap-2">{% if darf %}
+    <a class="btn btn-sm btn-outline-primary" href="{% url 'fibu_sepa:mandat_bearbeiten' mandat.pk %}"><i class="bi bi-pencil"></i> Bearbeiten</a>
+    {% if mandat.status == "AKTIV" %}<form method="post" action="{% url 'fibu_sepa:mandat_status' mandat.pk 'sperren' %}" onsubmit="return confirm('Mandat sperren? Es wird bei Lastschriftvorschlägen nicht mehr berücksichtigt.')">{% csrf_token %}<button class="btn btn-sm btn-outline-warning">Sperren</button></form>{% endif %}
+    {% if mandat.status == "GESPERRT" %}<form method="post" action="{% url 'fibu_sepa:mandat_status' mandat.pk 'entsperren' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-success">Entsperren</button></form>{% endif %}
+    {% if mandat.status == "AKTIV" or mandat.status == "GESPERRT" %}<form method="post" action="{% url 'fibu_sepa:mandat_status' mandat.pk 'beenden' %}" onsubmit="return confirm('Mandat endgültig beenden?')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger">Beenden</button></form>{% endif %}
+  {% endif %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'fibu_sepa:mandate' %}">Zurück</a></div></div>
+<div class="card mb-3"><div class="card-body small"><div class="row g-2">
+  <div class="col-md-4">Kunde: <b>{{ mandat.partner }}</b></div>
+  <div class="col-md-4">Verfahren: <b>{{ mandat.get_typ_display }}</b></div>
+  <div class="col-md-4">Art: <b>{{ mandat.get_art_display }}</b></div>
+  <div class="col-md-4">Unterschrieben am: <b>{{ mandat.unterschrieben_am|date:"d.m.Y" }}</b></div>
+  <div class="col-md-4">Kontoinhaber: <b>{{ mandat.name_zahlungspflichtiger }}</b></div>
+  <div class="col-md-4">IBAN/BIC: <b>{{ mandat.iban }}</b> {{ mandat.bic }}</div>
+  <div class="col-md-4">Letzter Einzug: <b>{{ mandat.letzte_nutzung|date:"d.m.Y"|default:"–" }}</b></div>
+  <div class="col-md-4">Verfällt am: <b>{{ mandat.verfallsdatum|date:"d.m.Y" }}</b> (36 Monate ohne Einzug)</div>
+  <div class="col-md-4">Nächste Sequenz: <b>{{ naechste_sequenz }}</b>{% if mandat.letzte_lastschrift %} (letzte Lastschrift){% endif %}</div>
+  {% if mandat.widerrufen_am %}<div class="col-md-4">Widerrufen am: <b>{{ mandat.widerrufen_am|date:"d.m.Y" }}</b></div>{% endif %}
+  {% if mandat.bemerkung %}<div class="col-12 text-muted">{{ mandat.bemerkung }}</div>{% endif %}
+</div></div></div>
+<div class="card"><div class="card-header bg-white fw-semibold">Nutzungshistorie ({{ historie|length }})</div><div class="table-responsive"><table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Lauf</th><th>Einzug</th><th>Beleg</th><th>Seq.</th><th class="text-end">Betrag</th><th>Laufstatus</th><th>Posten</th></tr></thead>
+  <tbody>{% for p in historie %}<tr class="{% if not p.ausgewaehlt %}text-muted{% endif %}"><td><a href="{% url 'fibu_sepa:lauf' p.lauf.pk %}">{{ p.lauf.nummer }}</a></td><td>{{ p.lauf.ausfuehrungsdatum|date:"d.m.Y" }}</td><td>{{ p.op.belegnr }}</td><td>{{ p.sequenz }}</td><td class="text-end">{{ p.betrag|euro }}</td><td>{{ p.lauf.get_status_display }}</td><td>{{ p.get_status_display }}</td></tr>
+  {% empty %}<tr><td colspan="7" class="text-muted text-center">Noch nicht genutzt.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

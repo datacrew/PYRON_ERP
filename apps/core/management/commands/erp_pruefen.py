@@ -1,7 +1,7 @@
 """Integritätsprüfung nach Wiederherstellung oder Update.
 
-Prüft: GoBD-/Lagerjournal-/DMS-Trigger vorhanden und aktiv, Hash-Kette der Belege (inkl. Archiv-PDFs)
-und der Fibu-Buchungen sowie die SHA-256-Siegel aller DMS-Dateiversionen. Exit-Code 1 bei Fehlern.
+Prüft: GoBD-/Lagerjournal-/SEPA-Sperr-/DMS-Trigger vorhanden und aktiv, Hash-Kette der Belege (inkl.
+Archiv-PDFs) und der Fibu-Buchungen sowie die SHA-256-Siegel aller DMS-Dateiversionen. Exit-Code 1 bei Fehlern.
 
     python manage.py erp_pruefen [--ohne-pdf]
 """
@@ -14,6 +14,8 @@ PFLICHT_TRIGGER = {
     "fibu_buchung_gobd": "fibu_buchung",
     "fibu_zeile_gobd": "fibu_buchungszeile",
     "lager_bewegung_unveraenderlich": "lager_lagerbewegung",
+    "fibu_sepa_lauf_gesperrt": "fibu_sepa_zahlungslauf",
+    "fibu_sepa_posten_gesperrt": "fibu_sepa_zahlungslaufposten",
     "dms_dokument_gobd": "dms_dokument",
     "dms_version_gobd": "dms_dokumentversion",
     "dms_protokoll_gobd": "dms_dokumentprotokoll",

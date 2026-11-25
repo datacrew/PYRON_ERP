@@ -1,0 +1,1 @@
+<span class="badge text-bg-{% if s == 'ENTWURF' %}secondary{% elif s == 'FREIGEGEBEN' %}info{% elif s == 'EXPORTIERT' %}primary{% elif s == 'AUSGEFUEHRT' or s == 'AKTIV' %}success{% elif s == 'STORNIERT' or s == 'GESPERRT' or s == 'WIDERRUFEN' %}danger{% else %}warning{% endif %}">{{ text }}</span>

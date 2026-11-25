@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}SEPA-Mandate{% endblock %}
+{% block content %}
+{% hat_recht "fibu_sepa" "aendern" as darf %}
+{% include "fibu_sepa/_nav.html" %}
+<div class="d-flex align-items-center mb-3 flex-wrap gap-2">
+  <div class="btn-group btn-group-sm">{% for w, t in filter_auswahl.items %}<a class="btn btn-outline-secondary {% if w == filter %}active{% endif %}" href="?filter={{ w }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ t }}</a>{% endfor %}</div>
+  <form method="get" class="d-flex gap-2"><input type="hidden" name="filter" value="{{ filter }}"><input class="form-control form-control-sm" name="q" value="{{ q }}" placeholder="Kunde oder Mandatsreferenz"><button class="btn btn-sm btn-outline-secondary">Suchen</button></form>
+  {% if darf %}<a class="btn btn-sm btn-primary ms-auto" href="{% url 'fibu_sepa:mandat_neu' %}"><i class="bi bi-plus-lg"></i> Neues Mandat</a>{% endif %}
+</div>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+  <thead class="table-light"><tr><th>Mandatsreferenz</th><th>Kunde</th><th>Verfahren</th><th>Art</th><th>Unterschrieben</th><th>Letzter Einzug</th><th>Verfällt</th><th class="text-end">Nutzungen</th><th>Status</th></tr></thead>
+  <tbody>{% for m in page_obj %}<tr><td><a href="{% url 'fibu_sepa:mandat' m.pk %}">{{ m.mandatsreferenz }}</a></td><td>{{ m.partner.name }}</td><td>{{ m.typ }}</td><td>{% if m.art == "OOFF" %}einmalig{% else %}wiederkehrend{% endif %}</td><td>{{ m.unterschrieben_am|date:"d.m.Y" }}</td><td>{{ m.letzte_nutzung|date:"d.m.Y"|default:"–" }}</td><td>{{ m.verfallsdatum|date:"d.m.Y" }}</td><td class="text-end">{{ m.nutzungen }}</td>
+    <td>{% if m.status == "AKTIV" and m.ist_verfallen %}<span class="badge text-bg-warning">Verfallen</span>{% else %}{% include "fibu_sepa/_status.html" with s=m.status text=m.get_status_display %}{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="9" class="text-muted text-center">Keine Mandate in dieser Auswahl.</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "generic/_seiten.html" %}
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Rücklastschriften{% endblock %}
+{% block content %}
+{% include "fibu_sepa/_nav.html" %}
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0 small">
+<thead><tr><th>Datum</th><th>Beleg</th><th>Lauf</th><th>Kunde</th><th>OP</th><th>End-to-End-ID</th><th>Grund</th><th class="text-end">Betrag</th><th class="text-end">Gebühr</th></tr></thead>
+<tbody>{% for r in page_obj %}<tr><td>{{ r.bankumsatz.buchungsdatum|date:"d.m.Y" }}</td><td>{{ r.buchung.belegnr }}</td>
+<td><a href="{% url 'fibu_sepa:lauf' r.posten.lauf_id %}">{{ r.posten.lauf.nummer }}</a></td><td>{{ r.posten.partner.name }}</td>
+<td>{{ r.posten.op.belegnr }} <small class="text-muted">offen {{ r.posten.op.offen|euro }}</small></td><td>{{ r.posten.end_to_end_id }}</td>
+<td>{{ r.grund }} <small class="text-muted">{{ r.grund_text }}</small></td><td class="text-end">{{ r.betrag|euro }}</td><td class="text-end">{{ r.gebuehr|euro }}</td></tr>
+{% empty %}<tr><td colspan="9" class="text-muted text-center py-3">Keine Rücklastschriften erfasst.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

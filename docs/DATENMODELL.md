@@ -628,6 +628,20 @@ Berichte selbst sind keine Datenbankobjekte: Sie werden im Code über die Berich
 (`apps/reporting/registry.py`, je Modul `berichte.py`) registriert und lesen nur über Querysets/Services der
 Fachmodule. Reporting schreibt nicht in fremde Tabellen.
 
+## SEPA-Zahlungsverkehr (`apps/fibu_sepa`)
+
+| Modell | Zweck / wichtige Felder |
+|---|---|
+| SepaMandat | Lastschriftmandat eines Kunden: partner, mandatsreferenz (Nummernkreis SEPA_MANDAT), typ (CORE/B2B), art (RCUR/OOFF), unterschrieben_am, kontoinhaber, iban, bic, status (aktiv, widerrufen, gesperrt, verfallen, beendet), letzte_lastschrift (FNAL), letzte_nutzung; Verfall 36 Monate nach letzter Nutzung |
+| Zahlungslauf | Überweisungs- oder Lastschriftlauf: nummer (SEPA_UEBERWEISUNG/SEPA_LASTSCHRIFT), art, bankkonto, ausfuehrungsdatum, status (Entwurf → freigegeben → exportiert → ausgeführt; verworfen/storniert), msg_id, summe, anzahl, xml_inhalt, xml_dateiname, xsd_geprueft, buchung/storno_buchung, Freigabe-/Export-/Storno-Benutzer und -Zeitpunkt; nach Export per Trigger eingefroren |
+| ZahlungslaufPosten | Position je offenem Posten: lauf, op, partner, mandat, ausgewaehlt, name, iban, bic, offen, skonto, betrag, verwendungszweck, end_to_end_id, pmtinf_id, sequenz, mandatsreferenz, mandat_datum, lastschrift_typ, status (offen, abgeglichen, zurückgegeben), bankumsatz, abgleich_buchung |
+| Ruecklastschrift | Verarbeitete Rücklastschrift: posten, bankumsatz (1:1), grund (ISO-Code), betrag, gebuehr, gebuehr_weiterbelastet, gebuehr_op, buchung (Belegnummer aus Nummernkreis SEPA_RUECKLAST, „RL-“), erfasst_von/-am; Gründe wie AC04/MD01 sperren das Mandat, MD06 wird vermerkt |
+
+Ergänzte Felder: `Mandant.glaeubiger_id`, `Geschaeftspartner.bic`, `Bankumsatz.sammlerreferenz` und
+`Bankumsatz.rueckgabegrund`, Ausgleichsart `RUECKLAST`. Trigger `fibu_sepa_lauf_gesperrt` und
+`fibu_sepa_posten_gesperrt` (Migration `0002_sperre_trigger`).
+
+
 ## Dokumentenmanagement (`apps/dms`)
 
 ```mermaid

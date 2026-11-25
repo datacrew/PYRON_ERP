@@ -635,6 +635,22 @@ OpenAPI-Schema: `/api/v1/schema/`, Swagger-UI: `/api/v1/docs/`, ReDoc: `/api/v1/
 
 ---
 
+## SEPA-Zahlungsverkehr (`apps/fibu_sepa`, Menü **SEPA**)
+
+- **Mandate:** Lastschriftmandate je Kunde (CORE/B2B, einmalig/wiederkehrend), Mandatsreferenz automatisch,
+  Sequenz FRST/RCUR/FNAL/OOFF wird selbst bestimmt, Verfall nach 36 Monaten ohne Einzug.
+- **Zahlungsläufe:** Überweisungsvorschlag aus fälligen Eingangsrechnungen (mit Skonto) und Lastschriftvorschlag aus
+  offenen Ausgangsrechnungen von Kunden mit gültigem Mandat → Freigabe (Recht „freigeben“) → Export als
+  pain.001.001.09 bzw. pain.008.001.08 (XSD-geprüft) zum Hochladen ins Online-Banking. Der Export bucht gegen
+  Geldtransit (1360 SKR03 / 1460 SKR04); danach ist der Lauf gesperrt (auch per DB-Trigger), Korrektur nur per Storno.
+- **Kontoauszug:** Beim CAMT-Import wird die Sammelbuchung über die Referenz erkannt und gegen Geldtransit
+  abgeglichen. Rücklastschriften öffnen den Debitoren-OP wieder (Mahnwesen), buchen die Gebühr und sperren je
+  nach Rückgabegrund das Mandat.
+- **Rechnungen:** Bei gültigem Mandat steht die Vorabankündigung (Einzugsdatum, maskierte IBAN, Mandatsreferenz,
+  Gläubiger-ID) auf dem PDF; ZUGFeRD/XRechnung enthalten Zahlungsart 59.
+- **Voraussetzungen:** Gläubiger-ID in den Firmendaten (Demo: DE98ZZZ09999999999), IBAN/BIC beim Partner.
+- **Grenzen:** keine EBICS/FinTS-Direktübertragung; vor dem Echtbetrieb einen Testlauf mit der Hausbank machen.
+
 ## Phase 6: Reporting
 
 Menü **Reporting** (`apps/reporting`, Recht `reporting`). Ein Bericht ist nur sichtbar, wenn der Benutzer

@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from apps.core.bankdaten import bic_validator, iban_validator
 from apps.stammdaten.models import Artikel, Geschaeftspartner, Konto
 
 NULL = Decimal("0.00")
@@ -357,6 +358,7 @@ class Ausgleich(models.Model):
         SKONTO = "SKONTO", "Skonto"
         VERRECHNUNG = "VERRECHNUNG", "Verrechnung"
         STORNO = "STORNO", "Storno"
+        RUECKLAST = "RUECKLAST", "Rücklastschrift / Rückläufer"
 
     op = models.ForeignKey(OffenerPosten, on_delete=models.PROTECT, related_name="ausgleiche")
     buchung = models.ForeignKey(Buchung, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
@@ -375,8 +377,8 @@ class Ausgleich(models.Model):
 
 class Bankkonto(models.Model):
     bezeichnung = models.CharField(max_length=100)
-    iban = models.CharField("IBAN", max_length=34, unique=True)
-    bic = models.CharField("BIC", max_length=11, blank=True)
+    iban = models.CharField("IBAN", max_length=34, unique=True, validators=[iban_validator])
+    bic = models.CharField("BIC", max_length=11, blank=True, validators=[bic_validator])
     konto = models.ForeignKey(Konto, on_delete=models.PROTECT, verbose_name="Sachkonto")
     aktiv = models.BooleanField(default=True)
 
@@ -430,6 +432,9 @@ class Bankumsatz(models.Model):
     verwendungszweck = models.TextField(blank=True)
     referenz = models.CharField("Referenz (EndToEnd/Bank)", max_length=100, blank=True)
     gvc = models.CharField("Geschäftsvorfall-Code", max_length=40, blank=True)
+    sammlerreferenz = models.CharField("Sammler-Referenz (PmtInfId/MsgId)", max_length=100, blank=True)
+    rueckgabegrund = models.CharField("Rückgabegrund (ISO-Code)", max_length=10, blank=True,
+                                      help_text="z. B. AC04, MD06, AM04 bei Rücklastschriften")
     dubletten_schluessel = models.CharField(max_length=64, unique=True)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.OFFEN)
     buchung = models.ForeignKey(Buchung, null=True, blank=True, on_delete=models.PROTECT, related_name="+")

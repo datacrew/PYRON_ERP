@@ -86,6 +86,7 @@ ERP_APPS = [
     "apps.fibu",
     "apps.fibu_bank",
     "apps.fibu_mahnwesen",
+    "apps.fibu_sepa",
     "apps.fibu_abschluss",
     "apps.reporting",
     "apps.dms",
