@@ -12,6 +12,7 @@ urlpatterns = [
     path("dokumente/<int:pk>/datei/", views.datei, name="datei"),
     path("dokumente/<int:pk>/datei/<int:version_pk>/", views.datei, name="datei_version"),
     path("dokumente/<int:pk>/version/", views.version_neu, name="version_neu"),
+    path("dokumente/<int:pk>/verarbeiten/", views.verarbeiten, name="verarbeiten"),
     path("dokumente/<int:pk>/archivieren/", views.archivieren, name="archivieren"),
     path("dokumente/<int:pk>/loeschen/", views.loeschen, name="loeschen"),
     path("stapel/", views.stapel_liste, name="stapel_liste"),

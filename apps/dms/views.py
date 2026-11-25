@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 from apps.core.permissions import hat_recht, recht_erforderlich
 
 from . import services as S
+from . import verarbeitung as V
 from .forms import MetadatenForm, TagForm, UploadForm, VersionForm
 from .models import Dokument, DokumentVersion, DmsGesperrt, Dokumentart, Stapel, Tag
 
@@ -182,6 +183,23 @@ def version_neu(request, pk):
             messages.success(request, f"Version {v.version} angelegt – das Dokument wird neu verarbeitet.")
     else:
         messages.error(request, "Bitte Datei und Kommentar angeben.")
+    return redirect("dms:detail", pk)
+
+
+@require_POST
+@recht_erforderlich(M, "anlegen")
+def verarbeiten(request, pk):
+    """Texterkennung (erneut) ausführen – z. B. nach einem Fehler oder einer neuen Version."""
+    d = get_object_or_404(Dokument, pk=pk)
+    try:
+        V.verarbeiten(d, request.user)
+    except FEHLER as exc:
+        _fehler(request, exc)
+    else:
+        if d.status == Dokument.Status.FEHLER:
+            messages.error(request, f"Verarbeitung fehlgeschlagen: {d.fehlermeldung}")
+        else:
+            messages.success(request, f"{d.nummer} verarbeitet ({d.get_status_display()}, Quelle {d.textquelle}).")
     return redirect("dms:detail", pk)
 
 

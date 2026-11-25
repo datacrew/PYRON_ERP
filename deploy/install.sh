@@ -116,7 +116,9 @@ ok "Quelle: $QUELLE  →  Ziel: $BASIS"
 # ------------------------------------------------------------------ Pakete
 schritt "Systempakete installieren"
 PAKETE=(ca-certificates curl gnupg lsb-release rsync python3 python3-venv python3-dev build-essential libpq-dev
-        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu fonts-liberation tzdata)
+        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu fonts-liberation tzdata
+        tesseract-ocr tesseract-ocr-deu ghostscript poppler-utils unpaper pngquant libzbar0)
+# (DMS: Tesseract = OCR deutsch, Ghostscript = PDF/A, zbar = Barcode-Trennblätter)
 # ab Ubuntu 24.04 vorhanden (WeasyPrint nutzt es zur Schrift-Teilmengenbildung, optional)
 if apt-cache show libharfbuzz-subset0 >/dev/null 2>&1; then PAKETE+=(libharfbuzz-subset0); fi
 tu_sh "DEBIAN_FRONTEND=noninteractive apt-get update -q"

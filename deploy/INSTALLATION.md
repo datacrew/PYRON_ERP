@@ -418,6 +418,46 @@ aufsetzen, Sicherung mit `restore.sh` einspielen, prüfen.
 | `erp_pruefen`: „Archiv-PDF fehlt/verändert“ | Belegarchiv nicht aus derselben Sicherung wie die Datenbank wiederhergestellt – Media aus passender Sicherung einspielen. |
 | GoBD-Fehlermeldung „Festgeschriebener Beleg … unveränderbar“ | Gewolltes Verhalten. Korrekturen nur per Storno/Gutschrift bzw. Gegenbuchung. |
 | Timeout bei großen Berichten/PDF-Läufen | `GUNICORN_TIMEOUT` erhöhen (Standard 120 s). |
+| DMS: Dokument bleibt im Status „Fehler: Tesseract ist nicht installiert" | Pakete aus Abschnitt 11.1 installieren, danach im Stapel „Erneut verarbeiten". |
+| DMS: OCRmyPDF meldet Ghostscript-Regression | Ghostscript 10.0.0–10.02.0 ist bei `--skip-text` fehlerhaft; das ERP nutzt deshalb `--force-ocr` (nur für Seiten ohne Textlayer). Bei anderen Fehlern Ghostscript aktualisieren. |
 
 Hilfe zur Diagnose: `python manage.py check --deploy`, `python manage.py erp_pruefen`,
 `deploy/scripts/gesundheit.sh`.
+
+---
+
+## 11. Dokumentenmanagement (DMS) und OCR
+
+### 11.1 Systempakete
+
+Die Texterkennung nutzt Tesseract (Sprachpaket Deutsch) über OCRmyPDF; Ghostscript erzeugt das durchsuchbare
+PDF/A, zbar liest Barcode-Trennblätter. Im Docker-Image und in `install.sh` sind die Pakete bereits enthalten.
+Manuell (Ubuntu/Debian):
+
+```bash
+sudo apt-get install -y tesseract-ocr tesseract-ocr-deu ghostscript poppler-utils unpaper pngquant libzbar0
+tesseract --list-langs   # muss „deu" enthalten
+```
+
+Die Python-Pakete (`ocrmypdf`, `pytesseract`, `pymupdf`, `pikepdf`, `pypdf`, `pyzbar`) stehen in
+`requirements.txt`. Fehlt OCRmyPDF/Ghostscript, liest das System Scans hilfsweise nur mit pytesseract
+(Volltext ja, aber kein PDF/A); fehlt Tesseract ganz, landen Scans im Status „Fehler". Digitale PDFs,
+ZUGFeRD/Factur-X und XRechnung (XML) brauchen **kein** OCR.
+
+### 11.2 Einstellungen (`.env` bzw. `config/settings.py`)
+
+| Variable | Bedeutung | Standard |
+|---|---|---|
+| `ERP_DMS_OCR_SPRACHE` | Tesseract-Sprache(n), z. B. `deu+eng` | `deu` |
+| `ERP_DMS_OCR_TIMEOUT` | Zeitlimit je Seite in Sekunden | `180` |
+
+Dokumente werden unter `MEDIA_ROOT/dms/JJJJ/MM/` abgelegt und sind Teil der normalen Datensicherung
+(Abschnitt 6). `python manage.py erp_pruefen` prüft zusätzlich die SHA-256-Siegel aller DMS-Dateien.
+
+### 11.3 Aufbewahrung
+
+Archivierte Dokumente sind per Datenbank-Trigger unveränderbar und nicht löschbar. Die Frist läuft bis zum
+31.12. des Jahres „Dokumentdatum + N Jahre": Eingangs-/Ausgangsrechnungen 8 Jahre (Buchungsbelege, § 147 AO
+in der Fassung ab 2025), Verträge 10 Jahre (vorsichtig gewählt), Lieferscheine/Sonstiges 6 Jahre.
+Abweichende Fristen über `ERP_DMS_AUFBEWAHRUNG` in den Settings (z. B. `{"VERTRAG": 6}`) – bitte mit dem
+Steuerberater abstimmen. Nach Fristende wird **nichts** automatisch gelöscht.

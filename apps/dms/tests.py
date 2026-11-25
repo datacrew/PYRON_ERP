@@ -1,4 +1,5 @@
 """Tests DMS – Fundament: Ablage, SHA-256, Versionierung, GoBD-Schutz (Code und Trigger), Suche, Rechte."""
+import io
 import shutil
 import tempfile
 from datetime import date
@@ -157,3 +158,94 @@ class OberflaecheTests(DmsTestBasis):
         self.client.force_login(leser)
         self.assertEqual(self.client.get(reverse("dms:liste")).status_code, 200)
         self.assertEqual(self.client.get(reverse("dms:hochladen")).status_code, 403)
+
+
+# ------------------------------------------------------------------ OCR-Pipeline
+
+from unittest import skipUnless  # noqa: E402
+
+from . import ocr as O  # noqa: E402
+from . import testdaten as T  # noqa: E402
+from . import verarbeitung as V  # noqa: E402
+
+
+class TexterkennungTests(TestCase):
+    """Reine Analyse ohne Datenbank: E-Rechnung, Textlayer, OCR."""
+
+    def test_xrechnung_und_zugferd_ohne_ocr(self):
+        e = O.analysieren(T.cii_xml(), "rechnung.xml")
+        self.assertEqual((e.quelle, O.xml_art(e.xml)), ("xrechnung", "CII"))
+        self.assertIn("RE-2026-0815", e.text)
+        self.assertEqual(O.xml_art(O.analysieren(T.ubl_xml(), "u.xml").xml), "UBL")
+        z = O.analysieren(T.zugferd_pdf(), "zugferd.pdf")
+        self.assertEqual(z.quelle, "zugferd")
+        self.assertEqual(O.xml_art(z.xml), "CII")
+        self.assertIsNone(z.pdfa)
+        self.assertIn("Gesamtbetrag", z.text)
+
+    def test_textlayer_zeilengetreu(self):
+        e = O.analysieren(T.pdf(), "digital.pdf")
+        self.assertEqual((e.quelle, e.seiten), ("textlayer", 1))
+        self.assertIsNone(e.pdfa)
+        self.assertRegex(e.text, r"2\s+2,00\s+Stk\s+Toner schwarz HP 26A\s+89,00\s+19 %\s+178,00")
+
+    def test_unbekanntes_format(self):
+        with self.assertRaises(O.OcrFehler):
+            O.analysieren(b"abc", "x.docx")
+        self.assertTrue(O.analysieren(b"<foo/>", "x.xml").hinweise)
+
+    @skipUnless(O.tesseract_verfuegbar(), "Tesseract nicht installiert")
+    def test_ocr_scan_pdf_mit_pdfa(self):
+        e = O.analysieren(T.scan_pdf(), "scan.pdf")
+        self.assertIn(e.quelle, ("ocr", "ocr-einfach"))
+        self.assertIn("RE-2026-0815", e.text)
+        self.assertIn("329,57", e.text)
+        if O.ocrmypdf_verfuegbar():
+            self.assertEqual(e.quelle, "ocr")
+            self.assertTrue(e.pdfa.startswith(b"%PDF"))
+            self.assertIn(b"pdfaid:part", e.pdfa)  # PDF/A-Kennung in den XMP-Metadaten
+            self.assertIn("Gesamtbetrag", O.pdf_text(e.pdfa)[0])  # durchsuchbar
+
+    @skipUnless(O.tesseract_verfuegbar(), "Tesseract nicht installiert")
+    def test_ocr_bilder(self):
+        for name, daten in (("scan.png", T.png(dpi=200)), ("scan.tif", T.tiff(dpi=200))):
+            with self.subTest(name=name):
+                e = O.analysieren(daten, name)
+                self.assertIn("Kaffeebohnen", e.text)
+                self.assertEqual(e.seiten, 1)
+
+
+class VerarbeitungTests(DmsTestBasis):
+    def test_pipeline_textlayer(self):
+        d = S.dokument_anlegen(T.pdf(), "re.pdf", art=Dokumentart.SONSTIGES, benutzer=self.user)
+        V.verarbeiten(d, self.user)
+        self.assertEqual(d.status, Dokument.Status.ERKANNT)
+        self.assertEqual(d.textquelle, "textlayer")
+        self.assertEqual(list(S.suchen(Dokument.objects.all(), "Kopierpapier")), [d])
+        self.assertTrue(d.protokoll.filter(aktion="Texterkennung").exists())
+
+    @skipUnless(O.tesseract_verfuegbar(), "Tesseract nicht installiert")
+    def test_pipeline_scan_erzeugt_pdfa_version(self):
+        d = S.dokument_anlegen(T.scan_pdf(dpi=200), "scan.pdf", benutzer=self.user)
+        call_command("dms_verarbeiten", verbosity=0, stdout=io.StringIO())
+        d.refresh_from_db()
+        self.assertEqual(d.status, Dokument.Status.ERKANNT, d.fehlermeldung)
+        if O.ocrmypdf_verfuegbar():
+            pdfa = d.anzeigeversion
+            self.assertEqual(pdfa.art, DokumentVersion.Art.PDFA)
+            self.assertEqual(pdfa.quelle, d.original)
+            self.assertTrue(pdfa.hash_pruefen())
+        self.assertIn("Toner", d.ocr_text)
+
+    def test_fehler_landet_im_status(self):
+        d = S.dokument_anlegen(b"%PDF-kaputt", "kaputt.pdf", benutzer=self.user)
+        V.verarbeiten(d)
+        self.assertEqual(d.status, Dokument.Status.FEHLER)
+        self.assertTrue(d.fehlermeldung)
+
+    def test_archiviertes_dokument_nicht_neu_verarbeiten(self):
+        d = S.dokument_anlegen(T.pdf(), "re.pdf", benutzer=self.user)
+        V.verarbeiten(d)
+        S.archivieren(d)
+        with self.assertRaises(S.DmsFehler):
+            V.verarbeiten(d)
