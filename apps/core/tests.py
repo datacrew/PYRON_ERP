@@ -89,6 +89,7 @@ class RechteTests(TestCase):
                      "fibu:op_liste", "fibu:er_liste", "fibu:er_neu", "fibu:bank", "fibu:mahnwesen",
                      "fibu:perioden", "fibu:auswertungen", "fibu:bankkonten_liste", "fibu:steuerschluessel_liste",
                      "fibu:kontierungsregeln_liste", "fibu:mahnstufen_liste", "fibu:basiszinssaetze_liste",
+                     "fibu_sepa:laeufe", "fibu_sepa:mandate", "fibu_sepa:mandat_neu",
                      "vertrieb:index", "vertrieb:pipeline", "vertrieb:angebote", "vertrieb:angebot_neu",
                      "vertrieb:auftraege", "vertrieb:auftrag_neu", "vertrieb:lieferscheine", "vertrieb:rechnungen",
                      "vertrieb:edi", "vertrieb:shops", "vertrieb:leads_liste", "vertrieb:edipartner_liste",

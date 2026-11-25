@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Zahlungslauf {{ lauf.nummer }} stornieren{% endblock %}
+{% block content %}
+{% include "fibu_sepa/_nav.html" %}
+<div class="card border-danger" style="max-width:800px"><div class="card-header bg-white fw-semibold text-danger">Zahlungslauf {{ lauf.nummer }} stornieren</div><div class="card-body">
+  <p class="small">Die Geldtransit-Buchung wird per Gegenbuchung storniert, die OP-Ausgleiche werden zurückgenommen. Der Lauf und die XML-Datei bleiben archiviert (GoBD). Nur sinnvoll, wenn die Datei <b>nicht</b> bei der Bank eingereicht wurde oder die Bank sie abgelehnt hat.</p>
+  <p class="small">{{ lauf.get_art_display }} · {{ lauf.anzahl }} Zahlung(en) · {{ lauf.summe|euro }} · Ausführung {{ lauf.ausfuehrungsdatum|date:"d.m.Y" }}</p>
+  <form method="post">{% csrf_token %}{% include "generic/_formfelder.html" %}
+    <button class="btn btn-sm btn-danger mt-3"><i class="bi bi-arrow-counterclockwise"></i> Endgültig stornieren</button>
+    <a class="btn btn-sm btn-outline-secondary mt-3" href="{% url 'fibu_sepa:lauf' lauf.pk %}">Abbrechen</a></form>
+</div></div>
+{% endblock %}

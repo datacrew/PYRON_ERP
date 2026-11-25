@@ -14,4 +14,12 @@ class FibuSepaConfig(AppConfig):
     label = "fibu_sepa"
     verbose_name = "SEPA-Zahlungsverkehr"
     default_auto_field = "django.db.models.BigAutoField"
-    # Modulregistrierung (Menü/Rechte "fibu_sepa") folgt mit den UI-Seiten – siehe docs/ROADMAP.md.
+    erp_modul = {
+        "code": "fibu_sepa",
+        "name": "SEPA-Zahlungsverkehr",
+        "beschreibung": "SEPA-Mandate, Überweisungs- und Lastschriftläufe, XML-Export (pain.001/pain.008)",
+        "icon": "bi-bank2",
+        "reihenfolge": 84,
+        "url_name": "fibu_sepa:laeufe",
+        "geplant": [],
+    }

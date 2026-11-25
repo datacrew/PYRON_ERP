@@ -31,7 +31,7 @@ urlpatterns += crud_urls(
     "partner", Geschaeftspartner, M,
     felder=["nummer", "name", "name2", "ist_kunde", "ist_lieferant", "ust_id", "steuernummer", "leitweg_id",
             "email", "email_rechnung", "telefon", "zahlungsbedingung", "debitorenkonto", "kreditorenkonto",
-            "gln", "aktiv"],
+            "gln", "iban", "bic", "aktiv"],
     spalten=[("Nr.", "nummer"), ("Name", "name"), ("Rolle", "rollen_text"), ("USt-IdNr.", "ust_id"),
              ("Ort", "rechnungsadresse.ort"), ("Aktiv", "aktiv")],
     suchfelder=["nummer", "name", "name2", "ust_id"],

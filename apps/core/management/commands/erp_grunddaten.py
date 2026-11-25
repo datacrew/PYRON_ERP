@@ -73,7 +73,7 @@ ROLLEN = {
                "belege": [L], "vertrieb": [L], "reporting": [L]}),
     "Buchhaltung": ("Finanzbuchhaltung, Belegprüfung und Festschreibung",
                     {"stammdaten": [L, AE], "fibu": ALLE, "fibu_bank": ALLE, "fibu_mahnwesen": ALLE,
-                     "fibu_abschluss": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
+                     "fibu_sepa": ALLE, "fibu_abschluss": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
                      "einkauf": [L], "wareneingang": [L], "produktion": [L], "akkord": [L]}),
     "Nur Lesen": ("Lesezugriff auf alle Fachmodule (ohne Lohndaten)", {"*-verwaltung": [L]}),
 }

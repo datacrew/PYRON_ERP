@@ -171,6 +171,9 @@ class Geschaeftspartner(models.Model):
             raise ValidationError("Ein Geschäftspartner muss Kunde und/oder Lieferant sein.")
         if self.ust_id:
             self.ust_id = self.ust_id.replace(" ", "").upper()
+        # Bankverbindung einheitlich ohne Leerzeichen speichern (Prüfung über die Feld-Validatoren)
+        self.iban = (self.iban or "").replace(" ", "").upper()
+        self.bic = (self.bic or "").replace(" ", "").upper()
 
     def save(self, *args, **kwargs):
         if not self.nummer:

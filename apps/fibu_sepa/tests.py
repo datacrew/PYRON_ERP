@@ -330,3 +330,194 @@ class SepaWorkflowTests(TestCase):
         m2 = self._mandat(self._partner("Kunde MD01", kunde=True))
         self.assertEqual(S.rueckgabe_mandat_behandeln(m2, "md01"), "gesperrt")
         self.assertIsNone(S.gueltiges_mandat(m2.partner, self.heute))
+
+
+class SepaOberflaecheTests(TestCase):
+    """Seiten, Rechte und Client-Ablauf Vorschlag → Freigabe → Export → Download → Storno."""
+
+    _op, _partner, _mandat = SepaWorkflowTests._op, SepaWorkflowTests._partner, SepaWorkflowTests._mandat
+
+    @classmethod
+    def setUpTestData(cls):
+        from apps.core.models import Rolle
+
+        SepaWorkflowTests.setUpTestData.__func__(cls)
+        User = get_user_model()
+        cls.admin = User.objects.create_superuser("sepa_admin", password="x")
+        cls.buha = User.objects.create_user("sepa_buha", password="x")
+        Rolle.objects.get(name="Buchhaltung").benutzer.add(cls.buha)
+        cls.einkauf = User.objects.create_user("sepa_einkauf", password="x")
+        Rolle.objects.get(name="Einkauf").benutzer.add(cls.einkauf)
+        cls.kunde = Geschaeftspartner.objects.create(name="Kunde Lastschrift", iban=IBAN, ist_kunde=True)
+        cls.mandat_obj = SepaMandat.objects.create(partner=cls.kunde, unterschrieben_am=cls.heute - timedelta(days=30),
+                                                   iban=IBAN)
+
+    def setUp(self):
+        self.nr = 0
+
+    def _seiten(self):
+        from django.urls import reverse
+
+        lauf = Zahlungslauf.objects.create(nummer="ZL-TEST", art=Zahlungslauf.Art.UEBERWEISUNG, bankkonto=self.bank,
+                                           ausfuehrungsdatum=self.heute)
+        return [reverse("fibu_sepa:laeufe"), reverse("fibu_sepa:mandate"), reverse("fibu_sepa:mandate") + "?filter=alle",
+                reverse("fibu_sepa:mandate") + "?filter=gesperrt", reverse("fibu_sepa:mandate") + "?filter=abgelaufen",
+                reverse("fibu_sepa:mandat", args=[self.mandat_obj.pk]), reverse("fibu_sepa:lauf", args=[lauf.pk])]
+
+    def test_rechte_und_seiten(self):
+        from django.urls import reverse
+
+        from apps.core.permissions import hat_recht
+
+        self.assertTrue(hat_recht(self.buha, "fibu_sepa", "freigeben"))
+        self.assertFalse(hat_recht(self.einkauf, "fibu_sepa", "lesen"))
+        seiten = self._seiten()
+        schreibseiten = [reverse("fibu_sepa:mandat_neu"), reverse("fibu_sepa:mandat_bearbeiten", args=[self.mandat_obj.pk]),
+                         reverse("fibu_sepa:vorschlag", args=["ueberweisung"]),
+                         reverse("fibu_sepa:vorschlag", args=["lastschrift"])]
+        for user in (self.admin, self.buha):
+            self.client.force_login(user)
+            for url in seiten + schreibseiten:
+                self.assertEqual(self.client.get(url).status_code, 200, f"{user}: {url}")
+        # Menüeintrag sichtbar
+        self.assertContains(self.client.get(reverse("core:dashboard")), reverse("fibu_sepa:laeufe"))
+        self.client.force_login(self.einkauf)
+        for url in seiten + schreibseiten:
+            self.assertEqual(self.client.get(url).status_code, 403, url)
+        lauf = Zahlungslauf.objects.get(nummer="ZL-TEST")
+        self.assertEqual(self.client.post(reverse("fibu_sepa:lauf_freigeben", args=[lauf.pk])).status_code, 403)
+        self.assertNotContains(self.client.get(reverse("core:dashboard")), reverse("fibu_sepa:laeufe"))
+        self.client.logout()
+        self.assertEqual(self.client.get(seiten[0]).status_code, 302)
+
+    def test_nur_lesen_darf_nicht_freigeben(self):
+        from django.urls import reverse
+
+        from apps.core.models import Rolle
+
+        leser = get_user_model().objects.create_user("sepa_leser", password="x")
+        Rolle.objects.get(name="Nur Lesen").benutzer.add(leser)
+        self.client.force_login(leser)
+        seiten = self._seiten()
+        self.assertEqual(self.client.get(seiten[0]).status_code, 200)
+        lauf = Zahlungslauf.objects.get(nummer="ZL-TEST")
+        self.assertEqual(self.client.post(reverse("fibu_sepa:lauf_freigeben", args=[lauf.pk])).status_code, 403)
+        self.assertEqual(self.client.post(reverse("fibu_sepa:lauf_exportieren", args=[lauf.pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse("fibu_sepa:vorschlag", args=["ueberweisung"])).status_code, 403)
+        self.assertEqual(Zahlungslauf.objects.get(pk=lauf.pk).status, Zahlungslauf.Status.ENTWURF)
+
+    def test_mandat_anlegen_sperren_beenden(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.buha)
+        antwort = self.client.post(reverse("fibu_sepa:mandat_neu"), {
+            "partner": self.kunde.pk, "typ": "B2B", "art": "OOFF",
+            "unterschrieben_am": (self.heute - timedelta(days=3)).isoformat(), "iban": "DE89 3704 0044 0532 0130 00",
+            "bic": "", "kontoinhaber": "", "bemerkung": ""})
+        m = SepaMandat.objects.exclude(pk=self.mandat_obj.pk).get()
+        self.assertRedirects(antwort, reverse("fibu_sepa:mandat", args=[m.pk]))
+        self.assertTrue(m.mandatsreferenz.startswith("MANDAT-"))
+        self.assertEqual((m.typ, m.art, m.iban), ("B2B", "OOFF", IBAN))
+        # ungültige IBAN wird abgelehnt
+        antwort = self.client.post(reverse("fibu_sepa:mandat_bearbeiten", args=[m.pk]), {
+            "partner": self.kunde.pk, "typ": "B2B", "art": "OOFF", "unterschrieben_am": self.heute.isoformat(),
+            "iban": "DE89370400440532013001"})
+        self.assertEqual(antwort.status_code, 200)
+        self.assertContains(antwort, "Prüfziffer")
+        self.client.post(reverse("fibu_sepa:mandat_status", args=[m.pk, "sperren"]))
+        m.refresh_from_db()
+        self.assertEqual(m.status, SepaMandat.Status.GESPERRT)
+        self.assertContains(self.client.get(reverse("fibu_sepa:mandate") + "?filter=gesperrt"), m.mandatsreferenz)
+        self.assertNotContains(self.client.get(reverse("fibu_sepa:mandate")), m.mandatsreferenz)
+        self.client.post(reverse("fibu_sepa:mandat_status", args=[m.pk, "beenden"]))
+        m.refresh_from_db()
+        self.assertEqual(m.status, SepaMandat.Status.BEENDET)
+        self.assertContains(self.client.get(reverse("fibu_sepa:mandate") + "?filter=abgelaufen"), m.mandatsreferenz)
+
+    def test_ablauf_ueberweisung_vorschlag_freigabe_export_download_storno(self):
+        from django.urls import reverse
+
+        datum = S.bankarbeitstag_addieren(self.heute, 2)
+        lieferant = self._partner("Lieferant UI GmbH")
+        op1 = self._op("K", lieferant, "1000.00", datum)
+        op2 = self._op("K", lieferant, "250.00", datum)
+        self._op("K", self._partner("Lieferant ohne IBAN UI", iban=""), "99.00", datum)
+        self.client.force_login(self.buha)
+        antwort = self.client.post(reverse("fibu_sepa:vorschlag", args=["ueberweisung"]), {
+            "bankkonto": self.bank.pk, "datum": datum.isoformat(), "bis": "", "skonto_nutzen": "on"}, follow=True)
+        lauf = Zahlungslauf.objects.get(art=Zahlungslauf.Art.UEBERWEISUNG)
+        self.assertRedirects(antwort, reverse("fibu_sepa:lauf", args=[lauf.pk]))
+        self.assertContains(antwort, "Lieferant ohne IBAN UI: keine gültige IBAN")  # übersprungene Partner
+        self.assertEqual(lauf.anzahl, 2)
+        # Position im Entwurf entfernen → Summe neu
+        p2 = lauf.posten.get(op=op2)
+        self.client.post(reverse("fibu_sepa:posten_entfernen", args=[lauf.pk, p2.pk]))
+        lauf.refresh_from_db()
+        self.assertEqual((lauf.anzahl, lauf.summe), (1, D("1000.00")))
+        # Export vor Freigabe → Service-Fehlermeldung als Message
+        antwort = self.client.post(reverse("fibu_sepa:lauf_exportieren", args=[lauf.pk]), follow=True)
+        self.assertContains(antwort, "muss vor dem Export freigegeben sein")
+        self.client.post(reverse("fibu_sepa:lauf_freigeben", args=[lauf.pk]))
+        lauf.refresh_from_db()
+        self.assertEqual(lauf.status, Zahlungslauf.Status.FREIGEGEBEN)
+        self.client.post(reverse("fibu_sepa:lauf_exportieren", args=[lauf.pk]))
+        lauf.refresh_from_db()
+        self.assertEqual(lauf.status, Zahlungslauf.Status.EXPORTIERT)
+        op1.refresh_from_db()
+        self.assertEqual(op1.offen, 0)
+        antwort = self.client.get(reverse("fibu_sepa:lauf_xml", args=[lauf.pk]))
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn(f'filename="{lauf.nummer}_pain.001.001.09.xml"', antwort["Content-Disposition"])
+        self.assertIn(b"<CtrlSum>1000.00</CtrlSum>", antwort.content)
+        # Posten nach Export nicht mehr entfernbar
+        p1 = lauf.posten.get(op=op1)
+        antwort = self.client.post(reverse("fibu_sepa:posten_entfernen", args=[lauf.pk, p1.pk]), follow=True)
+        self.assertContains(antwort, "nicht mehr im Entwurf")
+        # Storno nur mit Bestätigung
+        url = reverse("fibu_sepa:lauf_stornieren", args=[lauf.pk])
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.client.post(url, {"grund": "Bank hat Datei abgelehnt"})
+        lauf.refresh_from_db()
+        self.assertEqual(lauf.status, Zahlungslauf.Status.EXPORTIERT)
+        self.client.post(url, {"grund": "Bank hat Datei abgelehnt", "bestaetigt": "on"})
+        lauf.refresh_from_db()
+        self.assertEqual(lauf.status, Zahlungslauf.Status.STORNIERT)
+        op1.refresh_from_db()
+        self.assertEqual(op1.offen, D("1000.00"))
+
+    def test_ablauf_lastschrift_per_client(self):
+        from django.urls import reverse
+
+        self._op("D", self.kunde, "300.00", self.heute + timedelta(days=1))
+        self.client.force_login(self.admin)
+        self.client.post(reverse("fibu_sepa:vorschlag", args=["lastschrift"]), {"bankkonto": self.bank.pk})
+        lauf = Zahlungslauf.objects.get(art=Zahlungslauf.Art.LASTSCHRIFT)
+        self.assertEqual(lauf.posten.get().sequenz, "FRST")
+        self.client.post(reverse("fibu_sepa:lauf_freigeben", args=[lauf.pk]))
+        self.client.post(reverse("fibu_sepa:lauf_exportieren", args=[lauf.pk]))
+        antwort = self.client.get(reverse("fibu_sepa:lauf_xml", args=[lauf.pk]))
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn(f'filename="{lauf.nummer}_pain.008.001.08.xml"', antwort["Content-Disposition"])
+        self.assertContains(self.client.get(reverse("fibu_sepa:mandat", args=[self.mandat_obj.pk])), lauf.nummer)
+
+    def test_stammdaten_iban_bic_und_glaeubiger_id(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.admin)
+        url = reverse("stammdaten:partner_neu")
+        daten = {"name": "Bank Test GmbH", "ist_lieferant": "on", "iban": "DE89 3704 0044 0532 0130 01",
+                 "bic": "COBADEFF", "aktiv": "on"}
+        for fs in ("fs0", "fs1"):  # Inline-Formsets (Adressen, Ansprechpartner) leer
+            daten.update({f"{fs}-TOTAL_FORMS": "0", f"{fs}-INITIAL_FORMS": "0"})
+        antwort = self.client.get(url)
+        self.assertContains(antwort, 'name="iban"')
+        self.assertContains(antwort, 'name="bic"')
+        antwort = self.client.post(url, daten)
+        self.assertEqual(antwort.status_code, 200)
+        self.assertContains(antwort, "Prüfziffer")
+        daten.update(iban="DE89 3704 0044 0532 0130 00", bic="cobadeff")
+        self.client.post(url, daten)
+        p = Geschaeftspartner.objects.get(name="Bank Test GmbH")
+        self.assertEqual((p.iban, p.bic), (IBAN, "COBADEFF"))
+        antwort = self.client.get(reverse("core:mandant"))
+        self.assertContains(antwort, 'name="glaeubiger_id"')

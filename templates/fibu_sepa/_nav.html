@@ -1,0 +1,10 @@
+{% hat_recht "fibu_sepa" "anlegen" as darf_anlegen %}
+<div class="d-flex align-items-center mb-3 flex-wrap gap-2"><h1 class="h4 m-0"><i class="bi bi-bank2"></i> SEPA-Zahlungsverkehr</h1>
+  <div class="ms-auto d-flex gap-2">{% if darf_anlegen %}
+    <a class="btn btn-sm btn-primary" href="{% url 'fibu_sepa:vorschlag' 'ueberweisung' %}"><i class="bi bi-send"></i> Überweisungsvorschlag erstellen</a>
+    <a class="btn btn-sm btn-primary" href="{% url 'fibu_sepa:vorschlag' 'lastschrift' %}"><i class="bi bi-arrow-down-left-circle"></i> Lastschriftvorschlag erstellen</a>{% endif %}</div></div>
+<ul class="nav nav-tabs small mb-3">
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'laeufe' %}active{% endif %}" href="{% url 'fibu_sepa:laeufe' %}">Zahlungsläufe</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'mandate' %}active{% endif %}" href="{% url 'fibu_sepa:mandate' %}">SEPA-Mandate</a></li>
+  <li class="nav-item"><a class="nav-link" href="{% url 'fibu:index' %}">Finanzbuchhaltung</a></li>
+</ul>
