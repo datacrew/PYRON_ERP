@@ -4,7 +4,6 @@
 <div class="d-flex align-items-center mb-3 flex-wrap gap-2"><h1 class="h4 m-0"><i class="bi bi-ui-checks"></i> Rechnung prüfen <small class="text-muted">{{ d.nummer }} · {{ d.titel }}</small>
   {% include "dms/_status.html" with s=d.status text=d.get_status_display %}{% if d.konfidenz is not None %} <span class="badge text-bg-light border">Konfidenz {{ d.konfidenz|zahl:2 }}</span>{% endif %}</h1>
   <div class="ms-auto d-flex gap-2">
-    {% block pruefen_aktionen %}{% endblock %}
     <a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:detail' d.pk %}"><i class="bi bi-file-earmark-text"></i> Dokument</a>
   </div></div>
 {% include "dms/_nav.html" %}
@@ -45,7 +44,8 @@
     </div>
     {% if darf %}<div class="d-flex gap-2 flex-wrap">
       <button class="btn btn-primary" name="aktion" value="speichern"><i class="bi bi-save"></i> Speichern und prüfen</button>
-      {% block pruefen_buttons %}{% endblock %}
+      {% if darf_buchen %}<button class="btn btn-success" name="aktion" value="verbuchen" onclick="return confirm('Rechnung freigeben und in der Finanzbuchhaltung verbuchen? Das Dokument wird danach revisionssicher archiviert.')"><i class="bi bi-check2-circle"></i> Speichern, freigeben und verbuchen</button>
+      <span class="small text-muted align-self-center">Bucht Aufwand + Vorsteuer an Kreditor, legt den offenen Posten an und archiviert das Dokument.</span>{% endif %}
     </div>{% elif not d.eingangsrechnung %}<p class="small text-muted">Nur ansehen – zum Korrigieren ist das Recht „DMS anlegen“ nötig bzw. das Dokument ist nicht im Status „Erkannt“/„Zu prüfen“.</p>{% endif %}
     </form>
   </div>
@@ -53,7 +53,9 @@
 <script>
 (function () {
   const tabelle = document.getElementById("positionen"), hinweis = document.getElementById("summenhinweis");
-  const zahl = (el) => { const v = parseFloat((el && el.value || "").replace(",", ".")); return isNaN(v) ? 0 : v; };
+  // Eingaben im deutschen Format („1.250,00“)
+  const zahl = (el) => { const v = parseFloat((el && el.value || "").replace(/\s/g, "").replace(/\./g, "").replace(",", ".")); return isNaN(v) ? 0 : v; };
+  const de = (v) => v.toFixed(2).replace(".", ",");
   function rechnen() {
     let summe = 0;
     tabelle.querySelectorAll("tbody tr").forEach((tr) => {
@@ -64,15 +66,15 @@
     });
     const netto = zahl(document.querySelector("[name='kopf-netto']"));
     const diff = Math.round((summe - netto) * 100) / 100;
-    hinweis.textContent = "Summe Positionen: " + summe.toFixed(2).replace(".", ",") + " € · Netto laut Kopf: " +
-      netto.toFixed(2).replace(".", ",") + " €" + (diff ? " · Differenz " + diff.toFixed(2).replace(".", ",") + " €" : " ✓");
+    hinweis.textContent = "Summe Positionen: " + de(summe) + " € · Netto laut Kopf: " + de(netto) + " €" +
+      (diff ? " · Differenz " + de(diff) + " €" : " ✓");
     hinweis.className = "card-footer bg-white small " + (diff ? "text-danger" : "text-success");
   }
   tabelle.addEventListener("input", (e) => {
     const tr = e.target.closest("tr");
     if (e.target.name && (e.target.name.endsWith("-menge") || e.target.name.endsWith("-einzelpreis"))) {
       const m = zahl(tr.querySelector("[name$='-menge']")) || 1, ep = zahl(tr.querySelector("[name$='-einzelpreis']"));
-      if (ep) tr.querySelector("[name$='-betrag']").value = (Math.round(m * ep * 100) / 100).toFixed(2);
+      if (ep) tr.querySelector("[name$='-betrag']").value = de(Math.round(m * ep * 100) / 100);
     }
     rechnen();
   });

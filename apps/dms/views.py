@@ -15,6 +15,7 @@ from apps.core.permissions import hat_recht, recht_erforderlich
 from . import pruefung as P
 from . import services as S
 from . import trennung as TR
+from . import verbuchung as VB
 from . import verarbeitung as V
 from .forms import (MetadatenForm, PruefKopfForm, PruefPositionFormSet, RegelForm, TagForm, UploadForm,
                     VersionForm)
@@ -355,6 +356,8 @@ def pruefen(request, pk):
             else:
                 if P.fehler(erg):
                     messages.warning(request, "Gespeichert – es bestehen noch Plausibilitätsfehler.")
+                elif request.POST.get("aktion") == "verbuchen":
+                    return _verbuchen(request, d)
                 else:
                     messages.success(request, "Gespeichert – die Rechnung ist plausibel.")
                 return redirect("dms:pruefen", pk)
@@ -375,6 +378,7 @@ def pruefen(request, pk):
     return render(request, "dms/pruefen.html", {
         "d": d, "kopf": kopf, "pos": pos, "darf": darf, "erg": erg, "konfidenz": konfidenz,
         "positionen_erkannt": erg.get("positionen", []), "lieferant": lieferant,
+        "darf_buchen": darf and hat_recht(request.user, M, "freigeben") and hat_recht(request.user, "fibu", "anlegen"),
         "aktiv": "liste"})
 
 
@@ -398,3 +402,23 @@ def regeln(request):
     return render(request, "dms/regeln.html", {
         "form": form, "aktiv": "regeln",
         "regeln": Kontierungsregel.objects.select_related("partner", "konto")})
+
+
+def _verbuchen(request, d):
+    if not (hat_recht(request.user, M, "freigeben") and hat_recht(request.user, "fibu", "anlegen")):
+        raise PermissionDenied
+    try:
+        er = VB.verbuchen(d, request.user)
+    except FEHLER as exc:
+        _fehler(request, exc)
+        return redirect("dms:pruefen", d.pk)
+    messages.success(request, f"Freigegeben und verbucht: Eingangsrechnung {er.nummer}, Buchung {er.buchung.nummer} "
+                              f"– das Dokument ist revisionssicher archiviert.")
+    return redirect("fibu:er", er.pk)
+
+
+@require_POST
+@recht_erforderlich(M, "freigeben")
+def verbuchen(request, pk):
+    """Freigabe ohne erneute Korrektur (z. B. aus der Liste der erkannten Rechnungen)."""
+    return _verbuchen(request, get_object_or_404(Dokument, pk=pk))

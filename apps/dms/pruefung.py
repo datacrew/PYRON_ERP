@@ -96,9 +96,14 @@ def korrektur_speichern(dokument, kopf, positionen, benutzer=None):
         if alt_partner:
             geaendert.append("lieferant")
         erg["lieferant"] = {}
-    neue_pos = []
-    for p in positionen:
+    neue_pos, alte_pos = [], erg.get("positionen", [])
+    for i, p in enumerate(positionen):
         konto = p.get("konto")
+        nummer = getattr(konto, "nummer", konto) or ""
+        vorher = alte_pos[i] if i < len(alte_pos) else {}
+        # Quelle des Kontos: unverändert übernommener Vorschlag behält seine Herkunft
+        quelle = vorher.get("kontoquelle", "") if nummer and nummer == vorher.get("konto") else (
+            "manuell" if nummer else "")
         neue_pos.append({
             "menge": str(Decimal(p["menge"]).quantize(Decimal("0.001"))),
             "einheit": p.get("einheit", ""), "beschreibung": (p.get("beschreibung") or "")[:200],
@@ -106,7 +111,7 @@ def korrektur_speichern(dokument, kopf, positionen, benutzer=None):
             "betrag": str(Decimal(p["betrag"]).quantize(E.CENT)),
             "steuersatz": str(Decimal(p["steuersatz"]).normalize()) if p.get("steuersatz") is not None else None,
             "steuerschluessel": p.get("steuerschluessel") or "",
-            "konto": getattr(konto, "nummer", konto) or "", "kontoquelle": "manuell" if konto else "",
+            "konto": nummer, "kontoquelle": quelle,
             "konfidenz": 1.0})
     if [(_p.get("betrag"), _p.get("konto"), _p.get("steuerschluessel"), _p.get("beschreibung"))
             for _p in erg.get("positionen", [])] != [(_p["betrag"], _p["konto"], _p["steuerschluessel"],

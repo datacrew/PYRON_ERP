@@ -602,6 +602,8 @@ class PruefmaskeTests(DmsTestBasis):
         return d
 
     def post_daten(self, d, **kopf):
+        from django.utils.formats import localize_input
+
         from . import pruefung as P
 
         k, positionen = P.formular_daten(d)
@@ -609,10 +611,13 @@ class PruefmaskeTests(DmsTestBasis):
         daten = {"aktion": "speichern", "pos-TOTAL_FORMS": str(len(positionen)), "pos-INITIAL_FORMS": "0",
                  "pos-MIN_NUM_FORMS": "0", "pos-MAX_NUM_FORMS": "1000"}
         for name, wert in k.items():
-            daten[f"kopf-{name}"] = "" if wert is None else (wert.isoformat() if hasattr(wert, "isoformat") else wert)
+            daten[f"kopf-{name}"] = "" if wert is None else (
+                wert.isoformat() if hasattr(wert, "isoformat") else localize_input(wert))
+        from django.utils.formats import localize_input
+
         for i, p in enumerate(positionen):
             for name, wert in p.items():
-                daten[f"pos-{i}-{name}"] = "" if wert is None else wert
+                daten[f"pos-{i}-{name}"] = "" if wert is None else localize_input(wert)
         return daten
 
     def test_split_view(self):
@@ -642,7 +647,7 @@ class PruefmaskeTests(DmsTestBasis):
 
     def test_korrektur_mit_summenfehler_bleibt_zu_pruefen(self):
         d = self.er()
-        r = self.client.post(reverse("dms:pruefen", args=[d.pk]), self.post_daten(d, brutto="400.00"))
+        r = self.client.post(reverse("dms:pruefen", args=[d.pk]), self.post_daten(d, brutto="400,00"))
         self.assertEqual(r.status_code, 302)
         d.refresh_from_db()
         self.assertEqual(d.status, Dokument.Status.PRUEFEN)
@@ -651,7 +656,7 @@ class PruefmaskeTests(DmsTestBasis):
 
     def test_position_hinzufuegen_und_loeschen(self):
         d = self.er()
-        daten = self.post_daten(d, netto="223.00", steuer="42.37", brutto="265.37")
+        daten = self.post_daten(d, netto="223,00", steuer="42,37", brutto="265,37")
         daten["pos-2-DELETE"] = "on"  # Kaffee (7 %) entfernen
         self.client.post(reverse("dms:pruefen", args=[d.pk]), daten)
         d.refresh_from_db()
@@ -674,3 +679,124 @@ class PruefmaskeTests(DmsTestBasis):
                                                      "konto": F.konto("4930").pk, "steuerschluessel": "V19"})
         self.assertRedirects(r, reverse("dms:regeln"))
         self.assertContains(self.client.get(reverse("dms:regeln")), "toner")
+
+
+# ------------------------------------------------------------------ Verbuchung in die Fibu
+
+class VerbuchungTests(DmsTestBasis):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from apps.fibu import services as F
+
+        F.geschaeftsjahr_anlegen(2026)
+        cls.lieferant = Geschaeftspartner.objects.create(name="Bürobedarf Schneider GmbH", ist_lieferant=True,
+                                                         ust_id="DE811569869")
+
+    def er(self, r=None, daten=None, name="re.pdf"):
+        d = S.dokument_anlegen(daten or T.pdf(r), name, art=Dokumentart.EINGANGSRECHNUNG, benutzer=self.user)
+        V.verarbeiten(d, self.user)
+        return d
+
+    def test_verbuchen_doppelte_buchfuehrung(self):
+        from apps.fibu.models import OffenerPosten
+
+        from . import verbuchung as VB
+
+        d = self.er()
+        er = VB.verbuchen(d, self.user)
+        d.refresh_from_db()
+        # Eingangsrechnung der Fibu
+        self.assertEqual((er.lieferant, er.rechnungsnummer, er.rechnungsdatum, er.faellig_am),
+                         (self.lieferant, "RE-2026-0815", date(2026, 3, 12), date(2026, 4, 11)))
+        self.assertEqual((er.summe_netto, er.summe_steuer, er.summe_brutto),
+                         (Decimal("283.00"), Decimal("46.57"), Decimal("329.57")))
+        self.assertEqual(er.positionen.count(), 3)
+        self.assertEqual(er.status, "GEBUCHT")
+        # Buchung: Aufwand + Vorsteuer an Kreditor, ausgeglichen
+        zeilen = list(er.buchung.zeilen.select_related("konto"))
+        self.assertEqual(sum(z.soll for z in zeilen), sum(z.haben for z in zeilen))
+        konten = {}
+        for z in zeilen:
+            konten[z.konto.nummer] = konten.get(z.konto.nummer, 0) + z.soll - z.haben
+        self.assertEqual(konten["3000"], Decimal("283.00"))
+        self.assertEqual((konten["1576"], konten["1571"]), (Decimal("42.37"), Decimal("4.20")))
+        kreditor = [z for z in zeilen if z.partner_id == self.lieferant.pk]
+        self.assertEqual(kreditor[0].haben, Decimal("329.57"))
+        # Offener Posten
+        op = OffenerPosten.objects.get(eingangsrechnung=er)
+        self.assertEqual((op.art, op.offen, op.fremdbelegnr), ("K", Decimal("329.57"), "RE-2026-0815"))
+        # Rückverweis und GoBD
+        self.assertEqual((d.status, d.eingangsrechnung, d.buchung), (Dokument.Status.GEBUCHT, er, er.buchung))
+        self.assertTrue(d.archiviert)
+        self.assertEqual(list(er.dms_dokumente.all()), [d])
+        self.assertTrue(d.protokoll.filter(aktion="Verbucht").exists())
+        with self.assertRaises(S.DmsFehler):
+            VB.verbuchen(d, self.user)
+
+    def test_lernregel_aus_buchung(self):
+        from apps.fibu import services as F
+
+        from . import pruefung as P
+        from . import verbuchung as VB
+        from .models import Kontierungsregel
+
+        d = self.er()
+        kopf, pos = P.formular_daten(d)
+        kopf["lieferant"] = self.lieferant
+        pos[1]["konto"] = F.konto("4930")  # Toner manuell auf Bürobedarf
+        P.korrektur_speichern(d, kopf, pos, self.user)
+        VB.verbuchen(d, self.user)
+        self.assertTrue(Kontierungsregel.objects.filter(partner=self.lieferant, stichwort="toner",
+                                                        konto__nummer="4930").exists())
+        # Folgerechnung desselben Lieferanten: Vorschlag aus den Lernregeln
+        d2 = self.er(T.beispiel(rechnungsnummer="RE-2026-0999"))
+        vorschlag = [(p["konto"], p["kontoquelle"]) for p in d2.erkennung["positionen"]]
+        self.assertEqual(vorschlag[1], ("4930", "Lernregel „toner“"))
+        self.assertEqual(vorschlag[0][1], "Lernregel Lieferant")
+
+    def test_plausibilitaetsfehler_verhindert_buchung(self):
+        from apps.fibu.models import Eingangsrechnung
+
+        from . import verbuchung as VB
+
+        d = self.er(T.beispiel(ust_id="DE999999999", lieferant="Unbekannt & Co"))
+        with self.assertRaises(S.DmsFehler):
+            VB.verbuchen(d, self.user)
+        self.assertFalse(Eingangsrechnung.objects.exists())
+        d.refresh_from_db()
+        self.assertFalse(d.archiviert)
+
+    def test_dublette_nach_buchung(self):
+        from . import verbuchung as VB
+
+        er = VB.verbuchen(self.er(), self.user)
+        zweit = self.er(daten=T.zugferd_pdf(), name="zugferd.pdf")
+        self.assertEqual(zweit.status, Dokument.Status.PRUEFEN)
+        self.assertTrue(any(er.nummer in m["text"] for m in zweit.erkennung["plausibilitaet"]))
+        with self.assertRaises(S.DmsFehler):
+            VB.verbuchen(zweit, self.user)
+
+    def test_oberflaeche_freigeben_und_rueckverweis(self):
+        self.client.force_login(self.user)
+        d = self.er()
+        daten = PruefmaskeTests.post_daten(self, d)
+        daten["aktion"] = "verbuchen"
+        r = self.client.post(reverse("dms:pruefen", args=[d.pk]), daten)
+        d.refresh_from_db()
+        self.assertIsNotNone(d.eingangsrechnung)
+        self.assertRedirects(r, reverse("fibu:er", args=[d.eingangsrechnung.pk]))
+        self.assertContains(self.client.get(r.url), reverse("dms:detail", args=[d.pk]))
+        self.assertContains(self.client.get(reverse("fibu:buchung", args=[d.buchung.pk])),
+                            reverse("dms:detail", args=[d.pk]))
+
+    def test_ohne_freigaberecht(self):
+        d = self.er()
+        einkauf = get_user_model().objects.create_user("einkauf", password="x")
+        einkauf.erp_rollen.add(Rolle.objects.get(name="Einkauf"))  # dms: lesen + anlegen
+        self.client.force_login(einkauf)
+        self.assertNotContains(self.client.get(reverse("dms:pruefen", args=[d.pk])), 'value="verbuchen"')
+        self.assertEqual(self.client.post(reverse("dms:verbuchen", args=[d.pk])).status_code, 403)
+        daten = PruefmaskeTests.post_daten(self, d)
+        daten["aktion"] = "verbuchen"
+        self.assertEqual(self.client.post(reverse("dms:pruefen", args=[d.pk]), daten).status_code, 403)
