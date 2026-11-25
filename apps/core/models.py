@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from .bankdaten import glaeubiger_id_validator
+
 AKTIONEN = [
     ("lesen", "Lesen"),
     ("anlegen", "Anlegen"),
@@ -31,6 +33,9 @@ class Mandant(models.Model):
     bank = models.CharField("Bank", max_length=100, blank=True)
     iban = models.CharField("IBAN", max_length=34, blank=True)
     bic = models.CharField("BIC", max_length=11, blank=True)
+    glaeubiger_id = models.CharField("Gläubiger-ID (SEPA-Lastschrift)", max_length=35, blank=True,
+                                     validators=[glaeubiger_id_validator],
+                                     help_text="Von der Deutschen Bundesbank vergeben, z. B. DE98ZZZ09999999999")
     kontenrahmen = models.CharField("Kontenrahmen", max_length=5, choices=KONTENRAHMEN, default="SKR03")
 
     class Meta:

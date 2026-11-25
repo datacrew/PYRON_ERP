@@ -30,7 +30,19 @@ def beleg_kontext(beleg):
         "titel": beleg.get_belegart_display(),
         "entwurf": beleg.status in (beleg.Status.ENTWURF, beleg.Status.FREIGEGEBEN),
         "storniert": beleg.status == beleg.Status.STORNIERT,
+        "lastschrift": _vorabankuendigung(beleg),
     }
+
+
+def _vorabankuendigung(beleg):
+    """SEPA-Pre-Notification (nur wenn das Modul fibu_sepa installiert ist)."""
+    from django.apps import apps
+
+    if not apps.is_installed("apps.fibu_sepa"):
+        return None
+    from apps.fibu_sepa.services import vorabankuendigung
+
+    return vorabankuendigung(beleg)
 
 
 def html_rendern(beleg, vorlage=None):

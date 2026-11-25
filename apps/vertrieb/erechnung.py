@@ -123,6 +123,8 @@ def rechnungsdaten(beleg):
         "steuern": steuern, "positionen": positionen,
         "netto": netto, "steuer": steuer, "brutto": netto + steuer,       # BT-106/109/110/112
         "faellig": faellig, "zahlungstext": zahlungstext,                 # BT-9/BT-20
+        # SEPA-Lastschrift (Code 59): BT-89 Mandatsreferenz, BT-90 Gläubiger-ID, BT-91 IBAN des Zahlers
+        "lastschrift": None if beleg.belegart == "GUTSCHRIFT" else k.get("lastschrift"),
     }
 
 
@@ -218,9 +220,16 @@ def cii_xml(beleg, profil=EN16931):
     ev = _el(dl, RAM, "ActualDeliverySupplyChainEvent")
     _cii_datum(ev, "OccurrenceDateTime", d["lieferdatum"])
     se = _el(tx, RAM, "ApplicableHeaderTradeSettlement")
+    ls = d["lastschrift"]
+    if ls:
+        _el(se, RAM, "CreditorReferenceID", ls["glaeubiger_id"])        # BT-90
     _el(se, RAM, "PaymentReference", d["nummer"])
     _el(se, RAM, "InvoiceCurrencyCode", d["waehrung"])
-    if v["iban"] and not d["gutschrift"]:
+    if ls:
+        pm = _el(se, RAM, "SpecifiedTradeSettlementPaymentMeans")
+        _el(pm, RAM, "TypeCode", "59")                                    # BT-81 SEPA-Lastschrift
+        _el(_el(pm, RAM, "PayerPartyDebtorFinancialAccount"), RAM, "IBANID", ls["iban"])  # BT-91
+    elif v["iban"] and not d["gutschrift"]:
         pm = _el(se, RAM, "SpecifiedTradeSettlementPaymentMeans")
         _el(pm, RAM, "TypeCode", "58")
         _el(_el(pm, RAM, "PayeePartyCreditorFinancialAccount"), RAM, "IBANID", v["iban"])
@@ -237,6 +246,8 @@ def cii_xml(beleg, profil=EN16931):
     _el(terms, RAM, "Description", d["zahlungstext"])
     if not d["gutschrift"]:
         _cii_datum(terms, "DueDateDateTime", d["faellig"])
+    if ls:
+        _el(terms, RAM, "DirectDebitMandateID", ls["mandatsreferenz"])   # BT-89
     su = _el(se, RAM, "SpecifiedTradeSettlementHeaderMonetarySummation")
     _el(su, RAM, "LineTotalAmount", _b(d["netto"]))
     _el(su, RAM, "TaxBasisTotalAmount", _b(d["netto"]))
@@ -263,6 +274,8 @@ def _ubl_partei(eltern, rolle, p, verkaeufer=False):
         _u(party, CBC, "EndpointID", p["email"], schemeID="EM")
     if not verkaeufer and p.get("nummer"):
         _u(_u(party, CAC, "PartyIdentification"), CBC, "ID", p["nummer"])
+    if verkaeufer and p.get("glaeubiger_id"):
+        _u(_u(party, CAC, "PartyIdentification"), CBC, "ID", p["glaeubiger_id"], schemeID="SEPA")  # BT-90
     adr = _u(party, CAC, "PostalAddress")
     _u(adr, CBC, "StreetName", p["strasse"])
     _u(adr, CBC, "CityName", p["ort"])
@@ -308,10 +321,21 @@ def xrechnung_xml(beleg):
         _u(_u(root, CAC, "OrderReference"), CBC, "ID", d["bestellnummer"])
     if d["vorrechnung"]:
         _u(_u(_u(root, CAC, "BillingReference"), CAC, "InvoiceDocumentReference"), CBC, "ID", d["vorrechnung"])
-    _ubl_partei(root, "AccountingSupplierParty", d["verkaeufer"], verkaeufer=True)
+    verkaeufer = dict(d["verkaeufer"])
+    if d["lastschrift"]:
+        verkaeufer["glaeubiger_id"] = d["lastschrift"]["glaeubiger_id"]
+    _ubl_partei(root, "AccountingSupplierParty", verkaeufer, verkaeufer=True)
     _ubl_partei(root, "AccountingCustomerParty", d["kaeufer"])
     _u(_u(root, CAC, "Delivery"), CBC, "ActualDeliveryDate", d["lieferdatum"].isoformat())
-    if d["verkaeufer"]["iban"] and not gs:
+    ls = d["lastschrift"]
+    if ls:
+        pm = _u(root, CAC, "PaymentMeans")
+        _u(pm, CBC, "PaymentMeansCode", "59")                             # BT-81 SEPA-Lastschrift
+        _u(pm, CBC, "PaymentID", d["nummer"])
+        mandat = _u(pm, CAC, "PaymentMandate")
+        _u(mandat, CBC, "ID", ls["mandatsreferenz"])                      # BT-89
+        _u(_u(mandat, CAC, "PayerFinancialAccount"), CBC, "ID", ls["iban"])  # BT-91
+    elif d["verkaeufer"]["iban"] and not gs:
         pm = _u(root, CAC, "PaymentMeans")
         _u(pm, CBC, "PaymentMeansCode", "58")
         _u(pm, CBC, "PaymentID", d["nummer"])

@@ -42,6 +42,11 @@ NUMMERNKREISE = [
     # Phase 4 – Finanzbuchhaltung
     ("FIBU_BUCHUNG", "Buchungen (Journal)", "FB-", True, 6), ("FIBU_ER", "Eingangsrechnungen", "ER-", True, 5),
     ("FIBU_BANKIMPORT", "Bankimporte", "BI-", True, 4), ("FIBU_MAHNLAUF", "Mahnläufe", "ML-", True, 4),
+    # SEPA-Zahlungsverkehr (Mandatsreferenz ohne Jahresbezug: muss über die Mandatslaufzeit eindeutig bleiben)
+    ("SEPA_MANDAT", "SEPA-Mandatsreferenzen", "MANDAT-", False, 6),
+    ("SEPA_UEBERWEISUNG", "SEPA-Überweisungsläufe", "ZL-", True, 4),
+    ("SEPA_LASTSCHRIFT", "SEPA-Lastschriftläufe", "LL-", True, 4),
+    ("SEPA_RUECKLAST", "SEPA-Rücklastschriften", "RL-", True, 4),
     # Phase 5 – Vertrieb und Versand
     ("VK_AUFTRAG", "Kundenaufträge", "VA-", True, 5), ("TOUR", "Versandtouren", "TO-", True, 5),
     ("EDI", "EDIFACT-Übertragungsnummern (UNB)", "", False, 8),
@@ -69,7 +74,7 @@ ROLLEN = {
                "belege": [L], "vertrieb": [L], "reporting": [L]}),
     "Buchhaltung": ("Finanzbuchhaltung, Belegprüfung und Festschreibung",
                     {"stammdaten": [L, AE], "fibu": ALLE, "fibu_bank": ALLE, "fibu_mahnwesen": ALLE,
-                     "fibu_abschluss": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
+                     "fibu_sepa": ALLE, "fibu_abschluss": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
                      "einkauf": [L], "wareneingang": [L], "produktion": [L], "akkord": [L]}),
     "Nur Lesen": ("Lesezugriff auf alle Fachmodule (ohne Lohndaten)", {"*-verwaltung": [L]}),
 }

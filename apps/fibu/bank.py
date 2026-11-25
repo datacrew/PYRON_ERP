@@ -85,8 +85,10 @@ def parse_camt053(daten):
             betrag = -betrag
         tx = _kind(ntry, "NtryDtls", "TxDtls")
         gegen = "Dbtr" if haben else "Cdtr"
-        zweck, name, iban, e2e = "", "", "", ""
+        zweck, name, iban, e2e, sammler, grund = "", "", "", "", "", ""
         if tx is not None:
+            sammler = _text(tx, "Refs", "PmtInfId")
+            grund = _text(tx, "RtrInf", "Rsn", "Cd")
             zweck = " ".join(e.text.strip() for e in _alle(tx, "Ustrd") if e.text)
             rp = _kind(tx, "RltdPties")
             if rp is not None:
@@ -96,12 +98,16 @@ def parse_camt053(daten):
             if e2e == "NOTPROVIDED":
                 e2e = ""
         zweck = zweck or _text(ntry, "AddtlNtryInf")
+        # Sammler (Batch): PmtInfId bzw. MsgId aus NtryDtls/Btch, sonst Bankreferenz des Eintrags
+        sammler = (sammler or _text(ntry, "NtryDtls", "Btch", "PmtInfId") or _text(ntry, "NtryDtls", "Btch", "MsgId")
+                   or _text(ntry, "AcctSvcrRef"))
         gvc = _text(ntry, "BkTxCd", "Prtry", "Cd") or _text(ntry, "BkTxCd", "Domn", "Fmly", "SubFmlyCd")
         erg["umsaetze"].append({
             "buchungsdatum": _datum(ntry, "BookgDt"), "valuta": _datum(ntry, "ValDt"),
             "betrag": betrag, "waehrung": (_kind(ntry, "Amt").get("Ccy") if _kind(ntry, "Amt") is not None else "EUR"),
             "name": name, "iban": iban, "verwendungszweck": zweck,
-            "referenz": e2e or _text(ntry, "AcctSvcrRef"), "gvc": gvc})
+            "referenz": e2e or _text(ntry, "AcctSvcrRef"), "gvc": gvc,
+            "sammlerreferenz": sammler, "rueckgabegrund": grund})
     daten_liste = [u["buchungsdatum"] for u in erg["umsaetze"] if u["buchungsdatum"]]
     erg["von"], erg["bis"] = (min(daten_liste), max(daten_liste)) if daten_liste else (None, None)
     return erg
@@ -234,7 +240,8 @@ def importieren(daten, dateiname, benutzer=None):
                 bankimport=imp, bankkonto=bk, buchungsdatum=u["buchungsdatum"], valuta=u["valuta"],
                 betrag=q(u["betrag"]), waehrung=u.get("waehrung") or "EUR", name=u["name"][:200],
                 iban=u["iban"].replace(" ", "")[:34], verwendungszweck=u["verwendungszweck"],
-                referenz=u["referenz"][:100], gvc=u["gvc"][:40], dubletten_schluessel=schl)
+                referenz=u["referenz"][:100], gvc=u["gvc"][:40], dubletten_schluessel=schl,
+                sammlerreferenz=u.get("sammlerreferenz", "")[:100], rueckgabegrund=u.get("rueckgabegrund", "")[:10])
             neu += 1
         imp.anzahl_neu, imp.anzahl_dubletten = neu, dubl
         imp.save(update_fields=["anzahl_neu", "anzahl_dubletten"])
@@ -375,6 +382,13 @@ def automatisch_zuordnen(umsaetze, benutzer=None, mindestpunkte=90):
     for u in umsaetze:
         if u.status != Bankumsatz.Status.OFFEN:
             continue
+        if u.sammlerreferenz and not u.rueckgabegrund:
+            from apps.fibu_sepa import services as sepa_services  # SEPA-Abgleich nur bei eindeutigem Treffer
+
+            if len(sepa_services.abgleich_kandidaten(u)) == 1:
+                sepa_services.lauf_abgleichen(u, benutzer)
+                zugeordnet += 1
+                continue
         if ist_gebuehr(u):
             gebuehr_buchen(u, benutzer)
             gebuehren += 1

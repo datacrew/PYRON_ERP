@@ -64,6 +64,7 @@ class Command(BaseCommand):
             partner = self._partner()
             self._stuecklisten(artikel)
         self._fibu(partner)
+        self._sepa(partner)
         self._belege(artikel, partner)
         self._lager(artikel, partner)
         self._einkauf(artikel, partner)
@@ -246,6 +247,36 @@ class Command(BaseCommand):
             {"konto": "0630", "haben": "80000.00", "text": "Bankdarlehen"},
             {"konto": "0860", "haben": "97545.00", "text": "Gewinnvortrag"},
         ], quelle="demo_eb", quelle_id="2026", benutzer=admin)
+
+    # Demo-Gläubiger-ID (Testkennung der Bundesbank) und SEPA-Mandate für zwei Kunden
+    GLAEUBIGER_ID = "DE98ZZZ09999999999"
+    BIC = {"Müller Maschinenbau GmbH": "COBADEFFXXX", "Autoteile Weber AG": "DEUTDEDBFRA",
+           "Stahlhandel Schmidt GmbH": "SOLADES1PFO", "Normteile Becker KG": "MARKDEF1100"}
+    MANDATE = (("Müller Maschinenbau GmbH", "CORE", date(2026, 1, 15)),
+               ("Autoteile Weber AG", "B2B", date(2026, 2, 2)))
+
+    def _sepa(self, p):
+        """Gläubiger-ID, BICs und SEPA-Mandate (idempotent); nur wenn das Modul fibu_sepa installiert ist."""
+        from django.apps import apps
+
+        from apps.core.models import Mandant
+
+        mandant = Mandant.aktuell()
+        if mandant and not mandant.glaeubiger_id:
+            Mandant.objects.filter(pk=mandant.pk).update(glaeubiger_id=self.GLAEUBIGER_ID)
+        for name, bic in self.BIC.items():
+            if name in p and not p[name].bic:
+                p[name].bic = bic
+                p[name].save(update_fields=["bic"])
+        if not apps.is_installed("apps.fibu_sepa"):
+            return
+        from apps.fibu_sepa.models import SepaMandat
+
+        for name, typ, datum in self.MANDATE:
+            partner = p.get(name)
+            if partner and partner.iban and not SepaMandat.objects.filter(partner=partner).exists():
+                SepaMandat.objects.create(partner=partner, typ=typ, unterschrieben_am=datum, iban=partner.iban,
+                                          bic=partner.bic)
 
     def _fibu_nach(self, p):
         """Eingangsrechnungen, Mahnhistorie und MT940-Kontoauszug Juli–November (nur einmalig).
