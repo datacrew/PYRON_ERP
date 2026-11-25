@@ -216,6 +216,45 @@ class ERechnungTests(Basis):
         self.assertEqual(root.findtext(f"{{{cbc}}}ID"), re.nummer)
         payable = root.find(".//{*}LegalMonetaryTotal/{*}PayableAmount")
         self.assertEqual(D(payable.text), re.summe_brutto)
+        # Demo-Kunde Weber hat ein B2B-Mandat → SEPA-Lastschrift (Code 59) mit Mandat und Gläubiger-ID
+        mandat = self.weber.sepa_mandate.get()
+        self.assertEqual(root.findtext(".//{*}PaymentMeans/{*}PaymentMeansCode"), "59")
+        self.assertEqual(root.findtext(".//{*}PaymentMandate/{*}ID"), mandat.mandatsreferenz)
+        self.assertEqual(root.findtext(".//{*}PaymentMandate/{*}PayerFinancialAccount/{*}ID"), mandat.iban)
+        self.assertEqual(root.find(".//{*}AccountingSupplierParty//{*}PartyIdentification/{*}ID").text,
+                         "DE98ZZZ09999999999")
+
+    def test_sepa_lastschrift_code59_und_vorabankuendigung(self):
+        from apps.belege.pdf import html_rendern
+        from apps.fibu_sepa.services import ist_bankarbeitstag
+
+        ns = {"ram": "urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"}
+        re = self._rechnung(self.mueller)
+        mandat = self.mueller.sepa_mandate.get()
+        xml = ER.cii_xml(re)
+        ER.pruefen_cii(xml)
+        root = etree.fromstring(xml)
+        self.assertEqual(root.findtext(".//ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode", namespaces=ns),
+                         "59")
+        self.assertEqual(root.findtext(".//ram:PayerPartyDebtorFinancialAccount/ram:IBANID", namespaces=ns),
+                         mandat.iban)
+        self.assertEqual(root.findtext(".//ram:CreditorReferenceID", namespaces=ns), "DE98ZZZ09999999999")
+        self.assertEqual(root.findtext(".//ram:DirectDebitMandateID", namespaces=ns), mandat.mandatsreferenz)
+        html = html_rendern(re)
+        self.assertIn("SEPA-Basislastschrift", html)
+        self.assertIn(mandat.mandatsreferenz, html)
+        self.assertIn(mandat.iban[-4:], html)
+        self.assertNotIn(mandat.iban, html)  # IBAN nur maskiert
+        from apps.belege.pdf import beleg_kontext
+        self.assertTrue(ist_bankarbeitstag(beleg_kontext(re)["lastschrift"]["einzugsdatum"]))
+        # Ohne gültiges Mandat: Überweisung (Code 58), kein Hinweis
+        mandat.status = mandat.Status.GESPERRT
+        mandat.save()
+        root = etree.fromstring(ER.cii_xml(re))
+        self.assertEqual(root.findtext(".//ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode", namespaces=ns),
+                         "58")
+        self.assertIsNone(root.find(".//ram:DirectDebitMandateID", namespaces=ns))
+        self.assertNotIn("SEPA-Basislastschrift", html_rendern(re))
 
 
 class ShopApiTests(Basis):

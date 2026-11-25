@@ -167,6 +167,30 @@ def gueltiges_mandat(partner, stichtag):
     return None
 
 
+def vorabankuendigung(beleg):
+    """Pre-Notification für Rechnungen an Kunden mit gültigem Mandat (Rechnungs-PDF, ZUGFeRD-Code 59).
+
+    Liefert ein Dict (Einzugsdatum, Mandatsreferenz, Gläubiger-ID, maskierte/volle IBAN) oder None, wenn kein
+    Lastschrifteinzug vorgesehen ist (keine Rechnung, Einkaufsbeleg, kein gültiges Mandat, keine Gläubiger-ID).
+    Einzugsdatum = Fälligkeit laut Zahlungsbedingung, frühestens Belegdatum + Vorlaufzeit, auf Bankarbeitstag.
+    """
+    if getattr(beleg, "belegart", "") != "RECHNUNG" or not beleg.partner_id or beleg.ist_einkauf:
+        return None
+    mandant = Mandant.aktuell()
+    glaeubiger_id = (getattr(mandant, "glaeubiger_id", "") or "").strip()
+    if not glaeubiger_id:
+        return None
+    stichtag = beleg.belegdatum or timezone.localdate()
+    mandat = gueltiges_mandat(beleg.partner, stichtag)
+    if not mandat:
+        return None
+    zb = beleg.zahlungsbedingung or beleg.partner.zahlungsbedingung
+    faellig = stichtag + timedelta(days=zb.tage_netto if zb else 30)
+    datum = naechster_bankarbeitstag(max(faellig, fruehestes_einzugsdatum(mandat.typ, stichtag)))
+    return {"einzugsdatum": datum, "mandatsreferenz": mandat.mandatsreferenz, "glaeubiger_id": glaeubiger_id,
+            "iban": mandat.iban, "iban_maskiert": f"{mandat.iban[:4]} … {mandat.iban[-4:]}", "typ": mandat.typ}
+
+
 def lastschriftvorschlag(bankkonto, einzugsdatum=None, bis=None, benutzer=None):
     """Debitoren-OPs von Kunden mit gültigem Mandat; Sequenz (FRST/RCUR/FNAL/OOFF) aus dem Mandat.
 

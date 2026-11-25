@@ -65,6 +65,7 @@
     <tr class="gesamt"><td>Gesamtbetrag</td><td class="r">{{ beleg.summe_brutto|euro }}</td></tr>
   </table>
   {% if beleg.zahlungsbedingung and not beleg.ist_einkauf %}<p>Zahlungsbedingung: {{ beleg.zahlungsbedingung.bezeichnung }}</p>{% endif %}
+  {% if lastschrift %}<p class="vorabankuendigung"><strong>SEPA-Lastschrift:</strong> Der Rechnungsbetrag von {{ beleg.summe_brutto|euro }} wird am {{ lastschrift.einzugsdatum|date:"d.m.Y" }} per SEPA-{% if lastschrift.typ == "B2B" %}Firmen{% else %}Basis{% endif %}lastschrift von Ihrem Konto IBAN {{ lastschrift.iban_maskiert }} eingezogen (Mandatsreferenz {{ lastschrift.mandatsreferenz }}, Gläubiger-ID {{ mandant.glaeubiger_id }}). Bitte sorgen Sie für ausreichende Deckung.</p>{% endif %}
   {% if beleg.fusstext %}<p>{{ beleg.fusstext|linebreaksbr }}</p>{% endif %}
 </div>
 </body></html>
