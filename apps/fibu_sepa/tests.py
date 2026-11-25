@@ -521,3 +521,28 @@ class SepaOberflaecheTests(TestCase):
         self.assertEqual((p.iban, p.bic), (IBAN, "COBADEFF"))
         antwort = self.client.get(reverse("core:mandant"))
         self.assertContains(antwort, 'name="glaeubiger_id"')
+
+
+class CamtSepaFelderTests(TestCase):
+    """CAMT.053: Sammlerreferenz (PmtInfId/MsgId/AcctSvcrRef) und Rückgabegrund (RtrInf/Rsn/Cd)."""
+
+    XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08"><BkToCstmrStmt><Stmt>
+<Acct><Id><IBAN>DE02120300000000202051</IBAN></Id></Acct>
+<Ntry><Amt Ccy="EUR">1500.00</Amt><CdtDbtInd>CRDT</CdtDbtInd><BookgDt><Dt>2026-12-03</Dt></BookgDt>
+<AcctSvcrRef>BANK-1</AcctSvcrRef><NtryDtls><Btch><MsgId>LL-2026-0001</MsgId><PmtInfId>LL-2026-0001-CORE-FRST</PmtInfId>
+</Btch></NtryDtls></Ntry>
+<Ntry><Amt Ccy="EUR">503.00</Amt><CdtDbtInd>DBIT</CdtDbtInd><BookgDt><Dt>2026-12-10</Dt></BookgDt>
+<NtryDtls><TxDtls><Refs><EndToEndId>LL-2026-0001-1</EndToEndId></Refs><RtrInf><Rsn><Cd>AC04</Cd></Rsn></RtrInf>
+</TxDtls></NtryDtls></Ntry>
+</Stmt></BkToCstmrStmt></Document>"""
+
+    def test_sammlerreferenz_und_rueckgabegrund(self):
+        from apps.fibu.bank import parse_camt053
+
+        u1, u2 = parse_camt053(self.XML)["umsaetze"]
+        self.assertEqual(u1["sammlerreferenz"], "LL-2026-0001-CORE-FRST")
+        self.assertEqual(u1["rueckgabegrund"], "")
+        self.assertEqual(u2["rueckgabegrund"], "AC04")
+        self.assertEqual(u2["referenz"], "LL-2026-0001-1")
+        self.assertEqual(u2["betrag"], Decimal("-503.00"))
