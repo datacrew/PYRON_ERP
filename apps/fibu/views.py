@@ -438,6 +438,12 @@ def bank_umsatz(request, pk):
                 b = BK.zuordnen(u, ops, request.user, skonto=request.POST.get("skonto") == "1")
                 messages.success(request, f"Zugeordnet und gebucht ({b.nummer}).")
                 return redirect("fibu:bank")
+            if aktion == "sepa_abgleich":
+                from apps.fibu_sepa import services as SP
+
+                lauf = SP.lauf_abgleichen(u, request.user)
+                messages.success(request, f"SEPA-Lauf {lauf.nummer} abgeglichen ({lauf.get_status_display()}).")
+                return redirect("fibu:bank")
             if aktion == "verrechnung":
                 b = BK.auf_verrechnung(u, request.user)
                 messages.warning(request, f"Auf Verrechnungskonto „ungeklärt“ gebucht ({b.nummer}).")

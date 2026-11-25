@@ -382,6 +382,13 @@ def automatisch_zuordnen(umsaetze, benutzer=None, mindestpunkte=90):
     for u in umsaetze:
         if u.status != Bankumsatz.Status.OFFEN:
             continue
+        if u.sammlerreferenz and not u.rueckgabegrund:
+            from apps.fibu_sepa import services as sepa_services  # SEPA-Abgleich nur bei eindeutigem Treffer
+
+            if len(sepa_services.abgleich_kandidaten(u)) == 1:
+                sepa_services.lauf_abgleichen(u, benutzer)
+                zugeordnet += 1
+                continue
         if ist_gebuehr(u):
             gebuehr_buchen(u, benutzer)
             gebuehren += 1

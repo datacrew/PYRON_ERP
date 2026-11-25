@@ -361,3 +361,61 @@ def rueckgabe_mandat_behandeln(mandat, grund, datum=None):
     mandat.bemerkung = f"{notiz} | {mandat.bemerkung}"[:200] if mandat.bemerkung else notiz[:200]
     mandat.save(update_fields=["status", "bemerkung"])
     return ergebnis
+
+
+# ------------------------------------------------------------------ 5. Abgleich mit dem Kontoauszug
+
+def abgleich_kandidaten(umsatz):
+    """Exportierte Läufe, deren MsgId/PmtInfId der Sammlerreferenz entspricht und deren Betrag passt.
+
+    Rückgabe: [(lauf, [posten])] – bei PmtInfId nur die Posten dieser Payment-Information.
+    """
+    ref = (umsatz.sammlerreferenz or "").strip()
+    if not ref or umsatz.rueckgabegrund:
+        return []
+    treffer = []
+    laeufe = Zahlungslauf.objects.filter(status=Zahlungslauf.Status.EXPORTIERT, bankkonto_id=umsatz.bankkonto_id)
+    for lauf in laeufe.filter(msg_id=ref) | laeufe.filter(posten__pmtinf_id=ref):
+        if any(t[0].pk == lauf.pk for t in treffer):
+            continue
+        posten = lauf.ausgewaehlte().filter(status=ZahlungslaufPosten.Status.OFFEN)
+        if lauf.msg_id != ref:
+            posten = posten.filter(pmtinf_id=ref)
+        posten = list(posten)
+        summe = sum((p.betrag for p in posten), fibu.q(0))
+        erwartet = summe if lauf.ist_lastschrift else -summe
+        if posten and fibu.q(umsatz.betrag) == erwartet:
+            treffer.append((lauf, posten))
+    return treffer
+
+
+def lauf_abgleichen(umsatz, benutzer=None):
+    """Bank an Geldtransit (Lastschrift) bzw. Geldtransit an Bank (Überweisung); Posten → abgeglichen."""
+    from apps.fibu.models import Bankumsatz
+
+    with transaction.atomic():
+        umsatz = Bankumsatz.objects.select_for_update().select_related("bankkonto__konto").get(pk=umsatz.pk)
+        if umsatz.status != Bankumsatz.Status.OFFEN:
+            raise SepaWorkflowFehler("Der Bankumsatz ist bereits zugeordnet.")
+        treffer = abgleich_kandidaten(umsatz)
+        if len(treffer) != 1:
+            raise SepaWorkflowFehler("Kein eindeutiger SEPA-Lauf zur Sammlerreferenz und zum Betrag gefunden."
+                                     if not treffer else "Mehrere SEPA-Läufe passen – bitte manuell klären.")
+        lauf, posten = treffer[0]
+        lauf = Zahlungslauf.objects.select_for_update().get(pk=lauf.pk)
+        betrag = abs(fibu.q(umsatz.betrag))
+        bank, transit = ("soll", "haben") if lauf.ist_lastschrift else ("haben", "soll")
+        art = "Lastschrifteinzug" if lauf.ist_lastschrift else "Überweisung"
+        b = fibu.buchen(umsatz.buchungsdatum, lauf.nummer, f"SEPA-Abgleich {art} {lauf.nummer}",
+                        [{"konto": umsatz.bankkonto.konto, bank: betrag},
+                         {"konto": geldtransit_konto(), transit: betrag}],
+                        quelle="sepa_abgleich", quelle_id=umsatz.pk, benutzer=benutzer)
+        for p in posten:
+            p.status, p.bankumsatz, p.abgleich_buchung = ZahlungslaufPosten.Status.ABGEGLICHEN, umsatz, b
+            p.save(update_fields=["status", "bankumsatz", "abgleich_buchung"])
+        if not lauf.ausgewaehlte().filter(status=ZahlungslaufPosten.Status.OFFEN).exists():
+            lauf.status = Zahlungslauf.Status.AUSGEFUEHRT
+            lauf.save(update_fields=["status"])
+        umsatz.buchung, umsatz.status = b, Bankumsatz.Status.GEBUCHT
+        umsatz.save(update_fields=["buchung", "status"])
+    return lauf

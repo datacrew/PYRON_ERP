@@ -546,3 +546,75 @@ class CamtSepaFelderTests(TestCase):
         self.assertEqual(u2["rueckgabegrund"], "AC04")
         self.assertEqual(u2["referenz"], "LL-2026-0001-1")
         self.assertEqual(u2["betrag"], Decimal("-503.00"))
+
+
+class SepaAbgleichTests(TestCase):
+    """(c2) Abgleich exportierter Läufe mit dem Kontoauszug und Rücklastschriften."""
+
+    _op, _partner, _mandat = SepaWorkflowTests._op, SepaWorkflowTests._partner, SepaWorkflowTests._mandat
+
+    @classmethod
+    def setUpTestData(cls):
+        SepaWorkflowTests.setUpTestData.__func__(cls)
+        from apps.fibu.models import Bankimport
+
+        cls.imp = Bankimport.objects.create(nummer="BI-T", bankkonto=cls.bank, format="CAMT053", dateiname="t.xml",
+                                            datei_hash="t" * 64)
+
+    def setUp(self):
+        self.nr = 0
+
+    def _umsatz(self, betrag, **kw):
+        from apps.fibu.models import Bankumsatz
+
+        self.nr += 1
+        return Bankumsatz.objects.create(bankimport=self.imp, bankkonto=self.bank, buchungsdatum=self.heute,
+                                         betrag=D(betrag), dubletten_schluessel=f"u{self.nr}-{betrag}", **kw)
+
+    def _lastschriftlauf(self, faellig=None):
+        kunde = self._partner("Kunde Abgleich", kunde=True)
+        mandat = self._mandat(kunde)
+        op = self._op("D", kunde, "503.00", faellig or self.heute)
+        lauf = S.lastschriftvorschlag(self.bank, benutzer=self.user)
+        S.freigeben(lauf, self.user)
+        return S.exportieren(lauf, self.user), op, mandat
+
+    def test_abgleich_lastschrift_automatisch(self):
+        from apps.fibu.bank import automatisch_zuordnen
+
+        lauf, op, _ = self._lastschriftlauf()
+        p = lauf.posten.get()
+        falsch = self._umsatz("500.00", sammlerreferenz=p.pmtinf_id)
+        self.assertEqual(S.abgleich_kandidaten(falsch), [])  # Betrag passt nicht
+        u = self._umsatz("503.00", sammlerreferenz=p.pmtinf_id)
+        self.assertEqual(automatisch_zuordnen([u]), (1, 0, 0))
+        u.refresh_from_db()
+        lauf.refresh_from_db()
+        p.refresh_from_db()
+        self.assertEqual(u.status, "GEBUCHT")
+        self.assertEqual(lauf.status, Zahlungslauf.Status.AUSGEFUEHRT)
+        self.assertEqual(p.status, ZahlungslaufPosten.Status.ABGEGLICHEN)
+        zeilen = {z.konto.nummer: (z.soll, z.haben) for z in u.buchung.zeilen.all()}
+        self.assertEqual(zeilen["1200"], (D("503.00"), D("0")))
+        self.assertEqual(zeilen["1360"], (D("0"), D("503.00")))
+        with self.assertRaises(S.SepaWorkflowFehler):
+            S.stornieren(lauf, self.user)
+
+    def test_abgleich_ueberweisung_per_msgid_und_button(self):
+        from django.urls import reverse
+
+        lauf = SepaWorkflowTests._ueberweisungslauf(self)[0]
+        S.freigeben(lauf, self.user)
+        lauf = S.exportieren(lauf, self.user)
+        u = self._umsatz(str(-lauf.summe), sammlerreferenz=lauf.msg_id)
+        admin = get_user_model().objects.create_superuser("abgl_admin", password="x")
+        self.client.force_login(admin)
+        seite = self.client.get(reverse("fibu:bank_umsatz", args=[u.pk]))
+        self.assertContains(seite, "SEPA-Lauf abgleichen")
+        self.client.post(reverse("fibu:bank_umsatz", args=[u.pk]), {"aktion": "sepa_abgleich"})
+        lauf.refresh_from_db()
+        u.refresh_from_db()
+        self.assertEqual(lauf.status, Zahlungslauf.Status.AUSGEFUEHRT)
+        zeilen = {z.konto.nummer: (z.soll, z.haben) for z in u.buchung.zeilen.all()}
+        self.assertEqual(zeilen["1360"], (lauf.summe, D("0")))
+        self.assertEqual(zeilen["1200"], (D("0"), lauf.summe))
