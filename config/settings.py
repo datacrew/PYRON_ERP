@@ -88,6 +88,7 @@ ERP_APPS = [
     "apps.fibu_mahnwesen",
     "apps.fibu_abschluss",
     "apps.reporting",
+    "apps.dms",
 ]
 
 INSTALLED_APPS = [
@@ -98,6 +99,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "django.contrib.postgres",
     "rest_framework",
     "rest_framework.authtoken",
     "drf_spectacular",

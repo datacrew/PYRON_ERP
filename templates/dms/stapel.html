@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Stapel {{ stapel.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-stack"></i> Stapel {{ stapel.nummer }} <small class="text-muted">{{ stapel.bezeichnung }}</small></h1>
+  <div class="ms-auto"><a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:stapel_liste' %}">Alle Stapel</a></div></div>
+{% include "dms/_nav.html" %}
+{% block stapel_fortschritt %}
+<div class="card mb-3"><div class="card-body">
+  <div class="d-flex small mb-1"><span>Fortschritt: {{ fortschritt.fertig }} von {{ fortschritt.gesamt }} verarbeitet</span><span class="ms-auto">{{ fortschritt.prozent }} %</span></div>
+  <div class="progress"><div class="progress-bar" role="progressbar" style="width: {{ fortschritt.prozent }}%"></div></div>
+</div></div>
+{% endblock %}
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th>Dokument</th><th>Titel</th><th>Art</th><th>Seiten</th><th>Partner</th><th>Status</th><th>Hinweis</th></tr></thead>
+<tbody>{% for d in dokumente %}<tr><td><a href="{% url 'dms:detail' d.pk %}">{{ d.nummer }}</a></td><td>{{ d.titel|truncatechars:50 }}</td><td>{{ d.get_art_display }}</td><td>{{ d.seiten|default:"" }}</td><td>{{ d.partner.name|default:"–" }}</td>
+  <td>{% include "dms/_status.html" with s=d.status text=d.get_status_display %}</td><td class="small text-danger">{{ d.fehlermeldung|truncatechars:60 }}</td></tr>
+{% empty %}<tr><td colspan="7" class="text-muted text-center">Keine Dokumente.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

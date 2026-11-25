@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Dokumente{% endblock %}
+{% block content %}
+{% hat_recht "dms" "anlegen" as darf_anlegen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-archive"></i> Dokumente</h1>
+  <div class="ms-auto">{% if darf_anlegen %}<a class="btn btn-sm btn-primary" href="{% url 'dms:hochladen' %}"><i class="bi bi-upload"></i> Hochladen</a>{% endif %}</div></div>
+{% include "dms/_nav.html" %}
+<form method="get" class="row g-2 mb-3 small">
+  <div class="col-md-3"><input class="form-control form-control-sm" name="q" value="{{ f.q }}" placeholder="Volltextsuche …"></div>
+  <div class="col-md-2"><select class="form-select form-select-sm" name="art"><option value="">alle Arten</option>{% for c, t in arten %}<option value="{{ c }}" {% if f.art == c %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><select class="form-select form-select-sm" name="status"><option value="">jeder Status</option>{% for c, t in status %}<option value="{{ c }}" {% if f.status == c %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></div>
+  <div class="col-md-2"><select class="form-select form-select-sm" name="tag"><option value="">alle Schlagwörter</option>{% for t in tags %}<option value="{{ t.pk }}" {% if f.tag == t.pk|stringformat:"s" %}selected{% endif %}>{{ t.name }}</option>{% endfor %}</select></div>
+  <div class="col-md-1"><input class="form-control form-control-sm" name="partner" value="{{ f.partner }}" placeholder="Partner"></div>
+  <div class="col-md-1"><select class="form-select form-select-sm" name="archiv"><option value="">Archiv?</option><option value="ja" {% if f.archiv == 'ja' %}selected{% endif %}>archiviert</option><option value="nein" {% if f.archiv == 'nein' %}selected{% endif %}>offen</option></select></div>
+  <div class="col-md-1"><button class="btn btn-sm btn-outline-primary w-100">Filtern</button></div>
+</form>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th>Nummer</th><th>Titel</th><th>Art</th><th>Partner</th><th>Datum</th><th>Schlagwörter</th><th>Status</th><th></th></tr></thead>
+<tbody>{% for d in page_obj %}<tr><td><a href="{% url 'dms:detail' d.pk %}">{{ d.nummer }}</a></td><td>{{ d.titel|truncatechars:50 }}</td><td>{{ d.get_art_display }}</td><td>{{ d.partner.name|default:"–" }}</td><td>{{ d.belegdatum|date:"d.m.Y"|default:"" }}</td>
+  <td>{% for t in d.tags.all %}<span class="badge text-bg-{{ t.farbe }}">{{ t.name }}</span> {% endfor %}</td>
+  <td>{% include "dms/_status.html" with s=d.status text=d.get_status_display %}</td><td>{% if d.archiviert %}<i class="bi bi-lock-fill text-secondary" title="revisionssicher archiviert"></i>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="8" class="text-muted text-center">Keine Dokumente gefunden.</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "generic/_seiten.html" %}
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Dokumente (DMS){% endblock %}
+{% block content %}
+{% hat_recht "dms" "anlegen" as darf_anlegen %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-archive"></i> Dokumentenmanagement</h1>
+  <div class="ms-auto">{% if darf_anlegen %}<a class="btn btn-sm btn-primary" href="{% url 'dms:hochladen' %}"><i class="bi bi-upload"></i> Dokumente hochladen</a>{% endif %}</div></div>
+{% include "dms/_nav.html" %}
+<form class="mb-3" method="get" action="{% url 'dms:liste' %}"><div class="input-group"><input class="form-control" name="q" placeholder="Volltextsuche in Dokumenten (OCR-Text, Titel, Nummer) …"><button class="btn btn-outline-primary"><i class="bi bi-search"></i> Suchen</button></div></form>
+<div class="row g-2 mb-3">{% for code, text, n in zaehlung %}
+  <div class="col-6 col-md-3 col-xl"><a class="card text-decoration-none h-100" href="{% url 'dms:liste' %}?status={{ code }}"><div class="card-body py-2"><div class="small text-muted">{{ text }}</div><div class="fs-4 fw-semibold">{{ n }}</div></div></a></div>{% endfor %}
+  <div class="col-6 col-md-3 col-xl"><a class="card text-decoration-none h-100" href="{% url 'dms:liste' %}?archiv=ja"><div class="card-body py-2"><div class="small text-muted">Archiviert</div><div class="fs-4 fw-semibold">{{ archiviert }}</div></div></a></div>
+</div>
+<div class="row g-3">
+  <div class="col-lg-7"><div class="card h-100"><div class="card-header bg-white fw-semibold">Eingangsrechnungen zu prüfen</div><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+    <thead class="table-light"><tr><th>Dokument</th><th>Titel</th><th>Lieferant</th><th>Konfidenz</th><th>Status</th></tr></thead>
+    <tbody>{% for d in zu_pruefen %}<tr><td><a href="{% url 'dms:detail' d.pk %}">{{ d.nummer }}</a></td><td>{{ d.titel|truncatechars:40 }}</td><td>{{ d.partner.name|default:"–" }}</td><td>{% if d.konfidenz is not None %}{{ d.konfidenz|zahl:2 }}{% endif %}</td><td>{% include "dms/_status.html" with s=d.status text=d.get_status_display %}</td></tr>
+    {% empty %}<tr><td colspan="5" class="text-muted text-center">Keine offenen Prüfungen.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-lg-5">
+    <div class="card mb-3"><div class="card-header bg-white fw-semibold">Letzte Stapel</div><ul class="list-group list-group-flush small">{% for s in stapel %}
+      <li class="list-group-item d-flex"><a href="{% url 'dms:stapel' s.pk %}">{{ s.nummer }}</a><span class="ms-2 text-muted">{{ s.bezeichnung|truncatechars:30 }}</span><span class="ms-auto">{{ s.n }} Dok.</span></li>
+    {% empty %}<li class="list-group-item text-muted">Noch keine Stapel.</li>{% endfor %}</ul></div>
+    {% if fehler %}<div class="card border-danger"><div class="card-header bg-white fw-semibold text-danger">Fehler bei der Verarbeitung</div><ul class="list-group list-group-flush small">{% for d in fehler %}
+      <li class="list-group-item"><a href="{% url 'dms:detail' d.pk %}">{{ d.nummer }}</a> {{ d.fehlermeldung|truncatechars:80 }}</li>{% endfor %}</ul></div>{% endif %}
+  </div>
+</div>
+{% endblock %}

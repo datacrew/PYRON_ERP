@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Dokumente hochladen{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3"><i class="bi bi-upload"></i> Dokumente hochladen</h1>
+{% include "dms/_nav.html" %}
+<form method="post" enctype="multipart/form-data">{% csrf_token %}<div class="card"><div class="card-body">
+  {% include "generic/_formfelder.html" %}
+  <div class="form-text mt-2">Erlaubt: PDF, PNG, JPG, TIFF und XML (XRechnung/ZUGFeRD), max. 50 MB je Datei. Alle Dateien landen in einem gemeinsamen Verarbeitungsstapel; jede Datei wird beim Eingang mit SHA-256 versiegelt.</div>
+  <button class="btn btn-primary mt-3"><i class="bi bi-cloud-arrow-up"></i> Hochladen</button>
+</div></div></form>
+{% endblock %}

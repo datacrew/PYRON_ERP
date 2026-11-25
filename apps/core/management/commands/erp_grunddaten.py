@@ -45,6 +45,8 @@ NUMMERNKREISE = [
     # Phase 5 – Vertrieb und Versand
     ("VK_AUFTRAG", "Kundenaufträge", "VA-", True, 5), ("TOUR", "Versandtouren", "TO-", True, 5),
     ("EDI", "EDIFACT-Übertragungsnummern (UNB)", "", False, 8),
+    # Dokumentenmanagement (DMS)
+    ("DMS_DOKUMENT", "DMS-Dokumente", "DOK-", True, 5), ("DMS_STAPEL", "DMS-Verarbeitungsstapel", "ST-", True, 4),
 ]
 
 L, A, AE, F, D = AKTION_CODES  # lesen, anlegen, aendern, freigeben, loeschen
@@ -53,10 +55,11 @@ ROLLEN = {
     "Administrator": ("Vollzugriff auf alle Module inkl. Verwaltung", {"*": ALLE}),
     "Einkauf": ("Einkauf, Lieferanten- und Artikelpflege, Bestellungen",
                 {"stammdaten": [L, A, AE], "einkauf": ALLE, "wareneingang": [L, A], "lager": [L],
-                 "belege": [L, A, AE, F], "reporting": [L]}),
+                 "belege": [L, A, AE, F], "reporting": [L], "dms": [L, A]}),
     "Vertrieb": ("Kundenbetreuung, Angebote, Aufträge, Rechnungen",
                  {"stammdaten": [L, A, AE], "vertrieb": ALLE, "belege": [L, A, AE, F, D], "versand": [L],
-                  "edi": ALLE, "shopapi": [L, A, AE], "lager": [L], "produktion": [L, A], "reporting": [L]}),
+                  "edi": ALLE, "shopapi": [L, A, AE], "lager": [L], "produktion": [L, A], "reporting": [L],
+                  "dms": [L]}),
     "Produktion": ("Fertigungsaufträge, Rückmeldungen, Stücklisten, Arbeitspläne, Stempel-Terminal",
                    {"stammdaten": [L, A, AE], "produktion": ALLE, "bde": [L, A], "wareneingang": [L],
                     "lager": [L, A]}),
@@ -66,11 +69,11 @@ ROLLEN = {
     "Terminal": ("Nur Stempel-Terminal (Kiosk-Benutzer an der Fertigungsstation)", {"bde": [L, A]}),
     "Lager": ("Lagerbestand, Wareneingang inkl. Qualitätsprüfung und Versand",
               {"stammdaten": [L], "lager": ALLE, "wareneingang": ALLE, "versand": ALLE, "einkauf": [L],
-               "belege": [L], "vertrieb": [L], "reporting": [L]}),
+               "belege": [L], "vertrieb": [L], "reporting": [L], "dms": [L, A]}),
     "Buchhaltung": ("Finanzbuchhaltung, Belegprüfung und Festschreibung",
                     {"stammdaten": [L, AE], "fibu": ALLE, "fibu_bank": ALLE, "fibu_mahnwesen": ALLE,
                      "fibu_abschluss": ALLE, "belege": [L, F], "reporting": [L], "lager": [L],
-                     "einkauf": [L], "wareneingang": [L], "produktion": [L], "akkord": [L]}),
+                     "einkauf": [L], "wareneingang": [L], "produktion": [L], "akkord": [L], "dms": ALLE}),
     "Nur Lesen": ("Lesezugriff auf alle Fachmodule (ohne Lohndaten)", {"*-verwaltung": [L]}),
 }
 
