@@ -13,7 +13,7 @@
 <div class="row g-3">
   <div class="col-lg-7"><div class="card h-100"><div class="card-header bg-white fw-semibold">Eingangsrechnungen zu prüfen</div><div class="table-responsive"><table class="table table-sm table-hover mb-0">
     <thead class="table-light"><tr><th>Dokument</th><th>Titel</th><th>Lieferant</th><th>Konfidenz</th><th>Status</th></tr></thead>
-    <tbody>{% for d in zu_pruefen %}<tr><td><a href="{% url 'dms:detail' d.pk %}">{{ d.nummer }}</a></td><td>{{ d.titel|truncatechars:40 }}</td><td>{{ d.partner.name|default:"–" }}</td><td>{% if d.konfidenz is not None %}{{ d.konfidenz|zahl:2 }}{% endif %}</td><td>{% include "dms/_status.html" with s=d.status text=d.get_status_display %}</td></tr>
+    <tbody>{% for d in zu_pruefen %}<tr><td><a href="{% url 'dms:pruefen' d.pk %}">{{ d.nummer }}</a></td><td>{{ d.titel|truncatechars:40 }}</td><td>{{ d.partner.name|default:"–" }}</td><td>{% if d.konfidenz is not None %}{{ d.konfidenz|zahl:2 }}{% endif %}</td><td>{% include "dms/_status.html" with s=d.status text=d.get_status_display %}</td></tr>
     {% empty %}<tr><td colspan="5" class="text-muted text-center">Keine offenen Prüfungen.</td></tr>{% endfor %}</tbody></table></div></div></div>
   <div class="col-lg-5">
     <div class="card mb-3"><div class="card-header bg-white fw-semibold">Letzte Stapel</div><ul class="list-group list-group-flush small">{% for s in stapel %}

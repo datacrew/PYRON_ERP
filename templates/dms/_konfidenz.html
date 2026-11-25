@@ -1,0 +1,1 @@
+{% if k is not None and k != "" %}<span class="badge rounded-pill text-bg-{% if k >= 0.9 %}success{% elif k >= 0.6 %}warning{% else %}danger{% endif %} ms-1" title="Konfidenz der Erkennung">{% widthratio k 1 100 %} %</span>{% else %}<span class="badge rounded-pill text-bg-light border ms-1" title="nicht erkannt">–</span>{% endif %}

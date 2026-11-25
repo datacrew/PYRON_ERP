@@ -6,6 +6,7 @@
   {% include "dms/_status.html" with s=d.status text=d.get_status_display %}{% if d.archiviert %} <span class="badge text-bg-dark"><i class="bi bi-lock-fill"></i> archiviert bis {{ d.aufbewahren_bis|date:"d.m.Y" }}</span>{% endif %}</h1>
   <div class="ms-auto d-flex gap-2">
     {% block detail_aktionen %}{% endblock %}
+    {% if d.art == 'ER' and d.erkennung %}<a class="btn btn-sm {% if d.status == 'PRUEFEN' or d.status == 'ERKANNT' %}btn-warning{% else %}btn-outline-secondary{% endif %}" href="{% url 'dms:pruefen' d.pk %}"><i class="bi bi-ui-checks"></i> Prüfmaske</a>{% endif %}
     {% if darf_anlegen and not d.archiviert and not d.aufgeteilt and not d.eingangsrechnung and d.seiten > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:trennen' d.pk %}"><i class="bi bi-scissors"></i> Trennen</a>{% endif %}
     {% if darf_anlegen and not d.archiviert and d.status != 'GEBUCHT' %}<form method="post" action="{% url 'dms:verarbeiten' d.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-primary" title="Texterkennung (erneut) ausführen"><i class="bi bi-cpu"></i> {% if d.status == 'NEU' %}Verarbeiten{% else %}Erneut verarbeiten{% endif %}</button></form>{% endif %}
     <a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:datei' d.pk %}?download=1"><i class="bi bi-download"></i> Download</a>

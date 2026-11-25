@@ -12,11 +12,13 @@ from django.views.decorators.http import require_POST
 
 from apps.core.permissions import hat_recht, recht_erforderlich
 
+from . import pruefung as P
 from . import services as S
 from . import trennung as TR
 from . import verarbeitung as V
-from .forms import MetadatenForm, TagForm, UploadForm, VersionForm
-from .models import Dokument, DokumentVersion, DmsGesperrt, Dokumentart, Stapel, Tag
+from .forms import (MetadatenForm, PruefKopfForm, PruefPositionFormSet, RegelForm, TagForm, UploadForm,
+                    VersionForm)
+from .models import Dokument, DokumentVersion, DmsGesperrt, Dokumentart, Kontierungsregel, Stapel, Tag
 
 M = "dms"
 FEHLER = (S.DmsFehler, DmsGesperrt)
@@ -317,3 +319,82 @@ def tags(request):
             return redirect("dms:tags")
     return render(request, "dms/tags.html", {"form": form, "aktiv": "tags",
                                              "tags": Tag.objects.annotate(n=Count("dokumente"))})
+
+
+# ------------------------------------------------------------------ Prüfmaske Eingangsrechnung
+
+@recht_erforderlich(M)
+def pruefen(request, pk):
+    """Split-Ansicht: Dokument links, erkannte Kopfdaten und Positionen rechts (korrigierbar)."""
+    d = get_object_or_404(Dokument.objects.select_related("partner", "eingangsrechnung"), pk=pk)
+    if d.art != Dokumentart.EINGANGSRECHNUNG:
+        messages.info(request, "Die Prüfmaske gibt es nur für Eingangsrechnungen.")
+        return redirect("dms:detail", pk)
+    darf = hat_recht(request.user, M, "anlegen") and P.bearbeitbar(d)
+    kopf_init, pos_init = P.formular_daten(d)
+    if request.method == "POST":
+        if not darf:
+            raise PermissionDenied
+        if request.POST.get("aktion") == "kontierung":
+            try:
+                P.kontierung_neu(d, request.user)
+            except FEHLER as exc:
+                _fehler(request, exc)
+            else:
+                messages.success(request, "Kontierungsvorschlag neu ermittelt.")
+            return redirect("dms:pruefen", pk)
+        kopf = PruefKopfForm(request.POST, prefix="kopf")
+        pos = PruefPositionFormSet(request.POST, prefix="pos")
+        if kopf.is_valid() and pos.is_valid():
+            positionen = [f.cleaned_data for f in pos.forms
+                          if f.cleaned_data and not f.cleaned_data.get("DELETE") and not f.leer()]
+            try:
+                erg = P.korrektur_speichern(d, kopf.cleaned_data, positionen, request.user)
+            except FEHLER as exc:
+                _fehler(request, exc)
+            else:
+                if P.fehler(erg):
+                    messages.warning(request, "Gespeichert – es bestehen noch Plausibilitätsfehler.")
+                else:
+                    messages.success(request, "Gespeichert – die Rechnung ist plausibel.")
+                return redirect("dms:pruefen", pk)
+        else:
+            messages.error(request, "Bitte die markierten Eingaben prüfen.")
+    else:
+        kopf = PruefKopfForm(initial=kopf_init, prefix="kopf")
+        pos = PruefPositionFormSet(initial=pos_init, prefix="pos")
+    if not darf:
+        for f in [kopf, *pos.forms]:
+            for feld in f.fields.values():
+                feld.disabled = True
+    erg = d.erkennung or {}
+    konfidenz = {k: v.get("konfidenz") for k, v in (erg.get("felder") or {}).items()}
+    lieferant = erg.get("lieferant") or {}
+    if lieferant:
+        konfidenz["lieferant"] = lieferant.get("konfidenz")
+    return render(request, "dms/pruefen.html", {
+        "d": d, "kopf": kopf, "pos": pos, "darf": darf, "erg": erg, "konfidenz": konfidenz,
+        "positionen_erkannt": erg.get("positionen", []), "lieferant": lieferant,
+        "aktiv": "liste"})
+
+
+@recht_erforderlich(M)
+def regeln(request):
+    """Lernregeln (Kontierungsvorschläge je Lieferant) ansehen und pflegen."""
+    form = RegelForm(request.POST or None)
+    if request.method == "POST":
+        if not hat_recht(request.user, M, "aendern"):
+            raise PermissionDenied
+        if request.POST.get("loeschen"):
+            Kontierungsregel.objects.filter(pk=request.POST["loeschen"]).delete()
+            messages.success(request, "Regel gelöscht.")
+            return redirect("dms:regeln")
+        if form.is_valid():
+            r = form.save(commit=False)
+            r.gelernt = False
+            r.save()
+            messages.success(request, "Regel angelegt.")
+            return redirect("dms:regeln")
+    return render(request, "dms/regeln.html", {
+        "form": form, "aktiv": "regeln",
+        "regeln": Kontierungsregel.objects.select_related("partner", "konto")})

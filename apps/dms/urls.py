@@ -21,6 +21,8 @@ urlpatterns = [
     path("stapel/<int:pk>/verarbeiten/", views.stapel_verarbeiten, name="stapel_verarbeiten"),
     path("dokumente/<int:pk>/trennen/", views.trennen, name="trennen"),
     path("trennblatt.pdf", views.trennblatt, name="trennblatt"),
+    path("dokumente/<int:pk>/pruefen/", views.pruefen, name="pruefen"),
+    path("lernregeln/", views.regeln, name="regeln"),
     path("fristen/", views.fristen, name="fristen"),
     path("schlagwoerter/", views.tags, name="tags"),
 ]

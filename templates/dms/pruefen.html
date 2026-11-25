@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Prüfen {{ d.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3 flex-wrap gap-2"><h1 class="h4 m-0"><i class="bi bi-ui-checks"></i> Rechnung prüfen <small class="text-muted">{{ d.nummer }} · {{ d.titel }}</small>
+  {% include "dms/_status.html" with s=d.status text=d.get_status_display %}{% if d.konfidenz is not None %} <span class="badge text-bg-light border">Konfidenz {{ d.konfidenz|zahl:2 }}</span>{% endif %}</h1>
+  <div class="ms-auto d-flex gap-2">
+    {% block pruefen_aktionen %}{% endblock %}
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:detail' d.pk %}"><i class="bi bi-file-earmark-text"></i> Dokument</a>
+  </div></div>
+{% include "dms/_nav.html" %}
+{% if not erg %}<div class="alert alert-info small">Für dieses Dokument liegt noch keine Belegerkennung vor – bitte zuerst verarbeiten.</div>{% endif %}
+{% if d.eingangsrechnung %}<div class="alert alert-success small"><i class="bi bi-check-circle"></i> Verbucht als Eingangsrechnung <a href="{% url 'fibu:er' d.eingangsrechnung.pk %}">{{ d.eingangsrechnung.nummer }}</a>{% if d.buchung %} · Buchung <a href="{% url 'fibu:buchung' d.buchung.pk %}">{{ d.buchung.nummer }}</a>{% endif %}.</div>{% endif %}
+<div class="row g-3">
+  <div class="col-xl-5"><div class="position-sticky" style="top:1rem">{% if d.anzeigeversion %}<iframe class="w-100 border rounded bg-light" style="height:82vh" src="{% url 'dms:datei' d.pk %}" title="Rechnung"></iframe>{% else %}<p class="text-muted">Keine Datei.</p>{% endif %}</div></div>
+  <div class="col-xl-7">
+    <form method="post" id="pruefform">{% csrf_token %}
+    {% with p=erg.plausibilitaet %}{% if p %}<div class="card mb-3"><div class="card-header bg-white fw-semibold">Plausibilitätsprüfung</div><ul class="list-group list-group-flush small">
+      {% for m in p %}<li class="list-group-item py-1 {% if m.stufe == 'fehler' %}list-group-item-danger{% elif m.stufe == 'warnung' %}list-group-item-warning{% endif %}"><i class="bi {% if m.stufe == 'fehler' %}bi-x-octagon{% elif m.stufe == 'warnung' %}bi-exclamation-triangle{% else %}bi-check2 text-success{% endif %}"></i> {{ m.text }}</li>{% endfor %}</ul></div>{% endif %}{% endwith %}
+    <div class="card mb-3"><div class="card-header bg-white fw-semibold d-flex"><span>Kopfdaten</span><span class="ms-auto small text-muted">Quelle: {% if erg.quelle == 'xml' %}E-Rechnung (XML){% elif erg.quelle %}Text ({{ d.textquelle }}){% else %}–{% endif %}{% if erg.korrigiert %} · manuell korrigiert{% endif %}</span></div>
+      <div class="card-body"><div class="row g-2 small">
+        {% include "dms/_kopffeld.html" with feld=kopf.lieferant k=konfidenz.lieferant breite="col-md-8" %}
+        <div class="col-md-4 small text-muted pt-4">{% if lieferant.methode %}zugeordnet per {{ lieferant.methode }}{% elif erg.felder.lieferant_name %}erkannt: „{{ erg.felder.lieferant_name.wert }}“{% endif %}</div>
+        {% include "dms/_kopffeld.html" with feld=kopf.rechnungsnummer k=konfidenz.rechnungsnummer breite="col-md-4" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.rechnungsdatum k=konfidenz.rechnungsdatum breite="col-md-4" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.faellig_am k=konfidenz.faellig_am breite="col-md-4" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.zahlungsbedingung k=konfidenz.zahlungsbedingung breite="col-md-12" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.iban k=konfidenz.iban %}
+        {% include "dms/_kopffeld.html" with feld=kopf.ust_id k=konfidenz.ust_id %}
+        {% include "dms/_kopffeld.html" with feld=kopf.netto k=konfidenz.netto breite="col-md-4" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.steuer k=konfidenz.steuer breite="col-md-4" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.brutto k=konfidenz.brutto breite="col-md-4" %}
+      </div>
+      {% if erg.steuersaetze %}<div class="small text-muted mt-2">Ausgewiesene Steuer: {% for s in erg.steuersaetze %}{{ s.satz }} %{% if s.basis %} auf {{ s.basis }}{% endif %} = {{ s.betrag }} €{% if not forloop.last %} · {% endif %}{% endfor %}</div>{% endif %}
+      </div></div>
+    <div class="card mb-3"><div class="card-header bg-white fw-semibold d-flex align-items-center"><span>Positionen und Kontierung</span>
+      {% if darf %}<button class="btn btn-sm btn-outline-secondary ms-auto" name="aktion" value="kontierung" formnovalidate title="Kontierung aus Lernregeln/früheren Buchungen neu vorschlagen"><i class="bi bi-magic"></i> Kontierung neu vorschlagen</button>{% endif %}</div>
+      {{ pos.management_form }}
+      <div class="table-responsive"><table class="table table-sm mb-0 small align-middle" id="positionen">
+        <thead class="table-light"><tr><th style="min-width:14rem">Beschreibung</th><th style="width:6rem">Menge</th><th style="width:7rem">Einzelpreis</th><th style="width:7rem">Betrag</th><th style="width:5rem">USt %</th><th style="min-width:9rem">Steuerschl.</th><th style="min-width:11rem">Konto</th><th title="Konfidenz / Vorschlagsquelle"></th><th title="Löschen"><i class="bi bi-trash"></i></th></tr></thead>
+        <tbody>{% for f in pos.forms %}<tr>
+          <td>{{ f.beschreibung }}{% for e in f.non_field_errors %}<div class="text-danger">{{ e }}</div>{% endfor %}</td><td>{{ f.menge }}</td><td>{{ f.einzelpreis }}{% for e in f.einzelpreis.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}</td><td>{{ f.betrag }}</td><td>{{ f.steuersatz }}</td><td>{{ f.steuerschluessel }}</td><td>{{ f.konto }}</td>
+          <td class="text-nowrap">{% for p in positionen_erkannt %}{% if forloop.counter0 == forloop.parentloop.counter0 %}{% include "dms/_konfidenz.html" with k=p.konfidenz %}{% if p.kontoquelle %}<div class="text-muted" style="font-size:.75em">{{ p.kontoquelle }}</div>{% endif %}{% endif %}{% endfor %}</td>
+          <td>{{ f.DELETE }}</td></tr>{% endfor %}</tbody></table></div>
+      <div class="card-footer bg-white small text-muted" id="summenhinweis"></div>
+    </div>
+    {% if darf %}<div class="d-flex gap-2 flex-wrap">
+      <button class="btn btn-primary" name="aktion" value="speichern"><i class="bi bi-save"></i> Speichern und prüfen</button>
+      {% block pruefen_buttons %}{% endblock %}
+    </div>{% elif not d.eingangsrechnung %}<p class="small text-muted">Nur ansehen – zum Korrigieren ist das Recht „DMS anlegen“ nötig bzw. das Dokument ist nicht im Status „Erkannt“/„Zu prüfen“.</p>{% endif %}
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  const tabelle = document.getElementById("positionen"), hinweis = document.getElementById("summenhinweis");
+  const zahl = (el) => { const v = parseFloat((el && el.value || "").replace(",", ".")); return isNaN(v) ? 0 : v; };
+  function rechnen() {
+    let summe = 0;
+    tabelle.querySelectorAll("tbody tr").forEach((tr) => {
+      const m = tr.querySelector("[name$='-menge']"), ep = tr.querySelector("[name$='-einzelpreis']"),
+            b = tr.querySelector("[name$='-betrag']"), del = tr.querySelector("[name$='-DELETE']");
+      if (del && del.checked) return;
+      summe += zahl(b);
+    });
+    const netto = zahl(document.querySelector("[name='kopf-netto']"));
+    const diff = Math.round((summe - netto) * 100) / 100;
+    hinweis.textContent = "Summe Positionen: " + summe.toFixed(2).replace(".", ",") + " € · Netto laut Kopf: " +
+      netto.toFixed(2).replace(".", ",") + " €" + (diff ? " · Differenz " + diff.toFixed(2).replace(".", ",") + " €" : " ✓");
+    hinweis.className = "card-footer bg-white small " + (diff ? "text-danger" : "text-success");
+  }
+  tabelle.addEventListener("input", (e) => {
+    const tr = e.target.closest("tr");
+    if (e.target.name && (e.target.name.endsWith("-menge") || e.target.name.endsWith("-einzelpreis"))) {
+      const m = zahl(tr.querySelector("[name$='-menge']")) || 1, ep = zahl(tr.querySelector("[name$='-einzelpreis']"));
+      if (ep) tr.querySelector("[name$='-betrag']").value = (Math.round(m * ep * 100) / 100).toFixed(2);
+    }
+    rechnen();
+  });
+  document.querySelector("[name='kopf-netto']").addEventListener("input", rechnen);
+  rechnen();
+})();
+</script>
+{% endblock %}

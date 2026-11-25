@@ -582,3 +582,95 @@ class BelegerkennungTests(DmsTestBasis):
         V.verarbeiten(d)
         self.assertEqual(d.status, Dokument.Status.ERKANNT)
         self.assertEqual(d.erkennung, {})
+
+
+# ------------------------------------------------------------------ Prüfmaske
+
+class PruefmaskeTests(DmsTestBasis):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.lieferant = Geschaeftspartner.objects.create(name="Bürobedarf Schneider GmbH", ist_lieferant=True,
+                                                         ust_id="DE811569869")
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def er(self, r=None):
+        d = S.dokument_anlegen(T.pdf(r), "re.pdf", art=Dokumentart.EINGANGSRECHNUNG, benutzer=self.user)
+        V.verarbeiten(d, self.user)
+        return d
+
+    def post_daten(self, d, **kopf):
+        from . import pruefung as P
+
+        k, positionen = P.formular_daten(d)
+        k.update(kopf)
+        daten = {"aktion": "speichern", "pos-TOTAL_FORMS": str(len(positionen)), "pos-INITIAL_FORMS": "0",
+                 "pos-MIN_NUM_FORMS": "0", "pos-MAX_NUM_FORMS": "1000"}
+        for name, wert in k.items():
+            daten[f"kopf-{name}"] = "" if wert is None else (wert.isoformat() if hasattr(wert, "isoformat") else wert)
+        for i, p in enumerate(positionen):
+            for name, wert in p.items():
+                daten[f"pos-{i}-{name}"] = "" if wert is None else wert
+        return daten
+
+    def test_split_view(self):
+        d = self.er()
+        r = self.client.get(reverse("dms:pruefen", args=[d.pk]))
+        self.assertContains(r, "Plausibilitätsprüfung")
+        self.assertContains(r, 'value="RE-2026-0815"')
+        self.assertContains(r, reverse("dms:datei", args=[d.pk]))  # Dokument links (iframe)
+        self.assertContains(r, "Toner schwarz HP 26A")
+        self.assertContains(r, "Standard-Aufwand")
+
+    def test_korrektur_lieferant_und_konto(self):
+        d = self.er(T.beispiel(ust_id="DE999999999", lieferant="Unbekannt & Co"))
+        self.assertEqual(d.status, Dokument.Status.PRUEFEN)
+        daten = self.post_daten(d, lieferant=self.lieferant.pk)
+        daten["pos-0-konto"] = "4930"
+        r = self.client.post(reverse("dms:pruefen", args=[d.pk]), daten)
+        self.assertRedirects(r, reverse("dms:pruefen", args=[d.pk]))
+        d.refresh_from_db()
+        self.assertEqual(d.status, Dokument.Status.ERKANNT, d.erkennung["plausibilitaet"])
+        self.assertEqual(d.partner, self.lieferant)
+        self.assertEqual(d.erkennung["lieferant"]["methode"], "manuell")
+        self.assertEqual(d.erkennung["positionen"][0]["konto"], "4930")
+        self.assertEqual(d.erkennung["positionen"][0]["kontoquelle"], "manuell")
+        self.assertTrue(d.erkennung["korrigiert"])
+        self.assertIn("lieferant", d.protokoll.filter(aktion="Korrektur").last().text)
+
+    def test_korrektur_mit_summenfehler_bleibt_zu_pruefen(self):
+        d = self.er()
+        r = self.client.post(reverse("dms:pruefen", args=[d.pk]), self.post_daten(d, brutto="400.00"))
+        self.assertEqual(r.status_code, 302)
+        d.refresh_from_db()
+        self.assertEqual(d.status, Dokument.Status.PRUEFEN)
+        self.assertEqual(d.wert("brutto"), "400.00")
+        self.assertTrue(d.erkennung["felder"]["brutto"]["manuell"])
+
+    def test_position_hinzufuegen_und_loeschen(self):
+        d = self.er()
+        daten = self.post_daten(d, netto="223.00", steuer="42.37", brutto="265.37")
+        daten["pos-2-DELETE"] = "on"  # Kaffee (7 %) entfernen
+        self.client.post(reverse("dms:pruefen", args=[d.pk]), daten)
+        d.refresh_from_db()
+        self.assertEqual(len(d.erkennung["positionen"]), 2)
+        self.assertEqual(d.status, Dokument.Status.ERKANNT, d.erkennung["plausibilitaet"])
+
+    def test_nur_lesen_darf_nicht_korrigieren(self):
+        d = self.er()
+        leser = get_user_model().objects.create_user("leser", password="x")
+        leser.erp_rollen.add(Rolle.objects.get(name="Vertrieb"))  # dms: nur lesen
+        self.client.force_login(leser)
+        self.assertEqual(self.client.get(reverse("dms:pruefen", args=[d.pk])).status_code, 200)
+        r = self.client.post(reverse("dms:pruefen", args=[d.pk]), self.post_daten(d))
+        self.assertEqual(r.status_code, 403)
+
+    def test_lernregeln_seite(self):
+        from apps.fibu import services as F
+
+        r = self.client.post(reverse("dms:regeln"), {"partner": self.lieferant.pk, "stichwort": "toner",
+                                                     "konto": F.konto("4930").pk, "steuerschluessel": "V19"})
+        self.assertRedirects(r, reverse("dms:regeln"))
+        self.assertContains(self.client.get(reverse("dms:regeln")), "toner")

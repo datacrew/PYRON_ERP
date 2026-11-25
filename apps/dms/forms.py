@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 
 from apps.core.forms import ErpForm, ErpModelForm
@@ -98,3 +100,92 @@ class RegelForm(ErpModelForm):
     class Meta:
         model = Kontierungsregel
         fields = ["partner", "stichwort", "konto", "steuerschluessel"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["partner"].queryset = Geschaeftspartner.objects.filter(aktiv=True, ist_lieferant=True)
+        self.fields["konto"].queryset = _aufwandskonten()
+        self.fields["steuerschluessel"] = forms.ChoiceField(label="Steuerschlüssel (optional)", required=False,
+                                                            choices=_vorsteuer_schluessel())
+        self.fields["steuerschluessel"].widget.attrs["class"] = "form-select form-select-sm"
+
+
+# ------------------------------------------------------------------ Prüfmaske Eingangsrechnung
+
+def _vorsteuer_schluessel():
+    from apps.fibu.models import Steuerschluessel
+    from apps.fibu.services import rahmen
+
+    return [("", "– bitte wählen –")] + [
+        (s.code, f"{s.code} – {s.bezeichnung}") for s in Steuerschluessel.objects.filter(
+            kontenrahmen=rahmen(), aktiv=True, art__in=["VST", "IGE", "RC", "FREI"]).order_by("code")]
+
+
+def _aufwandskonten():
+    from apps.fibu.services import rahmen
+    from apps.stammdaten.models import Konto
+
+    return Konto.objects.filter(kontenrahmen=rahmen(), aktiv=True, kontoart__in=["aufwand", "aktiv"],
+                                partner__isnull=True).order_by("nummer")
+
+
+class PruefKopfForm(ErpForm):
+    """Kopfdaten der erkannten Eingangsrechnung (korrigierbar)."""
+
+    lieferant = forms.ModelChoiceField(label="Lieferant", required=False,
+                                       queryset=Geschaeftspartner.objects.filter(aktiv=True, ist_lieferant=True))
+    rechnungsnummer = forms.CharField(label="Rechnungsnummer", max_length=60, required=False)
+    rechnungsdatum = forms.DateField(label="Rechnungsdatum", required=False,
+                                     widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"))
+    faellig_am = forms.DateField(label="Fällig am", required=False,
+                                 widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"))
+    zahlungsbedingung = forms.CharField(label="Zahlungsbedingung", max_length=200, required=False)
+    iban = forms.CharField(label="IBAN", max_length=34, required=False)
+    ust_id = forms.CharField(label="USt-IdNr. Lieferant", max_length=20, required=False)
+    netto = forms.DecimalField(label="Netto", max_digits=14, decimal_places=2, required=False)
+    steuer = forms.DecimalField(label="Steuer", max_digits=14, decimal_places=2, required=False)
+    brutto = forms.DecimalField(label="Brutto", max_digits=14, decimal_places=2, required=False)
+
+    def clean_iban(self):
+        from .erkennung import iban_gueltig
+
+        iban = self.cleaned_data["iban"].replace(" ", "").upper()
+        if iban and not iban_gueltig(iban):
+            raise forms.ValidationError("IBAN ist ungültig (Prüfziffer).")
+        return iban
+
+
+class PruefPositionForm(ErpForm):
+    beschreibung = forms.CharField(label="Beschreibung", max_length=200, required=False)
+    menge = forms.DecimalField(label="Menge", max_digits=12, decimal_places=3, required=False)
+    einzelpreis = forms.DecimalField(label="Einzelpreis", max_digits=12, decimal_places=4, required=False)
+    betrag = forms.DecimalField(label="Betrag netto", max_digits=14, decimal_places=2, required=False)
+    steuersatz = forms.DecimalField(label="USt %", max_digits=5, decimal_places=2, required=False)
+    steuerschluessel = forms.ChoiceField(label="Steuerschlüssel", required=False)
+    konto = forms.ModelChoiceField(label="Konto", required=False, queryset=None, to_field_name="nummer")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["steuerschluessel"].choices = _vorsteuer_schluessel()
+        self.fields["konto"].queryset = _aufwandskonten()
+
+    def leer(self):
+        d = getattr(self, "cleaned_data", {}) or {}
+        return not any(d.get(f) not in (None, "") for f in ("beschreibung", "menge", "einzelpreis", "betrag"))
+
+    def clean(self):
+        d = super().clean()
+        if self.leer() or d.get("DELETE"):
+            return d
+        if d.get("menge") in (None, 0):
+            d["menge"] = Decimal("1")
+        if d.get("einzelpreis") is None and d.get("betrag") is not None:
+            d["einzelpreis"] = (d["betrag"] / d["menge"]).quantize(Decimal("0.0001"))
+        if d.get("einzelpreis") is None:
+            self.add_error("einzelpreis", "Einzelpreis oder Betrag angeben.")
+        elif d.get("betrag") is None:
+            d["betrag"] = (d["menge"] * d["einzelpreis"]).quantize(Decimal("0.01"))
+        return d
+
+
+PruefPositionFormSet = forms.formset_factory(PruefPositionForm, extra=1, can_delete=True)
