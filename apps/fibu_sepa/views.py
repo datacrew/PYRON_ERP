@@ -217,3 +217,14 @@ def lauf_xml(request, pk):
     antwort = HttpResponse(lauf.xml_inhalt.encode("utf-8"), content_type="application/xml; charset=utf-8")
     antwort["Content-Disposition"] = f'attachment; filename="{lauf.xml_dateiname or lauf.nummer + ".xml"}"'
     return antwort
+
+
+# ------------------------------------------------------------------ Rücklastschriften
+
+@recht_erforderlich(M)
+def ruecklastschriften(request):
+    from .models import Ruecklastschrift
+
+    qs = Ruecklastschrift.objects.select_related("posten__lauf", "posten__partner", "posten__op", "bankumsatz", "buchung")
+    page_obj = Paginator(qs, 50).get_page(request.GET.get("page"))
+    return render(request, "fibu_sepa/ruecklastschriften.html", {"page_obj": page_obj, "aktiv": "ruecklastschriften"})

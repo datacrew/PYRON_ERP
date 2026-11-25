@@ -46,6 +46,7 @@ NUMMERNKREISE = [
     ("SEPA_MANDAT", "SEPA-Mandatsreferenzen", "MANDAT-", False, 6),
     ("SEPA_UEBERWEISUNG", "SEPA-Überweisungsläufe", "ZL-", True, 4),
     ("SEPA_LASTSCHRIFT", "SEPA-Lastschriftläufe", "LL-", True, 4),
+    ("SEPA_RUECKLAST", "SEPA-Rücklastschriften", "RL-", True, 4),
     # Phase 5 – Vertrieb und Versand
     ("VK_AUFTRAG", "Kundenaufträge", "VA-", True, 5), ("TOUR", "Versandtouren", "TO-", True, 5),
     ("EDI", "EDIFACT-Übertragungsnummern (UNB)", "", False, 8),

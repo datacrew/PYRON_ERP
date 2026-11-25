@@ -14,6 +14,7 @@ urlpatterns = [
     path("lauf/<int:pk>/stornieren/", views.lauf_stornieren, name="lauf_stornieren"),
     path("lauf/<int:pk>/verwerfen/", views.lauf_verwerfen, name="lauf_verwerfen"),
     path("lauf/<int:pk>/xml/", views.lauf_xml, name="lauf_xml"),
+    path("ruecklastschriften/", views.ruecklastschriften, name="ruecklastschriften"),
     path("mandate/", views.mandate, name="mandate"),
     path("mandate/neu/", views.mandat_form, name="mandat_neu"),
     path("mandate/<int:pk>/", views.mandat_detail, name="mandat"),

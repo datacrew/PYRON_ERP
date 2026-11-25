@@ -419,3 +419,71 @@ def lauf_abgleichen(umsatz, benutzer=None):
         umsatz.buchung, umsatz.status = b, Bankumsatz.Status.GEBUCHT
         umsatz.save(update_fields=["buchung", "status"])
     return lauf
+
+
+# ------------------------------------------------------------------ 7. Rücklastschrift verarbeiten
+
+def ruecklastschrift_posten(umsatz):
+    """Zurückgegebener Posten: zuerst über die EndToEndId, sonst über Betrag + Referenz (Sammler/Zweck)."""
+    qs = (ZahlungslaufPosten.objects.filter(lauf__exportiert_am__isnull=False, ausgewaehlt=True)
+          .exclude(lauf__status=Zahlungslauf.Status.STORNIERT).exclude(status=ZahlungslaufPosten.Status.ZURUECK)
+          .select_related("lauf", "op", "mandat"))
+    ref = (umsatz.referenz or "").strip()
+    if ref:
+        treffer = list(qs.filter(end_to_end_id=ref))
+        if len(treffer) == 1:
+            return treffer[0]
+    betrag = abs(fibu.q(umsatz.betrag))
+    texte = " ".join(filter(None, [umsatz.sammlerreferenz, umsatz.verwendungszweck, ref]))
+    treffer = [p for p in qs.filter(betrag__lte=betrag)
+               if texte and any(x and x in texte for x in (p.end_to_end_id, p.pmtinf_id, p.lauf.msg_id))]
+    if len(treffer) == 1:
+        return treffer[0]
+    raise SepaWorkflowFehler("Kein eindeutiger SEPA-Posten zur Rückbuchung gefunden (EndToEndId bzw. Betrag + "
+                             "Referenz).")
+
+
+def ruecklastschrift_verarbeiten(umsatz, posten=None, gebuehr=None, benutzer=None):
+    """Rückbuchung: Debitor + Nebenkosten des Geldverkehrs an Bank; OP per Gegen-Ausgleich wieder geöffnet."""
+    from apps.fibu.models import Ausgleich, Bankumsatz
+
+    with transaction.atomic():
+        umsatz = Bankumsatz.objects.select_for_update().select_related("bankkonto__konto").get(pk=umsatz.pk)
+        if umsatz.status != Bankumsatz.Status.OFFEN:
+            raise SepaWorkflowFehler("Der Bankumsatz ist bereits zugeordnet.")
+        if umsatz.betrag >= 0:
+            raise SepaWorkflowFehler("Eine Rücklastschrift ist eine Belastung (negativer Betrag).")
+        posten = posten or ruecklastschrift_posten(umsatz)
+        posten = ZahlungslaufPosten.objects.select_for_update(of=("self",)).select_related("lauf", "op", "mandat").get(
+            pk=posten.pk)
+        if not posten.lauf.ist_lastschrift or posten.status == ZahlungslaufPosten.Status.ZURUECK:
+            raise SepaWorkflowFehler("Der Posten ist keine offene Lastschrift oder bereits zurückgegeben.")
+        gesamt = abs(fibu.q(umsatz.betrag))
+        gebuehr = fibu.q(gebuehr) if gebuehr not in (None, "") else gesamt - posten.betrag
+        if gebuehr < 0 or posten.betrag + gebuehr != gesamt:
+            raise SepaWorkflowFehler(f"Betrag {fibu.euro(gesamt)} ≠ Lastschrift {fibu.euro(posten.betrag)} "
+                                     f"+ Gebühr {fibu.euro(gebuehr)}.")
+        op = OffenerPosten.objects.select_for_update().get(pk=posten.op_id)
+        grund = (umsatz.rueckgabegrund or "").upper()[:4]
+        belegnr = naechste_nummer("SEPA_RUECKLAST", umsatz.buchungsdatum)
+        zeilen = [{"konto": op.konto, "soll": posten.betrag, "partner": op.partner,
+                   "text": f"Rücklastschrift {op.belegnr} {grund}".strip()}]
+        if gebuehr:
+            zeilen.append({"konto": fibu.automatikkonto("GELDVERKEHR"), "soll": gebuehr,
+                           "text": "Rücklastschriftgebühr"})
+        zeilen.append({"konto": umsatz.bankkonto.konto, "haben": gesamt})
+        b = fibu.buchen(umsatz.buchungsdatum, belegnr, f"SEPA-Rücklastschrift {posten.end_to_end_id} {grund}".strip(),
+                        zeilen, quelle="sepa_ruecklast", quelle_id=umsatz.pk, benutzer=benutzer)
+        Ausgleich.objects.create(op=op, buchung=b, datum=umsatz.buchungsdatum, art=Ausgleich.Art.RUECKLAST,
+                                 betrag=-posten.betrag, benutzer=_benutzer(benutzer))
+        op.offen += posten.betrag
+        op.save(update_fields=["offen"])
+        posten.status = ZahlungslaufPosten.Status.ZURUECK
+        posten.save(update_fields=["status"])
+        rl = Ruecklastschrift.objects.create(posten=posten, bankumsatz=umsatz, grund=grund, betrag=posten.betrag,
+                                             gebuehr=gebuehr, buchung=b, erfasst_von=_benutzer(benutzer))
+        if posten.mandat_id:
+            rl.mandat_ergebnis = rueckgabe_mandat_behandeln(posten.mandat, grund, umsatz.buchungsdatum)
+        umsatz.buchung, umsatz.status = b, Bankumsatz.Status.GEBUCHT
+        umsatz.save(update_fields=["buchung", "status"])
+    return rl

@@ -618,3 +618,55 @@ class SepaAbgleichTests(TestCase):
         zeilen = {z.konto.nummer: (z.soll, z.haben) for z in u.buchung.zeilen.all()}
         self.assertEqual(zeilen["1360"], (lauf.summe, D("0")))
         self.assertEqual(zeilen["1200"], (D("0"), lauf.summe))
+
+    def test_ruecklastschrift_op_wieder_offen_gebuehr_mandat_mahnung(self):
+        from apps.fibu import mahnwesen
+
+        lauf, op, mandat = self._lastschriftlauf(faellig=self.heute - timedelta(days=5))
+        p = lauf.posten.get()
+        S.lauf_abgleichen(self._umsatz("503.00", sammlerreferenz=p.pmtinf_id), self.user)
+        op.refresh_from_db()
+        self.assertEqual(op.offen, D("0"))
+        rueck = self._umsatz("-506.50", referenz=p.end_to_end_id, rueckgabegrund="AC04")
+        self.assertEqual(S.ruecklastschrift_posten(rueck), p)
+        rl = S.ruecklastschrift_verarbeiten(rueck, benutzer=self.user)
+        op.refresh_from_db()
+        p.refresh_from_db()
+        mandat.refresh_from_db()
+        self.assertEqual(op.offen, D("503.00"))
+        self.assertEqual((rl.betrag, rl.gebuehr, rl.grund), (D("503.00"), D("3.50"), "AC04"))
+        self.assertTrue(rl.buchung.belegnr.startswith("RL-"))
+        self.assertEqual(p.status, ZahlungslaufPosten.Status.ZURUECK)
+        self.assertEqual(mandat.status, SepaMandat.Status.GESPERRT)
+        self.assertEqual(op.ausgleiche.filter(art=Ausgleich.Art.RUECKLAST).get().betrag, D("-503.00"))
+        self.assertEqual(op.ausgleiche.count(), 2)  # Ausgleich bleibt erhalten, Gegenausgleich zusätzlich
+        zeilen = {z.konto.nummer: (z.soll, z.haben) for z in rl.buchung.zeilen.all()}
+        self.assertEqual(zeilen["4970"], (D("3.50"), D("0")))
+        self.assertEqual(zeilen["1200"], (D("0"), D("506.50")))
+        ml = mahnwesen.vorschlag(stichtag=self.heute + timedelta(days=60))
+        from apps.fibu.models import MahnPosition
+
+        self.assertTrue(MahnPosition.objects.filter(mahnung__mahnlauf=ml, op=op).exists())
+        with self.assertRaises(S.SepaWorkflowFehler):  # keine doppelte Verarbeitung
+            S.ruecklastschrift_verarbeiten(rueck, posten=p, benutzer=self.user)
+
+    def test_ruecklastschrift_oberflaeche(self):
+        from django.urls import reverse
+
+        lauf, op, _ = self._lastschriftlauf()
+        p = lauf.posten.get()
+        u = self._umsatz("-508.00", sammlerreferenz=p.pmtinf_id, verwendungszweck=f"RUECKLASTSCHRIFT {p.end_to_end_id}",
+                         rueckgabegrund="MD06")
+        admin = get_user_model().objects.create_superuser("rl_admin", password="x")
+        self.client.force_login(admin)
+        self.assertContains(self.client.get(reverse("fibu:bank_umsatz", args=[u.pk])), "Rücklastschrift verarbeiten")
+        r = self.client.post(reverse("fibu:bank_umsatz", args=[u.pk]), {"aktion": "ruecklastschrift", "gebuehr": "5,00"})
+        self.assertRedirects(r, reverse("fibu_sepa:ruecklastschriften"))
+        rl = Ruecklastschrift.objects.get(bankumsatz=u)
+        self.assertEqual(rl.gebuehr, D("5.00"))
+        seite = self.client.get(reverse("fibu_sepa:ruecklastschriften"))
+        self.assertContains(seite, p.end_to_end_id)
+        self.assertContains(self.client.get(reverse("fibu_sepa:laeufe")), "Rücklastschriften")
+        einkauf = get_user_model().objects.create_user("rl_einkauf", password="x")
+        self.client.force_login(einkauf)
+        self.assertNotEqual(self.client.get(reverse("fibu_sepa:ruecklastschriften")).status_code, 200)
