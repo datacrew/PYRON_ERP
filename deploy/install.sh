@@ -262,6 +262,7 @@ als_erp "$VENV/bin/python" manage.py migrate --noinput
 als_erp "$VENV/bin/python" manage.py erp_grunddaten
 if [[ "$DEMO" == "1" ]]; then
     als_erp "$VENV/bin/python" manage.py erp_demodaten
+    als_erp "$VENV/bin/python" manage.py dms_demodaten
 fi
 als_erp "$VENV/bin/python" manage.py collectstatic --noinput -v0
 tu chmod -R a+rX "$STATIC"

@@ -115,6 +115,10 @@ class FundamentTests(DmsTestBasis):
         treffer = list(S.suchen(Dokument.objects.all(), "Druckerpatrone"))  # Stemming (german)
         self.assertEqual(treffer, [d])
         self.assertEqual(list(S.suchen(Dokument.objects.all(), "Büromaterial")), [d])
+        # globale Suche in der Kopfzeile findet das Dokument über den OCR-Text
+        self.client.force_login(self.user)
+        r = self.client.get(reverse("core:suche"), {"q": "Druckerpatronen"})
+        self.assertContains(r, reverse("dms:detail", args=[d.pk]))
 
     def test_integritaet_erkennt_manipulation(self):
         d = S.dokument_anlegen(b"<a/>", "a.xml", benutzer=self.user)
@@ -800,3 +804,30 @@ class VerbuchungTests(DmsTestBasis):
         daten = PruefmaskeTests.post_daten(self, d)
         daten["aktion"] = "verbuchen"
         self.assertEqual(self.client.post(reverse("dms:pruefen", args=[d.pk]), daten).status_code, 403)
+
+
+class DemodatenTests(DmsTestBasis):
+    """Demodaten-Command: Stapel, Trennung, Erkennung und Verbuchung der ZUGFeRD-Rechnung (idempotent)."""
+
+    @skipUnless(O.tesseract_verfuegbar(), "Tesseract nicht installiert")
+    def test_dms_demodaten(self):
+        from django.utils import timezone
+
+        from apps.dms.models import Stapel
+        from apps.fibu import services as F
+
+        F.geschaeftsjahr_anlegen(timezone.localdate().year)
+        call_command("dms_demodaten", verbosity=0)
+        stapel = Stapel.objects.get(bezeichnung="Demodaten Dokumentenmanagement")
+        docs = Dokument.objects.filter(stapel=stapel)
+        # 4 Rechnungsdateien + Vertrag; das Sammel-PDF wird in 2 Teildokumente geteilt
+        self.assertEqual(docs.filter(eltern__isnull=True).count(), 5)
+        self.assertEqual(docs.filter(eltern__isnull=False).count(), 2)
+        gebucht = docs.filter(status=Dokument.Status.GEBUCHT)
+        self.assertEqual(gebucht.count(), 1)
+        self.assertIsNotNone(gebucht.first().eingangsrechnung)
+        self.assertTrue(gebucht.first().archiviert)
+        self.assertFalse(docs.filter(status=Dokument.Status.FEHLER).exists())
+        self.assertTrue(docs.filter(art=Dokumentart.VERTRAG, tags__name="Rahmenvertrag").exists())
+        call_command("dms_demodaten", verbosity=0)  # zweiter Lauf legt nichts doppelt an
+        self.assertEqual(Stapel.objects.filter(bezeichnung="Demodaten Dokumentenmanagement").count(), 1)

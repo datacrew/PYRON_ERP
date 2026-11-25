@@ -484,6 +484,9 @@ sudo systemctl start erp-dms-eingang.service && journalctl -u erp-dms-eingang -n
 systemctl list-timers erp-dms-eingang.timer
 ```
 
+Demo-/Schulungsinstanz: `python manage.py dms_demodaten` legt synthetische Beispielrechnungen an (bei
+`ERP_DEMODATEN=1` bzw. `install.sh --demo` automatisch) – **nie im Produktivsystem**.
+
 ### 11.4 Aufbewahrung
 
 Archivierte Dokumente sind per Datenbank-Trigger unveränderbar und nicht löschbar. Die Frist läuft bis zum

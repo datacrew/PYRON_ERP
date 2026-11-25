@@ -220,3 +220,16 @@ def ubl_xml(r=None):
  <cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">{r["netto"]}</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">{r["netto"]}</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">{r["brutto"]}</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">{r["brutto"]}</cbc:PayableAmount></cac:LegalMonetaryTotal>{zeilen_xml}
 </Invoice>
 """.encode("utf-8")
+
+
+def sammel_pdf(*teile):
+    """Fügt mehrere PDFs (z. B. Rechnung, Trennblatt, Rechnung) zu einem Sammel-PDF zusammen – wie ein Stapelscan."""
+    from pypdf import PdfReader, PdfWriter
+
+    w = PdfWriter()
+    for daten in teile:
+        for seite in PdfReader(io.BytesIO(daten)).pages:
+            w.add_page(seite)
+    puffer = io.BytesIO()
+    w.write(puffer)
+    return puffer.getvalue()

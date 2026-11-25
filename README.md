@@ -1,4 +1,4 @@
-# ERP-System Mittelstand – Phasen 1 bis 6 (Fundament, Warenfluss, Produktion, Fibu, Vertrieb/Versand, Reporting)
+# ERP-System Mittelstand – Phasen 1 bis 6 (Fundament, Warenfluss, Produktion, Fibu, Vertrieb/Versand, Reporting) + Dokumentenmanagement
 
 Modulares ERP für einen mittelständischen Industriebetrieb – **Django 5.2 · Django REST Framework · PostgreSQL ·
 WeasyPrint**. Phase 1 liefert das Fundament: Mandant, Modul-Registry, Rechte, Nummernkreise, Audit-Log,
@@ -11,7 +11,9 @@ Auftragsstempelung am Terminal), Rückmeldungen, Zeitakkord mit Mindestlohngaran
 Fertigmeldung zu Herstellkosten und Nachkalkulation. Phase 4 ergänzt die **Finanzbuchhaltung**, Phase 5
 **Vertrieb und Versand** (CRM, ZUGFeRD/XRechnung, Shop-API, EDIFACT, Touren, LVS-Adapter) und Phase 6 das
 **Reporting** (Bericht-Registry mit 28 Standardberichten, Management-Cockpit, Excel/CSV/PDF-Export,
-Berichtsvarianten, Berichts-API) sowie eine globale Suche (siehe [docs/ROADMAP.md](docs/ROADMAP.md)).
+Berichtsvarianten, Berichts-API) sowie eine globale Suche (siehe [docs/ROADMAP.md](docs/ROADMAP.md)). Dazu kommt
+das **Dokumentenmanagement (DMS)** mit OCR, Stapelverarbeitung und automatischer Belegerkennung für
+Eingangsrechnungen bis zur Buchung in der Fibu (Abschnitt „Dokumentenmanagement“).
 
 ---
 
@@ -36,6 +38,7 @@ python3 manage.py migrate
 python3 manage.py erp_grunddaten         # Module, Kontenrahmen, Steuersätze, Nummernkreise, Rollen, Vorlage
 python3 manage.py erp_demodaten          # optional: Demo-Benutzer, Artikel, Partner, Stücklisten, Belege,
                                          #   Lagerorte, Anfangsbestände, Bestellungen, Teil-Wareneingang
+python3 manage.py dms_demodaten          # optional: Beispielrechnungen im DMS (braucht Tesseract, siehe unten)
 
 # 5. Starten
 python3 manage.py runserver 0.0.0.0:8000
@@ -111,7 +114,11 @@ Phase 4 ergänzt 20 Tests für die Finanzbuchhaltung (gesamt 86). Phase 5 ergän
 Versand (Kernfluss Angebot → Auftrag → Lieferschein → Rechnung mit Lagerabgang, Fibu-Buchung und OP,
 Teillieferung, Gutschrift, ZUGFeRD-/XRechnung-XML inkl. XSD und Summen, PDF/A-3-Einbettung, Shop-API mit Token
 und Idempotenz, EDIFACT-Parser/-Generator, Tourenbildung, Kapazitätsprüfung, LVS-Export/-Rückmeldung, Rechte).
-**Aktueller Stand: 128 Tests, alle grün** (gezählt mit `python manage.py test apps`).
+Das Dokumentenmanagement ergänzt Tests für Ablage, SHA-256/GoBD-Trigger, Volltextsuche, Versionierung, Rechte,
+Textlayer-/OCR-Erkennung (Tesseract, PDF/A), ZUGFeRD/XRechnung, Hotfolder, Trennblätter, Belegerkennung inkl.
+Konfidenzen/Plausibilität/Dubletten, Lernregeln, Prüfmaske und Verbuchung (synthetische Testrechnungen aus
+`apps/dms/testdaten.py`; OCR-Tests werden ohne Tesseract übersprungen).
+**Aktueller Stand: 185 Tests, alle grün** (gezählt mit `python manage.py test apps`).
 
 ---
 
@@ -131,12 +138,13 @@ erp_system/
 │   ├── einkauf/       Bestellanforderung, Anfrage, Bestellung, Bestellvorschlag, Bestell-PDF          (Phase 2)
 │   ├── wareneingang/  Wareneingang gegen Bestellung, Qualitätsprüfung, WE-PDF                        (Phase 2)
 │   ├── produktion/ bde/ akkord/   Fertigung, Terminal-Recht, Akkord-Recht (Phase 3)
-│   ├── vertrieb/ versand/ fibu/ reporting/   (Gerüste)
+│   ├── vertrieb/ versand/ fibu/ reporting/   Vertrieb/Versand, Finanzbuchhaltung, Reporting (Phasen 4–6)
+│   ├── dms/          Dokumentenmanagement: Ablage, OCR, Stapel/Eingangsordner, Belegerkennung, Verbuchung
 ├── templates/         Bootstrap-5-Oberfläche (CDN), PDF-Vorlage belege/pdf/standard.html
 ├── docker/            Entrypoint des App-Containers
 ├── deploy/            Produktivbetrieb: Compose, install.sh, Caddy, systemd, Skripte, INSTALLATION.md
 ├── docs/              DATENMODELL.md, ROADMAP.md
-└── media/             PDF-Archiv (archiv/belege/<Jahr>/<belegart>/…)
+└── media/             PDF-Archiv (archiv/belege/<Jahr>/<belegart>/…), DMS-Ablage (dms/<Jahr>/<Monat>/…)
 ```
 
 ### Modul-Registry
@@ -694,6 +702,81 @@ Export, Web-Ansicht, Varianten und API funktionieren dann ohne weiteren Code.
 
 ---
 
+## Dokumentenmanagement (DMS) mit OCR und Belegerkennung (`apps/dms`, Menü **Dokumente**)
+
+Revisionssichere Ablage für Eingangs-/Ausgangsrechnungen, Verträge, Lieferscheine und sonstige Dokumente mit
+Texterkennung, Stapelverarbeitung und automatischer Erkennung von Eingangsrechnungen bis zur Buchung in der Fibu.
+Systempakete und Betrieb: [deploy/INSTALLATION.md, Abschnitt 11](deploy/INSTALLATION.md#11-dokumentenmanagement-dms-und-ocr).
+
+### Funktionen
+- **Ablage**: Upload von PDF, PNG/JPEG, TIFF und XML (XRechnung) bis 50 MB; Dokumentarten Eingangsrechnung,
+  Ausgangsrechnung, Vertrag, Lieferschein, Sonstiges; Titel, Dokumentdatum, Bemerkung, Schlagwörter (Tags),
+  Verknüpfung mit Geschäftspartner, Beleg, Buchung und Eingangsrechnung; Nummernkreis `DMS_DOKUMENT` (DOK-JJJJ-nnnnn).
+- **Versionierung**: Jede Datei ist eine unveränderbare `DokumentVersion` mit SHA-256; neue Versionen statt
+  Überschreiben; die OCR erzeugt eine abgeleitete Version „Durchsuchbares PDF/A“, das Original bleibt erhalten.
+- **GoBD**: SHA-256-Siegel je Datei (`erp_pruefen` prüft sie), lückenloses Protokoll (nur INSERT, per Trigger
+  geschützt), Archivierung („revisionssicher“) sperrt Dokument, Dateien und Löschung per PostgreSQL-Trigger;
+  Aufbewahrungsfrist je Dokumentart (31.12. des Jahres Dokumentdatum + 8/10/6 Jahre), Fristenübersicht; gelöscht
+  werden kann nur ein nicht archiviertes Dokument ohne Buchungsbezug (Recht `loeschen`, protokolliert).
+- **Volltextsuche**: PostgreSQL-FTS (Konfiguration `german` mit Wortstammbildung, GIN-Index) über Nummer, Titel,
+  Bemerkung und OCR-Text, Suchsyntax wie bei Websuchen („…“, `-wort`, `or`); Filter nach Art, Status, Partner,
+  Schlagwort; Treffer auch in der globalen Suche der Kopfzeile.
+- **Stapelverarbeitung**: Mehrfach-Upload (Mehrfachauswahl im Dateidialog) und Eingangsordner (`dms_eingang`, systemd-Timer bzw.
+  Docker-Dienst) bilden einen `Stapel`; Warteschlange mit Status *Neu → In OCR → Erkannt/Zu prüfen → Gebucht*
+  bzw. *Abgelegt/Fehler*; Fortschrittsbalken im Browser (ein Dokument je Anfrage, kein Celery nötig);
+  `dms_verarbeiten` arbeitet Rückstände ab.
+- **Sammel-PDFs**: automatische Trennung an Trennblättern (Barcode „PYRON-TRENNBLATT“ per zbar oder Text
+  „TRENNBLATT“; Vorlage unter „Hochladen → Trennblatt“) oder manuell nach Seitenbereichen („1-2, 3, 4-6“).
+- **OCR**: digitale PDFs über den Textlayer (PyMuPDF), Scans/Bilder über OCRmyPDF + Tesseract (`deu`) mit
+  durchsuchbarem PDF/A-2b, Ersatzweg pytesseract; ZUGFeRD/Factur-X-PDFs und XRechnung (CII/UBL) werden direkt
+  aus dem XML gelesen – ohne OCR.
+- **Belegerkennung Eingangsrechnungen**: Lieferant (Zuordnung USt-IdNr. → IBAN → Name), Rechnungsnummer,
+  Rechnungsdatum, Fälligkeit, Zahlungsbedingung, Netto/Steuer/Brutto, Steuersätze, IBAN (Prüfziffer) und Positionen
+  (Menge, Einheit, Beschreibung, Einzelpreis, Betrag, Steuersatz) – regelbasiert (Regex + Zeilen-/Tabellenheuristik)
+  mit Konfidenz je Feld und Gesamtkonfidenz. Ab 80 % und ohne Plausibilitätsfehler „Erkannt“, sonst „Zu prüfen“.
+- **Plausibilität**: Summenabgleich (Positionen = Netto, Netto + Steuer = Brutto, berechnete Steuer je Satz), Dubletten nach
+  Lieferant + Rechnungsnummer (DMS und Fibu), Pflichtfelder, Steuerschlüssel je Position, Datum/Fälligkeit,
+  unbekannter Lieferant, IBAN abweichend von der hinterlegten Lieferanten-IBAN. Fehler verhindern die Verbuchung.
+- **Lernregeln (Kontierung)**: Vorschlag je Position aus Stichwortregel → Lieferantenregel → letzter Buchung beim
+  Lieferanten → Standard-Aufwandskonto; jede Verbuchung lernt die verwendeten Konten (Menü „Lernregeln“,
+  pflegbar).
+- **Prüfmaske (Split-Ansicht)**: Dokument links (PDF/Bild), rechts editierbare Kopffelder mit Konfidenz-Ampel,
+  Positionen mit Konto/Steuerschlüssel, Live-Summen, Plausibilitätsmeldungen; „Speichern“, „Kontierung neu
+  vorschlagen“, „Speichern, freigeben und verbuchen“.
+- **Verbuchung**: Freigabe erzeugt eine `fibu.Eingangsrechnung` mit `ERPosition`en (Nummernkreis `FIBU_ER`) und
+  bucht sie über `fibu.services.er_buchen` – Aufwand + Vorsteuer an Kreditor, Offener Posten, Hash-Kette der Fibu
+  unverändert. Das Dokument wird archiviert und mit Eingangsrechnung/Buchung verknüpft; Eingangsrechnung und
+  Buchung zeigen „Originalbeleg (DMS)“.
+
+### Rechte (Modul `dms`)
+| Aktion | Bedeutung | Standardrollen |
+|---|---|---|
+| `lesen` | Dokumente, Stapel, Suche, Fristen, Dateien ansehen | alle Fachrollen inkl. Nur Lesen |
+| `anlegen` | Hochladen, (erneut) verarbeiten, Trennen, neue Version, Prüfmaske bearbeiten | Einkauf, Lager, Buchhaltung |
+| `aendern` | Metadaten/Schlagwörter, Lernregeln pflegen, Archivieren | Buchhaltung |
+| `freigeben` | Verbuchen in die Fibu (zusätzlich `fibu.anlegen` nötig) | Buchhaltung |
+| `loeschen` | Nicht archivierte Dokumente ohne Buchungsbezug löschen | Buchhaltung |
+
+### Befehle
+```bash
+python3 manage.py dms_eingang [--ordner PFAD] [--art VERTRAG] [--ohne-verarbeitung]   # Eingangsordner einlesen
+python3 manage.py dms_verarbeiten [--limit 20]                                       # Warteschlange abarbeiten
+python3 manage.py dms_demodaten [--ohne-ocr]                                         # Beispielrechnungen (Demo)
+python3 manage.py erp_pruefen                                                        # inkl. SHA-256 der DMS-Dateien
+```
+
+### Demodaten und Demo-Ablauf (`dms_demodaten`, Login `buchhaltung` / `Demo!2026`)
+`dms_demodaten` (nach `erp_demodaten`; im Docker-/`install.sh`-Demobetrieb automatisch) legt den Lieferanten
+„Bürobedarf Schneider GmbH“ und einen Stapel mit **synthetischen** Rechnungen an: ZUGFeRD-Rechnung (wird direkt
+verbucht), digitale PDF-Rechnung (wartet auf Freigabe), gescannte Rechnung (OCR), Sammel-PDF mit Trennblatt
+(wird in zwei Dokumente geteilt) und einen Rahmenvertrag mit Schlagwort.
+1. **Dokumente** → Übersicht: Warteschlange und „Zu prüfen“/„Erkannt“.
+2. Rechnung öffnen → **Prüfmaske**: Felder kontrollieren, Konto anpassen → „Speichern, freigeben und verbuchen“.
+3. Weiterleitung zur Eingangsrechnung in der Fibu (Kreditor-OP, Buchung mit Vorsteuer) mit Link zum Originalbeleg.
+4. **Hochladen**: mehrere PDFs/Scans auf einmal auswählen, Fortschritt im Stapel verfolgen; **Suche** nach Begriffen im OCR-Text.
+
+---
+
 ## REST-API
 
 Basis: `/api/v1/` – Authentifizierung per Session, Basic-Auth oder Token. Alle Endpunkte prüfen die
@@ -746,10 +829,10 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
 
 ## Weitere Dokumentation
 - [docs/DATENMODELL.md](docs/DATENMODELL.md) – Datenmodell als Mermaid-ERD
-- [docs/ROADMAP.md](docs/ROADMAP.md) – Phasen 2–6 (alle erledigt) und nächste Schritte für den Produktivbetrieb
-- [deploy/INSTALLATION.md](deploy/INSTALLATION.md) – Installation, Datensicherung, Updates, Betrieb
+- [docs/ROADMAP.md](docs/ROADMAP.md) – Phasen 2–6 und DMS (erledigt), nächste Schritte für den Produktivbetrieb
+- [deploy/INSTALLATION.md](deploy/INSTALLATION.md) – Installation, Datensicherung, Updates, Betrieb, DMS/OCR (Abschnitt 11)
 
-## Bekannte Grenzen (Stand Phase 6)
+## Bekannte Grenzen (Stand Phase 6 + DMS)
 - Reporting: keine geplanten Berichte per E-Mail, kein freier Berichtsdesigner; Diagramme laden Chart.js per CDN
   (ohne Internetzugang keine Diagramme, Tabellen und Exporte funktionieren weiter); Vorjahresvergleiche sind
   mit den Demodaten leer (keine Vorjahresumsätze).
@@ -766,6 +849,12 @@ curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/belege/<id>/
   Lieferanten-Preisliste; Bestellvorschlag nur aus Meldebestand (noch nicht aus Stücklistenbedarf).
 - Bestandsbewertung nur gleitender Durchschnitt (kein FIFO/Niederstwert).
 - Ein Mandant (Firma) pro Installation.
+- DMS: Belegerkennung und OCR-Genauigkeit nur mit **synthetischen** Testrechnungen geprüft, nicht mit einer größeren
+  Zahl echter Lieferantenrechnungen; die Positionserkennung aus Text ist eine Zeilenheuristik und layoutabhängig
+  (ZUGFeRD/XRechnung sind zuverlässig). Keine KI-/ML-Extraktion, keine E-Mail-Postfachanbindung, keine REST-API
+  für das DMS, Barcode-Trennblätter nur mit installiertem zbar (sonst Texterkennung „TRENNBLATT“), Verbuchung nur
+  für Eingangsrechnungen ohne Bestellbezug (keine automatische Rechnungsprüfung gegen Bestellung/Wareneingang),
+  keine WORM-Speicheranbindung (Unveränderbarkeit über DB-Trigger + SHA-256).
 - Kontenrahmen SKR03/SKR04 als erweiterter Grundbestand (kein vollständiger DATEV-Kontenrahmen).
 - Docker-Weg und `install.sh` nicht auf einem frischen Server ausgeführt (siehe „Produktivbetrieb“ oben).
 

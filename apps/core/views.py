@@ -249,7 +249,7 @@ def audit_log(request):
 
 @login_required
 def suche(request):
-    """Globale Suche in der Kopfzeile: Artikel, Geschäftspartner und Belegnummern – je nach Leserecht."""
+    """Globale Suche in der Kopfzeile: Artikel, Geschäftspartner, Belegnummern und DMS-Dokumente – je nach Leserecht."""
     from django.db.models import Q
 
     q = (request.GET.get("q") or "").strip()
@@ -294,6 +294,13 @@ def suche(request):
             gruppe("Fertigungsaufträge", "bi-gear", [
                 (str(f), reverse("produktion:detail", args=[f.pk]))
                 for f in Fertigungsauftrag.objects.filter(nummer__icontains=q)[:15]])
+        if hat_recht(u, "dms"):
+            from apps.dms import services as dms
+            from apps.dms.models import Dokument
+
+            gruppe("Dokumente (DMS)", "bi-archive", [  # Nummer, Titel und Volltext (OCR-Text)
+                (f"{d.nummer} – {d.titel}", reverse("dms:detail", args=[d.pk]))
+                for d in dms.suchen(Dokument.objects.all(), q)[:15]])
     return render(request, "core/suche.html", {"q": q, "gruppen": gruppen})
 
 
