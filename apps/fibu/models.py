@@ -260,6 +260,12 @@ class Eingangsrechnung(models.Model):
                                    related_name="eingangsrechnungen")
     zahlungsbedingung = models.ForeignKey("stammdaten.Zahlungsbedingung", null=True, blank=True,
                                           on_delete=models.PROTECT)
+    # Skonto laut Rechnung (z. B. aus „14 Tage 2 % Skonto“ oder ZUGFeRD/XRechnung BT-20) – hat Vorrang vor der
+    # Zahlungsbedingung des Lieferanten und wird in den offenen Posten übernommen.
+    skonto_prozent = models.DecimalField("Skontosatz %", max_digits=5, decimal_places=2, default=0)
+    skonto_tage = models.PositiveSmallIntegerField("Skontofrist (Tage)", null=True, blank=True)
+    skonto_bis = models.DateField("Skonto bis", null=True, blank=True)
+    skontobetrag = models.DecimalField("Skontobetrag", max_digits=14, decimal_places=2, default=0)
     summe_netto = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     summe_steuer = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     summe_brutto = models.DecimalField(max_digits=14, decimal_places=2, default=0)
@@ -322,6 +328,8 @@ class OffenerPosten(models.Model):
     faellig_am = models.DateField("Fällig am")
     skonto_bis = models.DateField("Skonto bis", null=True, blank=True)
     skonto_prozent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    skontobetrag = models.DecimalField("Skontobetrag", max_digits=14, decimal_places=2, default=0,
+                                       help_text="Möglicher Skontoabzug bei Zahlung bis „Skonto bis“ (0 = Satz × Betrag)")
     betrag = models.DecimalField("Betrag brutto", max_digits=14, decimal_places=2)
     offen = models.DecimalField("Offen", max_digits=14, decimal_places=2)
     steuer_aufteilung = models.JSONField(default=list, blank=True,
@@ -348,7 +356,8 @@ class OffenerPosten(models.Model):
     def skonto_betrag(self, datum=None):
         datum = datum or timezone.localdate()
         if self.skonto_prozent and self.skonto_bis and datum <= self.skonto_bis and self.offen == self.betrag:
-            return (self.betrag * self.skonto_prozent / 100).quantize(Decimal("0.01"))
+            # Gespeicherter Skontobetrag (z. B. abweichende Skontobasis laut E-Rechnung) hat Vorrang
+            return self.skontobetrag or (self.betrag * self.skonto_prozent / 100).quantize(Decimal("0.01"))
         return NULL
 
 

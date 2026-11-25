@@ -9,6 +9,7 @@
     <dt class="col-5">Rechnungsnr.</dt><dd class="col-7">{{ er.rechnungsnummer }}</dd>
     <dt class="col-5">Rechnungsdatum</dt><dd class="col-7">{{ er.rechnungsdatum|date:"d.m.Y" }}</dd>
     <dt class="col-5">Fällig am</dt><dd class="col-7">{{ er.faellig_am|date:"d.m.Y"|default:"aus Zahlungsbedingung" }}</dd>
+    <dt class="col-5">Skonto</dt><dd class="col-7">{% if er.skonto_prozent %}{{ er.skonto_prozent|zahl }} %{% if er.skonto_bis %} bis {{ er.skonto_bis|date:"d.m.Y" }}{% elif er.skonto_tage is not None %} innerhalb {{ er.skonto_tage }} Tagen{% endif %}{% if er.skontobetrag %} · {{ er.skontobetrag|euro }}{% endif %} <span class="text-muted">(laut Rechnung)</span>{% elif er.zahlungsbedingung.skonto_prozent %}{{ er.zahlungsbedingung.skonto_prozent|zahl }} % in {{ er.zahlungsbedingung.skonto_tage }} Tagen <span class="text-muted">(Zahlungsbedingung)</span>{% else %}–{% endif %}</dd>
     <dt class="col-5">Bestellung</dt><dd class="col-7">{{ er.bestellung.nummer|default:"–" }}</dd>
     <dt class="col-5">Netto / USt / Brutto</dt><dd class="col-7">{{ er.summe_netto|euro }} / {{ er.summe_steuer|euro }} / <b>{{ er.summe_brutto|euro }}</b></dd>
     {% if er.buchung %}<dt class="col-5">Buchung</dt><dd class="col-7"><a href="{% url 'fibu:buchung' er.buchung.pk %}">{{ er.buchung.nummer }}</a></dd>{% endif %}

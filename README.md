@@ -765,6 +765,11 @@ Systempakete und Betrieb: [deploy/INSTALLATION.md, Abschnitt 11](deploy/INSTALLA
 - **Prüfmaske (Split-Ansicht)**: Dokument links (PDF/Bild), rechts editierbare Kopffelder mit Konfidenz-Ampel,
   Positionen mit Konto/Steuerschlüssel, Live-Summen, Plausibilitätsmeldungen; „Speichern“, „Kontierung neu
   vorschlagen“, „Speichern, freigeben und verbuchen“.
+- **Skonto automatisch**: Zahlungsbedingungen wie „14 Tage 2 % Skonto, 30 Tage netto“ werden aus dem Text bzw.
+  aus ZUGFeRD/XRechnung (BT-20, strukturierte Skontoangaben, XRechnung-Syntax `#SKONTO#…#`) erkannt; Skontosatz,
+  -frist und -betrag sind in der Prüfmaske korrigierbar und werden beim Verbuchen in Eingangsrechnung und offenen
+  Posten übernommen. Zahlungsvorschlag und SEPA-Zahlungslauf ziehen Skonto innerhalb der Frist ab; die
+  Skontobuchung bucht den Skontoertrag (SKR03 3736/3731, SKR04 5736/5731) mit Vorsteuerberichtigung.
 - **Dreifach-Abgleich Bestellung ↔ Wareneingang ↔ Rechnung**: Die Bestellnummer wird aus der E-Rechnung (BT-13,
   CII `BuyerOrderReferencedDocument` bzw. UBL `OrderReference`) oder dem Text („Ihre Bestellung …“, „Bestell-Nr.“)
   erkannt; alternativ wählt man in der Prüfmaske eine der offenen Bestellungen des Lieferanten (Vorschlagsliste)

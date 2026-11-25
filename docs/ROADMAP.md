@@ -130,6 +130,11 @@ Ursprünglicher Umfang:
 - ✅ REST-API `/api/v1/dms/` (Upload/Stapel, Suche, Detail, Status, Download, Tags, Verbuchen, Protokoll), Schema `docs/schema.yml`
 - ✅ Dreifach-Abgleich Bestellung ↔ Wareneingang ↔ Rechnung in Prüfmaske und vor der Verbuchung (Bestellnummer aus
   Text/BT-13 oder manuelle Auswahl, Toleranzen, Freigabe nur mit Begründung + Recht, Verknüpfung ER ↔ Bestellung)
+- ✅ Skonto automatisch übernehmen: Zahlungsbedingungen („14 Tage 2 % Skonto, 30 Tage netto“, „bis TT.MM.JJJJ
+  abzüglich 2 % Skonto“, XRechnung `#SKONTO#TAGE=..#PROZENT=..#`) aus Text bzw. ZUGFeRD/XRechnung (BT-20,
+  `SpecifiedTradePaymentTerms`/`ApplicableTradePaymentDiscountTerms`, UBL `PaymentTerms`) erkennen, Skontosatz/-frist/
+  -betrag in Eingangsrechnung und offenem Posten, Zahlungsvorschlag/SEPA-Lauf mit Skontoabzug in der Frist,
+  Skontobuchung SKR03 (3736/3731) bzw. SKR04 (5736/5731) mit Vorsteuerberichtigung
 - offen: Validierung an einer größeren Zahl echter Lieferantenrechnungen (bisher nur synthetische Testrechnungen),
   bessere Tabellenerkennung für Positionen (ggf. Layout-Analyse/ML), Test des Mailabrufs gegen ein echtes
   Postfach (Exchange/M365 ggf. OAuth2 statt Passwort), Positionszuordnung im Dreifach-Abgleich an echten

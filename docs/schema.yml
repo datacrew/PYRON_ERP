@@ -6158,6 +6158,12 @@ components:
           type: string
           format: decimal
           pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        skontobetrag:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,2})?$
+          description: Möglicher Skontoabzug bei Zahlung bis „Skonto bis“ (0 = Satz
+            × Betrag)
         betrag:
           type: string
           format: decimal

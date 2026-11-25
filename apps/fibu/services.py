@@ -382,13 +382,21 @@ def _faelligkeit(belegdatum, zb):
 
 
 def op_anlegen(art, partner, buchung, belegnr, belegdatum, betrag, zahlungsbedingung=None, steuer_aufteilung=(),
-               beleg=None, eingangsrechnung=None, fremdbelegnr="", faellig_am=None):
+               beleg=None, eingangsrechnung=None, fremdbelegnr="", faellig_am=None, skonto=None):
+    """Offenen Posten anlegen. `skonto` = (prozent, bis, betrag) laut Rechnung hat Vorrang vor der
+    Zahlungsbedingung; betrag 0/None → Satz × Bruttobetrag."""
     faellig, skonto_bis, skonto_proz = _faelligkeit(belegdatum, zahlungsbedingung)
+    skonto_betrag = NULL
+    if skonto and skonto[0] and skonto[1]:
+        skonto_proz, skonto_bis, skonto_betrag = Decimal(skonto[0]), skonto[1], q(skonto[2] or 0)
+    if skonto_proz and not skonto_betrag:
+        skonto_betrag = q(Decimal(betrag) * skonto_proz / 100)
     return OffenerPosten.objects.create(
         art=art, partner=partner, konto=personenkonto(partner, art), buchung=buchung, beleg=beleg,
         eingangsrechnung=eingangsrechnung, belegnr=belegnr, fremdbelegnr=fremdbelegnr, belegdatum=belegdatum,
-        faellig_am=faellig_am or faellig, skonto_bis=skonto_bis, skonto_prozent=skonto_proz, betrag=q(betrag),
-        offen=q(betrag), steuer_aufteilung=[[c, str(q(n)), str(q(s))] for c, n, s in steuer_aufteilung])
+        faellig_am=faellig_am or faellig, skonto_bis=skonto_bis, skonto_prozent=skonto_proz,
+        skontobetrag=skonto_betrag, betrag=q(betrag), offen=q(betrag),
+        steuer_aufteilung=[[c, str(q(n)), str(q(s))] for c, n, s in steuer_aufteilung])
 
 
 def _skonto_zeilen(op, skonto):
@@ -653,6 +661,18 @@ def er_pruefen(er):
     return ergebnis
 
 
+def er_skonto(er):
+    """Skonto laut Eingangsrechnung → (prozent, bis, betrag) oder None (dann gilt die Zahlungsbedingung)."""
+    if not er.skonto_prozent:
+        return None
+    bis = er.skonto_bis
+    if bis is None and er.skonto_tage is not None:
+        bis = er.rechnungsdatum + timedelta(days=er.skonto_tage)
+    if bis is None:
+        return None
+    return er.skonto_prozent, bis, er.skontobetrag or q(er.summe_brutto * er.skonto_prozent / 100)
+
+
 def er_buchen(er, benutzer=None):
     """Eingangsrechnung → WE/RE (bzw. Aufwand) + Vorsteuer an Kreditor; Preisdifferenz auf Aufwand; OP."""
     if er.status == Eingangsrechnung.Status.GEBUCHT and er.buchung_id:
@@ -709,7 +729,7 @@ def er_buchen(er, benutzer=None):
                    quelle="eingangsrechnung", quelle_id=er.pk, benutzer=benutzer)
         op_anlegen("K", er.lieferant, b, er.nummer, er.rechnungsdatum, er.summe_brutto,
                    er.zahlungsbedingung or er.lieferant.zahlungsbedingung, aufteilung, eingangsrechnung=er,
-                   fremdbelegnr=er.rechnungsnummer, faellig_am=er.faellig_am)
+                   fremdbelegnr=er.rechnungsnummer, faellig_am=er.faellig_am, skonto=er_skonto(er))
         er.status, er.buchung = Eingangsrechnung.Status.GEBUCHT, b
         er.save(update_fields=["status", "buchung"])
     return b

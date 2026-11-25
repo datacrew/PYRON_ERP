@@ -47,7 +47,8 @@ class Command(BaseCommand):
         datum = heute - timedelta(days=5)
 
         stapel = S.stapel_anlegen(bezeichnung=STAPEL_NAME, benutzer=admin)
-        zugferd = T.beispiel(rechnungsnummer=f"RE-{heute.year}-0815", datum=datum - timedelta(days=10))
+        zugferd = T.beispiel(rechnungsnummer=f"RE-{heute.year}-0815", datum=datum - timedelta(days=10),
+                             skonto={"prozent": 2, "tage": 14})  # Skonto: 14 Tage 2 %, 30 Tage netto
         digital = T.beispiel(rechnungsnummer=f"RE-{heute.year}-0901", datum=datum, positionen=[
             {"menge": D("4"), "einheit": "Stk", "text": "Ordner breit blau", "preis": D("3.20"), "satz": 19},
             {"menge": D("1"), "einheit": "Stk", "text": "Schreibtischlampe LED", "preis": D("49.90"), "satz": 19}])

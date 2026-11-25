@@ -145,6 +145,12 @@ class PruefKopfForm(ErpForm):
     netto = forms.DecimalField(label="Netto", max_digits=14, decimal_places=2, required=False)
     steuer = forms.DecimalField(label="Steuer", max_digits=14, decimal_places=2, required=False)
     brutto = forms.DecimalField(label="Brutto", max_digits=14, decimal_places=2, required=False)
+    skonto_prozent = forms.DecimalField(label="Skonto %", max_digits=5, decimal_places=2, required=False,
+                                        min_value=0, max_value=99)
+    skonto_bis = forms.DateField(label="Skonto bis", required=False,
+                                 widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"))
+    skonto_betrag = forms.DecimalField(label="Skontobetrag", max_digits=14, decimal_places=2, required=False,
+                                       help_text="Leer = Skontosatz × Brutto")
     bestellung = forms.CharField(label="Bestellbezug (Dreifach-Abgleich)", required=False, widget=forms.Select)
 
     def __init__(self, *args, bestellungen=(), **kwargs):

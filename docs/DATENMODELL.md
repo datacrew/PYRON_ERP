@@ -684,6 +684,10 @@ Regeln:
 - Verbuchung legt **keine eigene Buchungsstruktur** an: `fibu.Eingangsrechnung` + `ERPosition` (Kreis `FIBU_ER`),
   gebucht über `fibu.services.er_buchen` (Aufwand + Vorsteuer an Kreditor, `OffenerPosten` Art K, Hash-Kette der Fibu).
   Danach zeigen `Dokument.eingangsrechnung`/`Dokument.buchung` auf das Ergebnis (Rückverweis `dms_dokumente`).
+- **Skonto** (Migration `fibu/0004_skonto_eingangsrechnung`): `fibu.Eingangsrechnung` erhält `skonto_prozent`,
+  `skonto_tage`, `skonto_bis`, `skontobetrag` (aus der Rechnung, Vorrang vor der Zahlungsbedingung des Lieferanten);
+  `fibu.OffenerPosten` erhält `skontobetrag` (fester Skontobetrag laut Rechnung; 0 = Satz × Betrag). Die
+  DMS-Erkennung liefert die Felder `skonto_prozent`, `skonto_tage`, `skonto_bis`, `skonto_betrag`.
 - **Dreifach-Abgleich** (`apps/dms/abgleich.py`, keine eigene Tabelle, keine Migration): nutzt die vorhandenen
   Felder `fibu.Eingangsrechnung.bestellung` (FK → `einkauf.Bestellung`, Rückverweis `eingangsrechnungen`) und
   `fibu.ERPosition.bestellposition` (FK → `einkauf.BestellPosition`) sowie `BestellPosition.geliefert_menge` und

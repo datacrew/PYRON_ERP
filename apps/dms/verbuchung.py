@@ -77,6 +77,17 @@ def _abgleich_pruefen(erg, dokument, partner, benutzer, begruendung):
     return abgleich, begruendung
 
 
+def _skonto_felder(f):
+    """Skonto laut Rechnung → Felder der Eingangsrechnung (Vorrang vor der Zahlungsbedingung des Lieferanten)."""
+    prozent = E.feldwert(f, "skonto_prozent", "betrag")
+    if not prozent:
+        return {}
+    tage = E.feldwert(f, "skonto_tage", "int")
+    return {"skonto_prozent": prozent, "skonto_tage": tage if tage is not None and 0 <= tage < 1000 else None,
+            "skonto_bis": E.feldwert(f, "skonto_bis", "datum"),
+            "skontobetrag": E.feldwert(f, "skonto_betrag", "betrag") or E.NULL}
+
+
 def verbuchen(dokument, benutzer=None, begruendung=""):
     """Erkannte und geprüfte Eingangsrechnung verbuchen → fibu.Eingangsrechnung.
 
@@ -110,7 +121,7 @@ def verbuchen(dokument, benutzer=None, begruendung=""):
                 rechnungsnummer=E.feldwert(f, "rechnungsnummer")[:60], rechnungsdatum=rechnungsdatum,
                 eingangsdatum=timezone.localdate(dokument.erstellt_am),
                 faellig_am=E.feldwert(f, "faellig_am", "datum"), zahlungsbedingung=partner.zahlungsbedingung,
-                bestellung_id=abgleich.get("bestellung_id"),
+                bestellung_id=abgleich.get("bestellung_id"), **_skonto_felder(f),
                 # Prüfung gegen Bestellung/WE ist im DMS erfolgt (Toleranzen bzw. begründete Freigabe)
                 abweichung_akzeptiert=bool(abgleich.get("bestellung_id")),
                 erfasst_von=benutzer if getattr(benutzer, "pk", None) else None)
@@ -137,9 +148,12 @@ def verbuchen(dokument, benutzer=None, begruendung=""):
         dokument.status = Dokument.Status.GEBUCHT
         dokument.belegdatum = dokument.belegdatum or rechnungsdatum
         dokument.save(update_fields=["erkennung", "eingangsrechnung", "buchung", "partner", "status", "belegdatum"])
+        op = er.offene_posten.first()
         S.protokollieren(dokument, "Verbucht",
                          f"Eingangsrechnung {er.nummer}, Buchung {buchung.nummer}: Brutto {er.summe_brutto} € an "
                          f"Kreditor {partner.name}, offener Posten angelegt."
+                         + (f" Skonto {er.skonto_prozent} % bis {op.skonto_bis:%d.%m.%Y} ({op.skontobetrag} €) "
+                            "aus der Rechnung übernommen." if er.skonto_prozent and op and op.skonto_bis else "")
                          + (f" Bestellbezug {abgleich['bestellnummer']} ({len(bezug)} Position(en) gegen WE/RE)."
                             if abgleich.get("bestellung_id") else ""), benutzer)
         if freigabe:

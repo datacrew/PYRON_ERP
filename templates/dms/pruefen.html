@@ -23,6 +23,9 @@
         {% include "dms/_kopffeld.html" with feld=kopf.rechnungsdatum k=konfidenz.rechnungsdatum breite="col-md-4" %}
         {% include "dms/_kopffeld.html" with feld=kopf.faellig_am k=konfidenz.faellig_am breite="col-md-4" %}
         {% include "dms/_kopffeld.html" with feld=kopf.zahlungsbedingung k=konfidenz.zahlungsbedingung breite="col-md-12" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.skonto_prozent k=konfidenz.skonto_prozent breite="col-md-4" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.skonto_bis k=konfidenz.skonto_bis breite="col-md-4" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.skonto_betrag k=konfidenz.skonto_betrag breite="col-md-4" %}
         {% include "dms/_kopffeld.html" with feld=kopf.bestellung k=konfidenz.bestellnummer breite="col-md-8" %}
         <div class="col-md-4 small text-muted pt-4">{% if erg.felder.bestellnummer %}erkannt: „{{ erg.felder.bestellnummer.wert }}“{% endif %}</div>
         {% include "dms/_kopffeld.html" with feld=kopf.iban k=konfidenz.iban %}

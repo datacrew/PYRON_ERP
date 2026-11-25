@@ -1366,3 +1366,84 @@ class DreifachAbgleichTests(DmsTestBasis):
         self.assertTrue(a["abweichung"], (a, d.erkennung["positionen"]))
         self.assertEqual([x["art"] for z in a["positionen"] for x in z["abweichungen"]], ["PREIS"])
         self.assertEqual([p["beschreibung"] for p in a["ohne_bezug"]], ["Frachtpauschale"])
+
+
+# ------------------------------------------------------------------ Skonto (Punkt k)
+
+class SkontoErkennungTests(TestCase):
+    def test_text_varianten(self):
+        from . import erkennung as E
+
+        sk = E.skonto_aus_text("14 Tage 2 % Skonto, 30 Tage netto")
+        self.assertEqual((sk["prozent"], sk["tage"]), (Decimal("2"), 14))
+        sk = E.skonto_aus_text("Bei Zahlung bis 24.03.2026 abzüglich 3 % Skonto")
+        self.assertEqual((sk["prozent"], sk["bis"]), (Decimal("3"), date(2026, 3, 24)))
+        sk = E.skonto_aus_text("#SKONTO#TAGE=10#PROZENT=2.50#")
+        self.assertEqual((sk["prozent"], sk["tage"]), (Decimal("2.50"), 10))
+        self.assertIsNone(E.skonto_aus_text("Zahlbar innerhalb von 30 Tagen netto"))
+
+    def _pruefe(self, erg, brutto):
+        from . import erkennung as E
+
+        f = erg["felder"]
+        self.assertEqual(E.feldwert(f, "skonto_prozent", "betrag"), Decimal("2"))
+        self.assertEqual(E.feldwert(f, "skonto_bis", "datum"), date(2026, 3, 26))
+        self.assertEqual(E.feldwert(f, "skonto_betrag", "betrag"), (brutto * 2 / 100).quantize(Decimal("0.01")))
+        self.assertEqual(E.feldwert(f, "faellig_am", "datum"), date(2026, 4, 11))
+
+    def test_pdf_cii_ubl(self):
+        from . import erkennung as E
+
+        r = T.beispiel(skonto={"prozent": 2, "tage": 14})
+        self._pruefe(E.extrahieren(xml=T.cii_xml(r)), r["brutto"])
+        self._pruefe(E.extrahieren(xml=T.ubl_xml(r)), r["brutto"])
+        text = "\n".join(" ".join(t for _, t, _, _ in felder) for _, felder in T.zeilen(r))
+        self._pruefe(E.extrahieren(text=text), r["brutto"])
+
+    def test_ohne_skonto_keine_felder(self):
+        from . import erkennung as E
+
+        erg = E.extrahieren(xml=T.cii_xml(T.beispiel()))
+        self.assertIsNone(E.feldwert(erg["felder"], "skonto_prozent", "betrag"))
+
+
+class SkontoVerbuchungTests(DmsTestBasis):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from apps.fibu import services as F
+
+        F.geschaeftsjahr_anlegen(2026)
+        cls.lieferant = Geschaeftspartner.objects.create(name="Bürobedarf Schneider GmbH", ist_lieferant=True,
+                                                         ust_id="DE811569869")
+
+    def test_skonto_in_er_op_und_skontobuchung(self):
+        from apps.fibu import services as F
+
+        from . import verbuchung as VB
+
+        r = T.beispiel(skonto={"prozent": 2, "tage": 14})
+        d = S.dokument_anlegen(T.zugferd_pdf(r), "re.pdf", art=Dokumentart.EINGANGSRECHNUNG, benutzer=self.user)
+        V.verarbeiten(d, self.user)
+        er = VB.verbuchen(d, self.user)
+        self.assertEqual((er.skonto_prozent, er.skonto_bis, er.skontobetrag),
+                         (Decimal("2.00"), date(2026, 3, 26), Decimal("6.59")))
+        op = er.offene_posten.get()
+        self.assertEqual((op.skonto_prozent, op.skonto_bis, op.skontobetrag),
+                         (Decimal("2.00"), date(2026, 3, 26), Decimal("6.59")))
+        self.assertEqual(op.skonto_betrag(date(2026, 3, 20)), Decimal("6.59"))
+        self.assertEqual(op.skonto_betrag(date(2026, 4, 1)), Decimal("0"))
+        # Zahlung innerhalb der Frist mit Skontoabzug → Skontoertrag + Vorsteuerberichtigung (SKR03)
+        bank = F.konto("1200")
+        buchung = F.op_ausgleichen([op], Decimal("322.98"), date(2026, 3, 20), bank, self.user, skonto=True)
+        op.refresh_from_db()
+        self.assertEqual(op.offen, Decimal("0"))
+        salden = {}
+        for z in buchung.zeilen.select_related("konto"):
+            salden[z.konto.nummer] = salden.get(z.konto.nummer, 0) + z.soll - z.haben
+        self.assertLess(salden["3736"], 0)
+        self.assertLess(salden["1576"], 0)
+        self.assertEqual(salden["1200"], Decimal("-322.98"))
+        # Skontoerträge (19 %/7 %) und Vorsteuerkorrekturen ergeben zusammen den Skontobetrag
+        self.assertEqual(sum(v for k, v in salden.items() if v < 0 and k != "1200"), Decimal("-6.59"))
+

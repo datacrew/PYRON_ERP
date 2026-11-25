@@ -14,7 +14,9 @@ from . import services as S
 from .models import Dokument, Dokumentart
 
 KOPF_FELDER = ("rechnungsnummer", "rechnungsdatum", "faellig_am", "zahlungsbedingung", "iban", "ust_id",
-               "netto", "steuer", "brutto")
+               "netto", "steuer", "brutto", "skonto_prozent", "skonto_bis", "skonto_betrag")
+DATUMSFELDER = ("rechnungsdatum", "faellig_am", "skonto_bis")
+BETRAGSFELDER = ("netto", "steuer", "brutto", "skonto_prozent", "skonto_betrag")
 
 
 def bearbeitbar(dokument):
@@ -37,8 +39,7 @@ def formular_daten(dokument):
                            str(abgleich["bestellung_id"]) if abgleich.get("auswahl") == "manuell"
                            and abgleich.get("bestellung_id") else "")}
     for name in KOPF_FELDER:
-        typ = "datum" if name in ("rechnungsdatum", "faellig_am") else (
-            "betrag" if name in ("netto", "steuer", "brutto") else None)
+        typ = "datum" if name in DATUMSFELDER else ("betrag" if name in BETRAGSFELDER else None)
         kopf[name] = E.feldwert(f, name, typ)
     positionen = []
     for p in erg.get("positionen", []):
@@ -84,9 +85,16 @@ def korrektur_speichern(dokument, kopf, positionen, benutzer=None):
         else:
             felder[name] = dict(alt[name], konfidenz=max(alt[name].get("konfidenz", 0), 0.99))
     # Zahlungsziel/Lieferantenname aus der Erkennung beibehalten (nicht Teil der Maske)
-    for name in ("zahlungsziel_tage", "lieferant_name", "bestellnummer"):
+    for name in ("zahlungsziel_tage", "lieferant_name", "bestellnummer", "skonto_tage"):
         if name in alt:
             felder[name] = alt[name]
+    # Skonto: Betrag neu rechnen, wenn Satz/Brutto geändert wurden (und der Betrag nicht selbst korrigiert);
+    # eine manuell geänderte Frist ersetzt die erkannte Tagesfrist
+    if {"skonto_prozent", "brutto"} & set(geaendert) and "skonto_betrag" not in geaendert:
+        felder.pop("skonto_betrag", None)
+    if "skonto_bis" in geaendert:
+        felder.pop("skonto_tage", None)
+    E.skonto_ergaenzen(felder)
     lieferant = kopf.get("lieferant")
     alt_partner = (erg.get("lieferant") or {}).get("partner_id")
     if lieferant:

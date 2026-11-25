@@ -42,6 +42,14 @@ def beispiel(**abweichend):
     return r
 
 
+def zahlungstext(r):
+    """Zahlungsbedingung als Text, optional mit Skonto (r["skonto"] = {"prozent": 2, "tage": 14})."""
+    sk = r.get("skonto")
+    if sk:
+        return f'{sk["tage"]} Tage {_de(D(sk["prozent"])).replace(",00", "")} % Skonto, {r["zahlungsziel_tage"]} Tage netto'
+    return f'Zahlbar innerhalb von {r["zahlungsziel_tage"]} Tagen netto'
+
+
 def _de(betrag, stellen=2):
     s = f"{betrag:,.{stellen}f}"
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
@@ -94,8 +102,7 @@ def zeilen(r):
     y += 7
     z.append((y, [(120, "Gesamtbetrag", "L", True), (190, f'{_de(r["brutto"])} EUR', "R", True)]))
     y += 16
-    z.append((y, [(20, f'Zahlbar innerhalb von {r["zahlungsziel_tage"]} Tagen netto bis zum '
-                       f'{r["faellig"]:%d.%m.%Y}.', "L", False)]))
+    z.append((y, [(20, zahlungstext(r) + f' bis zum {r["faellig"]:%d.%m.%Y}.', "L", False)]))
     y += 6
     z.append((y, [(20, f'Bankverbindung: IBAN {_iban_lesbar(r["iban"])} · BIC {r["bic"]}', "L", False)]))
     return z
@@ -179,6 +186,10 @@ def cii_xml(r=None):
     bestellung = (f"""
    <ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>{r["bestellnummer"]}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>"""
                   if r.get("bestellnummer") else "")
+    sk = r.get("skonto")
+    skonto = (f'<ram:ApplicableTradePaymentDiscountTerms><ram:BasisPeriodMeasure unitCode="DAY">{sk["tage"]}'
+              f'</ram:BasisPeriodMeasure><ram:CalculationPercent>{D(sk["prozent"]):.2f}</ram:CalculationPercent>'
+              f'</ram:ApplicableTradePaymentDiscountTerms>') if sk else ""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100">
  <rsm:ExchangedDocumentContext><ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>urn:cen.eu:en16931:2017</ram:ID></ram:GuidelineSpecifiedDocumentContextParameter></rsm:ExchangedDocumentContext>
@@ -192,7 +203,7 @@ def cii_xml(r=None):
   <ram:ApplicableHeaderTradeSettlement>
    <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
    <ram:SpecifiedTradeSettlementPaymentMeans><ram:TypeCode>58</ram:TypeCode><ram:PayeePartyCreditorFinancialAccount><ram:IBANID>{r["iban"]}</ram:IBANID></ram:PayeePartyCreditorFinancialAccount></ram:SpecifiedTradeSettlementPaymentMeans>{steuern}
-   <ram:SpecifiedTradePaymentTerms><ram:Description>Zahlbar innerhalb von {r["zahlungsziel_tage"]} Tagen netto</ram:Description><ram:DueDateDateTime><udt:DateTimeString format="102">{r["faellig"]:%Y%m%d}</udt:DateTimeString></ram:DueDateDateTime></ram:SpecifiedTradePaymentTerms>
+   <ram:SpecifiedTradePaymentTerms><ram:Description>{zahlungstext(r)}</ram:Description><ram:DueDateDateTime><udt:DateTimeString format="102">{r["faellig"]:%Y%m%d}</udt:DateTimeString></ram:DueDateDateTime>{skonto}</ram:SpecifiedTradePaymentTerms>
    <ram:SpecifiedTradeSettlementHeaderMonetarySummation><ram:LineTotalAmount>{r["netto"]}</ram:LineTotalAmount><ram:TaxBasisTotalAmount>{r["netto"]}</ram:TaxBasisTotalAmount><ram:TaxTotalAmount currencyID="EUR">{r["steuer"]}</ram:TaxTotalAmount><ram:GrandTotalAmount>{r["brutto"]}</ram:GrandTotalAmount><ram:DuePayableAmount>{r["brutto"]}</ram:DuePayableAmount></ram:SpecifiedTradeSettlementHeaderMonetarySummation>
   </ram:ApplicableHeaderTradeSettlement>
  </rsm:SupplyChainTradeTransaction>
@@ -228,7 +239,7 @@ def ubl_xml(r=None):
  <cac:AccountingSupplierParty><cac:Party><cac:PartyName><cbc:Name>{r["lieferant"]}</cbc:Name></cac:PartyName><cac:PartyTaxScheme><cbc:CompanyID>{r["ust_id"]}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme><cac:PartyLegalEntity><cbc:RegistrationName>{r["lieferant"]}</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingSupplierParty>
  <cac:AccountingCustomerParty><cac:Party><cac:PartyLegalEntity><cbc:RegistrationName>{r["kunde"]}</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingCustomerParty>
  <cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>{r["iban"]}</cbc:ID></cac:PayeeFinancialAccount></cac:PaymentMeans>
- <cac:PaymentTerms><cbc:Note>Zahlbar innerhalb von {r["zahlungsziel_tage"]} Tagen netto</cbc:Note></cac:PaymentTerms>
+ <cac:PaymentTerms><cbc:Note>{zahlungstext(r)}</cbc:Note></cac:PaymentTerms>
  <cac:TaxTotal><cbc:TaxAmount currencyID="EUR">{r["steuer"]}</cbc:TaxAmount>{steuern}</cac:TaxTotal>
  <cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">{r["netto"]}</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">{r["netto"]}</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">{r["brutto"]}</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">{r["brutto"]}</cbc:PayableAmount></cac:LegalMonetaryTotal>{zeilen_xml}
 </Invoice>

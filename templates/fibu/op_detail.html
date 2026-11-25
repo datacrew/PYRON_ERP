@@ -15,7 +15,7 @@
     {% if op.fremdbelegnr %}<dt class="col-5">Fremdbeleg</dt><dd class="col-7">{{ op.fremdbelegnr }}</dd>{% endif %}
     <dt class="col-5">Belegdatum</dt><dd class="col-7">{{ op.belegdatum|date:"d.m.Y" }}</dd>
     <dt class="col-5">Fällig am</dt><dd class="col-7">{{ op.faellig_am|date:"d.m.Y" }}</dd>
-    <dt class="col-5">Skonto</dt><dd class="col-7">{% if op.skonto_prozent %}{{ op.skonto_prozent|zahl }} % bis {{ op.skonto_bis|date:"d.m.Y" }}{% if skonto %} (heute {{ skonto|euro }}){% endif %}{% else %}–{% endif %}</dd>
+    <dt class="col-5">Skonto</dt><dd class="col-7">{% if op.skonto_prozent %}{{ op.skonto_prozent|zahl }} % bis {{ op.skonto_bis|date:"d.m.Y" }}{% if op.skontobetrag %} = {{ op.skontobetrag|euro }}{% endif %}{% if skonto %} (heute {{ skonto|euro }}){% endif %}{% else %}–{% endif %}</dd>
     <dt class="col-5">Betrag</dt><dd class="col-7">{{ op.betrag|euro }}</dd>
     <dt class="col-5">Offen</dt><dd class="col-7 fw-semibold">{{ op.offen|euro }}</dd>
     <dt class="col-5">Mahnstufe</dt><dd class="col-7">{{ op.mahnstufe }}{% if op.letzte_mahnung %} (zuletzt {{ op.letzte_mahnung|date:"d.m.Y" }}){% endif %}</dd>

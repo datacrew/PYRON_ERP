@@ -44,7 +44,8 @@ MENGE = r"\d{1,3}(?:\.\d{3})+(?:,\d{1,3})?|\d+(?:[.,]\d{1,3})?"
 DATUM = r"\d{1,2}\.\s?\d{1,2}\.\s?(?:\d{4}|\d{2})\b"
 
 FELDER_KOPF = ("lieferant_name", "ust_id", "iban", "rechnungsnummer", "rechnungsdatum", "faellig_am",
-               "zahlungsziel_tage", "zahlungsbedingung", "bestellnummer", "netto", "steuer", "brutto")
+               "zahlungsziel_tage", "zahlungsbedingung", "bestellnummer", "netto", "steuer", "brutto",
+               "skonto_prozent", "skonto_tage", "skonto_bis", "skonto_betrag")
 
 
 # ------------------------------------------------------------------ Hilfen
@@ -149,7 +150,8 @@ def _xml_cii(w):
     for reg in _pfad(verk, "SpecifiedTaxRegistration/ID", alle=True) if verk is not None else []:
         if reg.get("schemeID") == "VA":
             ust = (reg.text or "").strip()
-    bed = _pfad(abr, "SpecifiedTradePaymentTerms")
+    bedingungen = _pfad(abr, "SpecifiedTradePaymentTerms", alle=True)
+    bed = bedingungen[0] if bedingungen else None
     r = {
         "rechnungsnummer": _txt(w, "ExchangedDocument/ID"),
         "rechnungsdatum": datum(_txt(w, "ExchangedDocument/IssueDateTime/DateTimeString")),
@@ -157,7 +159,8 @@ def _xml_cii(w):
         "ust_id": ust,
         "iban": _txt(abr, "SpecifiedTradeSettlementPaymentMeans/PayeePartyCreditorFinancialAccount/IBANID"),
         "faellig_am": datum(_txt(bed, "DueDateDateTime/DateTimeString")) if bed is not None else None,
-        "zahlungsbedingung": _txt(bed, "Description") if bed is not None else "",
+        # BT-20 Zahlungsbedingungen (ggf. mehrere Einträge, z. B. Skontostaffel + netto)
+        "zahlungsbedingung": "; ".join(t for t in (_txt(b, "Description") for b in bedingungen) if t),
         # BT-13 Bestellnummer des Käufers
         "bestellnummer": _txt(tx, "ApplicableHeaderTradeAgreement/BuyerOrderReferencedDocument/IssuerAssignedID"),
         "netto": zahl(_txt(summen, "TaxBasisTotalAmount") or _txt(summen, "LineTotalAmount")),
@@ -180,6 +183,17 @@ def _xml_cii(w):
             "betrag": zahl(_txt(z, "SpecifiedLineTradeSettlement/SpecifiedTradeSettlementLineMonetarySummation/"
                                    "LineTotalAmount")),
         })
+    # Strukturierter Skonto (CII ApplicableTradePaymentDiscountTerms) – sonst Text der Zahlungsbedingung
+    for b in bedingungen:
+        rabatt = _pfad(b, "ApplicableTradePaymentDiscountTerms")
+        prozent = zahl(_txt(rabatt, "CalculationPercent")) if rabatt is not None else None
+        if prozent:
+            tage = _txt(rabatt, "BasisPeriodMeasure")
+            r["skonto"] = {"prozent": prozent, "tage": int(zahl(tage)) if zahl(tage) is not None else None,
+                           "bis": datum(_txt(rabatt, "BasisDateDateTime/DateTimeString")),
+                           "basis": zahl(_txt(rabatt, "BasisAmount")),
+                           "betrag": zahl(_txt(rabatt, "ActualDiscountAmount"))}
+            break
     return r
 
 
@@ -215,6 +229,12 @@ def _xml_ubl(w):
             "steuersatz": zahl(_txt(z, "Item/ClassifiedTaxCategory/Percent")),
             "betrag": zahl(_txt(z, "LineExtensionAmount")),
         })
+    # UBL: strukturierter Skonto (PaymentTerms/SettlementDiscountPercent + SettlementPeriod)
+    prozent = zahl(_txt(w, "PaymentTerms/SettlementDiscountPercent"))
+    if prozent:
+        r["skonto"] = {"prozent": prozent, "tage": None,
+                       "bis": datum(_txt(w, "PaymentTerms/SettlementPeriod/EndDate")),
+                       "basis": None, "betrag": zahl(_txt(w, "PaymentTerms/SettlementDiscountAmount"))}
     return r
 
 
@@ -244,8 +264,66 @@ RE_RECHNUNGSDATUM = re.compile(r"\b(?:Rechnungsdatum|Belegdatum|Datum(?:\s+der\s
 RE_FAELLIG = re.compile(rf"(?:f[äa]llig\s+(?:am|bis|zum)?|zahlbar\s+bis(?:\s+zum)?|bis\s+zum|Zahlungsziel|"
                         rf"F[äa]lligkeit(?:sdatum)?)\s*[:.]?\s*({DATUM})", re.I)
 RE_TAGE = re.compile(r"(?:innerhalb|binnen)\s+(?:von\s+)?(\d{1,3})\s+Tag(?:en)?|(\d{1,3})\s+Tage\s+netto", re.I)
-RE_SKONTO = re.compile(r"(\d{1,2}(?:,\d{1,2})?)\s?%\s+Skonto\s+(?:bei\s+Zahlung\s+)?(?:innerhalb|binnen)\s+"
-                       r"(?:von\s+)?(\d{1,3})\s+Tag", re.I)
+_PROZ = r"(?P<p>\d{1,2}(?:[,.]\d{1,2})?)\s?%"
+_ABZUG = r"(?:abz(?:üglich|ugl\.?|gl\.?)\s+|mit\s+|unter\s+Abzug\s+von\s+)?"
+# Skontoangaben in üblichen Schreibweisen (Reihenfolge = Priorität bei Überschneidung)
+RE_SKONTO_LISTE = [
+    # XRechnung-Konvention (BT-20): #SKONTO#TAGE=14#PROZENT=2.00#[BASISBETRAG=119.00#]
+    re.compile(r"#SKONTO#TAGE=(?P<t>\d{1,3})#PROZENT=(?P<p>\d{1,2}(?:\.\d{1,2})?)#"
+               r"(?:BASISBETRAG=(?P<b>-?\d+(?:\.\d{1,2})?)#)?", re.I),
+    # „2 % Skonto bei Zahlung bis 24.11.2026“ / „2 % Skonto bis zum 24.11.2026“
+    re.compile(rf"{_PROZ}\s+Skonto\s+(?:bei\s+Zahlung\s+)?(?:bis(?:\s+zum)?|am)\s+(?P<d>{DATUM})", re.I),
+    # „2 % Skonto (bei Zahlung) innerhalb von 10 Tagen“
+    re.compile(rf"{_PROZ}\s+Skonto\s+(?:bei\s+Zahlung\s+)?(?:innerhalb|binnen)\s+(?:von\s+)?(?P<t>\d{{1,3}})\s+Tag",
+               re.I),
+    # „bei Zahlung bis 24.11.2026 abzüglich 2 % Skonto“
+    re.compile(rf"(?:Zahlung\s+)?bis(?:\s+zum)?\s+(?P<d>{DATUM})\s+{_ABZUG}{_PROZ}\s+Skonto", re.I),
+    # „14 Tage 2 % Skonto“ / „innerhalb von 14 Tagen abzüglich 2 % Skonto“ / „Zahlbar in 14 Tagen mit 2 % Skonto“
+    re.compile(rf"(?:(?:innerhalb|binnen|in)\s+(?:von\s+)?)?(?P<t>\d{{1,3}})\s+Tag(?:e|en)?\s*[:,]?\s+{_ABZUG}"
+               rf"{_PROZ}\s+Skonto", re.I),
+]
+
+
+def skonto_aus_text(text):
+    """Erste Skontoangabe im Text → {"prozent", "tage", "bis", "basis", "spanne"} oder None.
+
+    Erkennt u. a. „14 Tage 2 % Skonto, 30 Tage netto“, „2 % Skonto innerhalb 10 Tagen“,
+    „2 % Skonto bei Zahlung bis 24.11.2026“ und die XRechnung-Konvention „#SKONTO#TAGE=14#PROZENT=2.00#“.
+    """
+    treffer = []
+    for rang, muster in enumerate(RE_SKONTO_LISTE):
+        for m in muster.finditer(text or ""):
+            treffer.append((m.start(), rang, m))
+    if not treffer:
+        return None
+    _, _, m = min(treffer, key=lambda t: (t[0], t[1]))
+    g = m.groupdict()
+    prozent = zahl(g["p"]) if "," in g["p"] else D(g["p"])
+    if not prozent or prozent <= 0 or prozent >= 100:
+        return None
+    return {"prozent": prozent, "tage": int(g["t"]) if g.get("t") else None,
+            "bis": datum(g["d"]) if g.get("d") else None,
+            "basis": D(g["b"]) if g.get("b") else None, "spanne": m.span()}
+
+
+def skonto_bereiche(text):
+    """Textstellen aller Skontoangaben (damit Skontofristen nicht als Zahlungsziel/Fälligkeit gelten)."""
+    return [m.span() for muster in RE_SKONTO_LISTE for m in muster.finditer(text or "")]
+
+
+def _proz_text(p):
+    return f"{D(p).normalize():f}".replace(".", ",")
+
+
+def skonto_bedingung(sk):
+    """Lesbare Kurzform: „2 % Skonto innerhalb 10 Tagen“ bzw. „2 % Skonto bis 24.11.2026“."""
+    if sk.get("tage") is not None:
+        return f"{_proz_text(sk['prozent'])} % Skonto innerhalb {sk['tage']} Tagen"
+    if sk.get("bis"):
+        return f"{_proz_text(sk['prozent'])} % Skonto bis {sk['bis']:%d.%m.%Y}"
+    return f"{_proz_text(sk['prozent'])} % Skonto"
+
+
 RE_BESTELLNR = re.compile(r"\b(?:Ihre\s+|Unsere\s+)?(?:Bestell(?:ung|nummer|[\s-]?Nr\.?)|Auftrags?[\s-]?Nr\.?|"
                           r"Order\s*(?:No\.?|Number))\s*(?:Nr\.?\s*)?[:#.]?\s*([A-Z0-9][A-Z0-9\-/_.]{2,40})", re.I)
 RE_UST_ID = re.compile(r"\b(DE\s?\d{3}\s?\d{3}\s?\d{3}|ATU\d{8}|(?:FR|IT|NL|BE|LU|ES|PL|CZ|DK)[0-9A-Z]{8,12})\b")
@@ -330,21 +408,25 @@ def aus_text(text, eigene=None):
             r["rechnungsdatum"], k["rechnungsdatum"] = alle[0], 0.5
 
     # Zahlungsziel: längste Tagesfrist außerhalb einer Skontoangabe („2 % Skonto innerhalb 10 Tagen“)
-    skonto_bereiche = [m.span() for m in RE_SKONTO.finditer(text)]
-    tage = [int(m.group(1) or m.group(2)) for m in RE_TAGE.finditer(text)
-            if not any(a <= m.start() < e for a, e in skonto_bereiche)]
+    bereiche = skonto_bereiche(text)
+
+    def im_skonto(pos):
+        return any(a <= pos < e for a, e in bereiche)
+
+    tage = [int(m.group(1) or m.group(2)) for m in RE_TAGE.finditer(text) if not im_skonto(m.start())]
     if tage:
         r["zahlungsziel_tage"], k["zahlungsziel_tage"] = max(tage), 0.9
-    m = RE_FAELLIG.search(text)
-    if m and datum(m.group(1)):
+    m = next((m for m in RE_FAELLIG.finditer(text) if datum(m.group(1)) and not im_skonto(m.start(1))), None)
+    if m:
         r["faellig_am"], k["faellig_am"] = datum(m.group(1)), 0.9
     elif r.get("zahlungsziel_tage") is not None and r.get("rechnungsdatum"):
         r["faellig_am"] = r["rechnungsdatum"] + timedelta(days=r["zahlungsziel_tage"])
         k["faellig_am"] = 0.8
     bedingung = []
-    m = RE_SKONTO.search(text)
-    if m:
-        bedingung.append(f"{m.group(1)} % Skonto innerhalb {m.group(2)} Tagen")
+    sk = skonto_aus_text(text)
+    if sk:
+        r["skonto"] = sk
+        bedingung.append(skonto_bedingung(sk))
     if r.get("zahlungsziel_tage") is not None:
         bedingung.append(f"{r['zahlungsziel_tage']} Tage netto")
     if bedingung:
@@ -410,6 +492,55 @@ def aus_text(text, eigene=None):
     return r, k
 
 
+def zahlungsziel(text):
+    """Längste Tagesfrist außerhalb von Skontoangaben („14 Tage 2 % Skonto, 30 Tage netto“ → 30) oder None."""
+    bereiche = skonto_bereiche(text)
+    tage = [int(m.group(1) or m.group(2)) for m in RE_TAGE.finditer(text or "")
+            if not any(a <= m.start() < e for a, e in bereiche)]
+    return max(tage) if tage else None
+
+
+def skonto_berechnen(prozent, tage=None, bis=None, rechnungsdatum=None, brutto=None, basis=None, betrag=None):
+    """Skontofrist und -betrag ergänzen → (bis, betrag); Basis ist der Bruttobetrag (bzw. Skontobasis lt. XML)."""
+    if bis is None and tage is not None and rechnungsdatum:
+        bis = rechnungsdatum + timedelta(days=int(tage))
+    if not betrag and prozent and (basis if basis is not None else brutto) is not None:
+        betrag = (D(basis if basis is not None else brutto) * D(prozent) / 100).quantize(CENT)
+    return bis, betrag
+
+
+def _skonto_uebernehmen(roh, konf, quelle):
+    """Erkannten Skonto (roh["skonto"]) in die Kopffelder skonto_prozent/_tage/_bis/_betrag übertragen."""
+    sk = roh.get("skonto")
+    if not sk or not sk.get("prozent"):
+        return
+    bis, betrag = skonto_berechnen(sk["prozent"], sk.get("tage"), sk.get("bis"), roh.get("rechnungsdatum"),
+                                   roh.get("brutto"), sk.get("basis"), sk.get("betrag"))
+    roh.update(skonto_prozent=sk["prozent"], skonto_tage=sk.get("tage"), skonto_bis=bis, skonto_betrag=betrag)
+    if quelle != "xml":
+        konf.update(skonto_prozent=0.85, skonto_tage=0.85, skonto_bis=0.85 if bis else 0.0,
+                    skonto_betrag=0.8 if betrag is not None else 0.0)
+
+
+def skonto_ergaenzen(felder):
+    """Nach einer Korrektur: fehlende Skontofrist/-betrag aus Satz, Tagen, Rechnungsdatum und Brutto ableiten;
+    ohne Skontosatz werden die abhängigen Felder entfernt."""
+    prozent = feldwert(felder, "skonto_prozent", "betrag")
+    if not prozent:
+        for name in ("skonto_prozent", "skonto_tage", "skonto_bis", "skonto_betrag"):
+            felder.pop(name, None)
+        return felder
+    bis, betrag = skonto_berechnen(prozent, feldwert(felder, "skonto_tage", "int"),
+                                   feldwert(felder, "skonto_bis", "datum"),
+                                   feldwert(felder, "rechnungsdatum", "datum"), feldwert(felder, "brutto", "betrag"),
+                                   betrag=feldwert(felder, "skonto_betrag", "betrag"))
+    if bis and "skonto_bis" not in felder:
+        felder["skonto_bis"] = _feld(bis, 0.8)
+    if betrag is not None and "skonto_betrag" not in felder:
+        felder["skonto_betrag"] = _feld(betrag, 0.8)
+    return felder
+
+
 def extrahieren(text="", xml=None, eigene=None):
     """Text und/oder E-Rechnungs-XML → {"quelle", "felder", "positionen", "steuersaetze"} (ohne Datenbank)."""
     roh, konf, quelle = None, {}, "text"
@@ -418,19 +549,20 @@ def extrahieren(text="", xml=None, eigene=None):
         if roh:
             quelle = "xml"
             konf = {f: 1.0 for f in FELDER_KOPF}
-            if roh.get("faellig_am") is None:
-                tage = RE_TAGE.search(roh.get("zahlungsbedingung") or "")
-                if tage and roh.get("rechnungsdatum"):
-                    roh["zahlungsziel_tage"] = int(tage.group(1) or tage.group(2))
-                    roh["faellig_am"] = roh["rechnungsdatum"] + timedelta(days=roh["zahlungsziel_tage"])
+            tage = zahlungsziel(roh.get("zahlungsbedingung"))
+            if tage is not None:
+                roh["zahlungsziel_tage"] = tage
+                if roh.get("faellig_am") is None and roh.get("rechnungsdatum"):
+                    roh["faellig_am"] = roh["rechnungsdatum"] + timedelta(days=tage)
+            sk = roh.get("skonto") or skonto_aus_text(roh.get("zahlungsbedingung"))
+            if sk:
+                roh["skonto"] = sk
+                roh["zahlungsbedingung"] = roh.get("zahlungsbedingung") or skonto_bedingung(sk)
             for p in roh["positionen"]:
                 p["konfidenz"] = 1.0
     if roh is None:
         roh, konf = aus_text(text or "", eigene)
-    else:
-        tage = RE_TAGE.search(roh.get("zahlungsbedingung") or "")
-        if tage:
-            roh.setdefault("zahlungsziel_tage", int(tage.group(1) or tage.group(2)))
+    _skonto_uebernehmen(roh, konf, quelle)
     felder = {}
     for name in FELDER_KOPF:
         wert = roh.get(name)
@@ -612,6 +744,20 @@ def plausibilitaet(erg, dokument=None):
         melden("warnung", "Rechnungsdatum liegt in der Zukunft.")
     if rd and fa and fa < rd:
         melden("warnung", "Fälligkeit liegt vor dem Rechnungsdatum.")
+    sp, sb = feldwert(f, "skonto_prozent", "betrag"), feldwert(f, "skonto_bis", "datum")
+    if sp:
+        if sp > 10:
+            melden("warnung", f"Skontosatz {sp} % ist ungewöhnlich hoch – bitte prüfen.")
+        if not sb:
+            melden("warnung", "Skontosatz ohne Skontofrist – der Skonto wird nicht in den offenen Posten übernommen.")
+        elif rd and sb < rd:
+            melden("warnung", "Skontofrist liegt vor dem Rechnungsdatum.")
+        elif fa and sb > fa:
+            melden("warnung", "Skontofrist endet nach der Fälligkeit.")
+        else:
+            sbetrag = feldwert(f, "skonto_betrag", "betrag")
+            melden("ok", f"Skonto {_proz_text(sp)} % bis {sb:%d.%m.%Y}"
+                         + (f" ({sbetrag} €)" if sbetrag is not None else "") + " wird in den offenen Posten übernommen.")
     if partner_id:
         p = Geschaeftspartner.objects.filter(pk=partner_id).first()
         iban = feldwert(f, "iban")
