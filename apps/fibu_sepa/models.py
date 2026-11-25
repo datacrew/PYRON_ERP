@@ -272,6 +272,11 @@ class Ruecklastschrift(models.Model):
     }
     # Diese Gründe machen das Mandat unbrauchbar → Mandat sperren (Prüfung durch die Buchhaltung)
     MANDAT_SPERREN = {"AC01", "AC04", "AC06", "AC13", "MD01", "MD02", "MD07", "BE05"}
+    # MD06 bewusst NICHT sperrend: Der Kunde hat innerhalb der 8-Wochen-Frist (CORE) einer an sich autorisierten
+    # Lastschrift widersprochen – das Mandat bleibt rechtlich wirksam. Es wird nur vermerkt, damit die
+    # Buchhaltung die Ursache klärt (Reklamation, Doppelabbuchung). Gesperrt wird nur bei Gründen, die das
+    # Mandat selbst unbrauchbar machen (z. B. AC04 Konto erloschen, MD01 kein gültiges Mandat).
+    MANDAT_VERMERKEN = {"MD06"}
 
     posten = models.ForeignKey(ZahlungslaufPosten, on_delete=models.PROTECT, related_name="rueckgaben")
     bankumsatz = models.OneToOneField("fibu.Bankumsatz", on_delete=models.PROTECT, related_name="sepa_rueckgabe")

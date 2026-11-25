@@ -42,6 +42,10 @@ NUMMERNKREISE = [
     # Phase 4 – Finanzbuchhaltung
     ("FIBU_BUCHUNG", "Buchungen (Journal)", "FB-", True, 6), ("FIBU_ER", "Eingangsrechnungen", "ER-", True, 5),
     ("FIBU_BANKIMPORT", "Bankimporte", "BI-", True, 4), ("FIBU_MAHNLAUF", "Mahnläufe", "ML-", True, 4),
+    # SEPA-Zahlungsverkehr (Mandatsreferenz ohne Jahresbezug: muss über die Mandatslaufzeit eindeutig bleiben)
+    ("SEPA_MANDAT", "SEPA-Mandatsreferenzen", "MANDAT-", False, 6),
+    ("SEPA_UEBERWEISUNG", "SEPA-Überweisungsläufe", "ZL-", True, 4),
+    ("SEPA_LASTSCHRIFT", "SEPA-Lastschriftläufe", "LL-", True, 4),
     # Phase 5 – Vertrieb und Versand
     ("VK_AUFTRAG", "Kundenaufträge", "VA-", True, 5), ("TOUR", "Versandtouren", "TO-", True, 5),
     ("EDI", "EDIFACT-Übertragungsnummern (UNB)", "", False, 8),

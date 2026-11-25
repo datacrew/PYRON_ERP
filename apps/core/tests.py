@@ -259,5 +259,5 @@ class BetriebTests(TestCase):
         self.assertTrue(Rolle.objects.get(name="Administrator").benutzer.filter(pk=user.pk).exists())
         ausgabe = StringIO()
         call_command("erp_pruefen", stdout=ausgabe)
-        self.assertIn("Trigger: 5/5", ausgabe.getvalue())
+        self.assertIn("Trigger: 7/7", ausgabe.getvalue())
         self.assertIn("bestanden", ausgabe.getvalue())
