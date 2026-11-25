@@ -450,6 +450,7 @@ ZUGFeRD/Factur-X und XRechnung (XML) brauchen **kein** OCR.
 |---|---|---|
 | `ERP_DMS_OCR_SPRACHE` | Tesseract-Sprache(n), z. B. `deu+eng` | `deu` |
 | `ERP_DMS_OCR_TIMEOUT` | Zeitlimit je Seite in Sekunden | `180` |
+| `ERP_DMS_IMAP_*` | E-Mail-Rechnungseingang, siehe 11.4 | deaktiviert |
 
 Dokumente werden unter `MEDIA_ROOT/dms/JJJJ/MM/` abgelegt und sind Teil der normalen Datensicherung
 (Abschnitt 6). `python manage.py erp_pruefen` prüft zusätzlich die SHA-256-Siegel aller DMS-Dateien.
@@ -487,7 +488,47 @@ systemctl list-timers erp-dms-eingang.timer
 Demo-/Schulungsinstanz: `python manage.py dms_demodaten` legt synthetische Beispielrechnungen an (bei
 `ERP_DEMODATEN=1` bzw. `install.sh --demo` automatisch) – **nie im Produktivsystem**.
 
-### 11.4 Aufbewahrung
+### 11.4 Rechnungseingang per E-Mail (IMAP)
+
+`python manage.py dms_mailabruf` ruft ein Postfach über **IMAP mit SSL/TLS** (Port 993, Zertifikatsprüfung) ab und
+legt die Anhänge jeder ungelesenen Mail als Stapel im DMS an (anschließend OCR/Belegerkennung wie beim
+Eingangsordner). Zugangsdaten stehen **nur** in der `.env` (bzw. als Datei über `ERP_DMS_IMAP_PASSWORD_FILE`),
+nie im Code. Am besten ein eigenes Postfach (z. B. `rechnungen@ihre-firma.de`) nur für Eingangsrechnungen anlegen.
+
+| Variable | Bedeutung | Standard |
+|---|---|---|
+| `ERP_DMS_IMAP_HOST` | IMAP-Server; leer = Abruf deaktiviert | – |
+| `ERP_DMS_IMAP_PORT` | Port (IMAPS) | `993` |
+| `ERP_DMS_IMAP_USER` / `ERP_DMS_IMAP_PASSWORD` | Anmeldung (App-Passwort empfohlen) | – |
+| `ERP_DMS_IMAP_PASSWORD_FILE` | Alternativ: Datei mit dem Passwort (z. B. Docker-Secret, Rechte 600) | – |
+| `ERP_DMS_IMAP_ORDNER` | abzurufender Ordner | `INBOX` |
+| `ERP_DMS_IMAP_ZIELORDNER` | verarbeitete Mails dorthin verschieben (Ordner vorher anlegen); leer = nur als gelesen markieren | leer |
+| `ERP_DMS_IMAP_FEHLERORDNER` | Mails ohne verwertbaren Anhang bzw. nach 3 Fehlversuchen | leer |
+| `ERP_DMS_IMAP_ABSENDER` | optional nur diese Absender (`a@b.de,@lieferant.de`), andere werden als gelesen markiert | alle |
+| `ERP_DMS_IMAP_ART` | Dokumentart der Anhänge | `ER` |
+| `ERP_DMS_IMAP_MAX_MAILS` / `ERP_DMS_IMAP_TIMEOUT` | Mails je Lauf / Netzwerk-Zeitlimit (s) | `50` / `60` |
+
+| Betrieb | Zeitplan |
+|---|---|
+| nativ (`install.sh`) | `erp-dms-mailabruf.timer` alle 5 Minuten (Dienst `erp-dms-mailabruf.service`) |
+| Docker | Dienst `dms-mailabruf` in `deploy/docker-compose.prod.yml` (Schleife, 5 Minuten) |
+
+- **Dubletten:** Jede Message-ID wird in „E-Mail-Eingang" gespeichert und nie zweimal übernommen – auch wenn die
+  Mail im Postfach wieder auf „ungelesen" gesetzt wird. Identische Dateien (SHA-256) werden ebenfalls übersprungen.
+- **Fehler:** Verbindungs-/Anmeldefehler beenden den Lauf mit Fehlermeldung (Exit-Code ≠ 0, im Journal sichtbar).
+  Fehler bei einer einzelnen Mail stoppen den Lauf nicht; die Mail bleibt ungelesen und wird bis zu 3-mal erneut
+  versucht. Parallele Läufe verhindert eine PostgreSQL-Sperre (Advisory Lock).
+- **Prüfen ohne Änderungen:** `python manage.py dms_mailabruf --trocken` listet die Mails nur auf.
+- Microsoft 365/Exchange Online erlaubt IMAP mit Passwort teils nicht mehr (nur OAuth2) – dann ein Postfach mit
+  App-Passwort verwenden oder Mails per Weiterleitungsregel an ein IMAP-fähiges Postfach senden.
+- **Nicht getestet:** Der Abruf ist nur mit einem simulierten IMAP-Server automatisiert getestet; vor dem
+  Produktivbetrieb mit dem echten Postfach `--trocken` und einen ersten Lauf prüfen.
+
+```bash
+sudo systemctl start erp-dms-mailabruf.service && journalctl -u erp-dms-mailabruf -n 20
+```
+
+### 11.5 Aufbewahrung
 
 Archivierte Dokumente sind per Datenbank-Trigger unveränderbar und nicht löschbar. Die Frist läuft bis zum
 31.12. des Jahres „Dokumentdatum + N Jahre": Eingangs-/Ausgangsrechnungen 8 Jahre (Buchungsbelege, § 147 AO

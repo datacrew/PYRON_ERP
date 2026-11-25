@@ -68,6 +68,8 @@ class Stapel(models.Model):
         UPLOAD = "UPLOAD", "Mehrfach-Upload"
         EINGANGSORDNER = "EINGANGSORDNER", "Eingangsordner (Hotfolder)"
         TRENNUNG = "TRENNUNG", "Trennung Sammel-PDF"
+        EMAIL = "EMAIL", "E-Mail-Eingang"
+        API = "API", "REST-API"
 
     nummer = models.CharField("Stapelnummer", max_length=30, unique=True)
     bezeichnung = models.CharField("Bezeichnung", max_length=200, blank=True)
@@ -303,3 +305,36 @@ class Kontierungsregel(models.Model):
 
     def __str__(self):
         return f"{self.partner.name} {self.stichwort or '*'} → {self.konto}"
+
+
+class MailEingang(models.Model):
+    """Protokoll des E-Mail-Rechnungseingangs (dms_mailabruf): je Message-ID genau ein Eintrag (Dublettenschutz)."""
+
+    class Status(models.TextChoices):
+        UEBERNOMMEN = "UEBERNOMMEN", "Übernommen"
+        OHNE_ANHANG = "OHNE_ANHANG", "Ohne verwertbaren Anhang"
+        IGNORIERT = "IGNORIERT", "Absender nicht zugelassen"
+        FEHLER = "FEHLER", "Fehler (wird erneut versucht)"
+        ABGEBROCHEN = "ABGEBROCHEN", "Fehler (aufgegeben)"
+
+    message_id = models.CharField("Message-ID", max_length=500, unique=True)
+    absender = models.CharField("Absender", max_length=320, blank=True)
+    betreff = models.CharField("Betreff", max_length=500, blank=True)
+    gesendet_am = models.DateTimeField("Gesendet am", null=True, blank=True)
+    postfach = models.CharField("Postfach/Ordner", max_length=200, blank=True)
+    status = models.CharField("Status", max_length=12, choices=Status.choices)
+    anhaenge = models.PositiveIntegerField("Übernommene Anhänge", default=0)
+    hinweise = models.TextField("Hinweise (abgelehnte Anhänge)", blank=True)
+    fehler = models.TextField("Fehler", blank=True)
+    versuche = models.PositiveIntegerField("Versuche", default=1)
+    stapel = models.ForeignKey(Stapel, null=True, blank=True, on_delete=models.PROTECT, related_name="mails")
+    erstellt_am = models.DateTimeField("Abgerufen am", default=timezone.now)
+    geaendert_am = models.DateTimeField("Zuletzt bearbeitet", auto_now=True)
+
+    class Meta:
+        verbose_name = "E-Mail-Eingang"
+        verbose_name_plural = "E-Mail-Eingang"
+        ordering = ["-erstellt_am", "-pk"]
+
+    def __str__(self):
+        return f"{self.absender}: {self.betreff}"[:120]

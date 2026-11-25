@@ -24,6 +24,7 @@
 #   /var/log/erp        Protokolle
 #   systemd: erp.service (Gunicorn 127.0.0.1:8000), erp-backup.timer (tägliche Sicherung),
 #            erp-dms-eingang.timer (DMS-Eingangsordner /var/lib/erp/eingang alle 5 Minuten)
+#            erp-dms-mailabruf.timer (E-Mail-Rechnungseingang per IMAP alle 5 Minuten, aktiv nur mit ERP_DMS_IMAP_HOST)
 # =====================================================================================
 set -euo pipefail
 
@@ -270,14 +271,17 @@ als_erp "$VENV/bin/python" manage.py check --deploy --fail-level ERROR
 
 # ------------------------------------------------------------------ systemd
 schritt "systemd-Dienste"
-for einheit in erp.service erp-backup.service erp-backup.timer erp-dms-eingang.service erp-dms-eingang.timer; do
+for einheit in erp.service erp-backup.service erp-backup.timer erp-dms-eingang.service erp-dms-eingang.timer \
+               erp-dms-mailabruf.service erp-dms-mailabruf.timer; do
     sed -e "s|__BASIS__|$BASIS|g" -e "s|__UHRZEIT__|$BACKUP_UHRZEIT|g" "$QUELLE/deploy/systemd/$einheit" \
         | datei_schreiben "/etc/systemd/system/$einheit" 644 root:root
 done
 tu systemctl daemon-reload
-tu systemctl enable erp.service erp-backup.timer erp-dms-eingang.timer
+tu systemctl enable erp.service erp-backup.timer erp-dms-eingang.timer erp-dms-mailabruf.timer
 tu systemctl restart erp.service
 tu systemctl start erp-backup.timer erp-dms-eingang.timer
+# Mailabruf: ohne ERP_DMS_IMAP_HOST beendet sich der Dienst sofort (deaktiviert)
+tu systemctl start erp-dms-mailabruf.timer
 
 # ------------------------------------------------------------------ Caddy
 if [[ "$CADDY" == "1" ]]; then

@@ -6,6 +6,7 @@ Legt einen Lieferanten „Bürobedarf Schneider GmbH“ und einen Demo-Stapel mi
 - gescannte Rechnung (Bild-PDF, Texterkennung per Tesseract) → je nach OCR-Ergebnis erkannt bzw. „zu prüfen“
 - Sammel-PDF mit Trennblatt → wird automatisch in zwei Dokumente geteilt
 - Vertrag (Sonstiges Dokument mit Schlagwort)
+- E-Mail-Eingang: eine simulierte Lieferantenmail mit PDF-Anhang (ohne IMAP-Verbindung) → eigener Stapel
 Alle Rechnungen sind erzeugte Beispiele (apps/dms/testdaten.py), keine echten Belege.
 """
 from datetime import timedelta
@@ -69,10 +70,15 @@ class Command(BaseCommand):
         tag, _ = Tag.objects.get_or_create(name="Rahmenvertrag", defaults={"farbe": "info"})
         vertrag.tags.add(tag)
 
+        mail_stapel = self._demo_mail(T.beispiel(rechnungsnummer=f"RE-{heute.year}-0960", datum=datum, positionen=[
+            {"menge": D("2"), "einheit": "Pkg", "text": "Haftnotizen gelb", "preis": D("6.40"), "satz": 19}]))
+
         if o["ohne_ocr"]:
             self.stdout.write(self.style.SUCCESS(f"DMS-Demodaten: Stapel {stapel.nummer} angelegt (ohne OCR)."))
             return
         ok, fehler = V.warteschlange_abarbeiten(stapel=stapel, benutzer=admin)
+        if mail_stapel:
+            V.warteschlange_abarbeiten(stapel=mail_stapel, benutzer=admin)
         gebucht = ""
         erste = Dokument.objects.get(pk=dokumente[0].pk)
         if erste.status == Dokument.Status.ERKANNT:
@@ -95,6 +101,24 @@ class Command(BaseCommand):
             zahlungsbedingung=Zahlungsbedingung.objects.filter(code="30N").first())
         Adresse.objects.create(partner=p, typ="HAUPT", strasse="Industriestraße 12", plz="90402", ort="Nürnberg")
         return p
+
+    @staticmethod
+    def _demo_mail(rechnung):
+        """Simulierter E-Mail-Eingang (gleiche Logik wie dms_mailabruf, nur ohne Postfach)."""
+        from email.message import EmailMessage
+
+        from apps.dms import mailabruf as M
+
+        m = EmailMessage()
+        m["From"] = "Buchhaltung Schneider <rechnung@schneider-buero.example>"
+        m["To"], m["Subject"] = "rechnungen@pyron.example", f"Ihre Rechnung {rechnung['rechnungsnummer']}"
+        m["Message-ID"] = f"<demo-{rechnung['rechnungsnummer']}@schneider-buero.example>"
+        m.set_content("Sehr geehrte Damen und Herren,\nanbei erhalten Sie unsere Rechnung.\n(Demodaten)")
+        m.add_attachment(T.pdf(rechnung), maintype="application", subtype="pdf",
+                         filename=f"{rechnung['rechnungsnummer']}.pdf")
+        eintrag, _ = M.mail_uebernehmen(m.as_bytes(), {"absender": [], "art": Dokumentart.EINGANGSRECHNUNG},
+                                        "Demo-Postfach")
+        return eintrag.stapel
 
     @staticmethod
     def _vertrag_pdf():

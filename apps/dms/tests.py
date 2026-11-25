@@ -828,6 +828,12 @@ class DemodatenTests(DmsTestBasis):
         self.assertIsNotNone(gebucht.first().eingangsrechnung)
         self.assertTrue(gebucht.first().archiviert)
         self.assertFalse(docs.filter(status=Dokument.Status.FEHLER).exists())
+        # simulierter E-Mail-Eingang mit eigenem Stapel, Lieferant über die E-Mail-Adresse zugeordnet
+        from apps.dms.models import MailEingang
+
+        mail = MailEingang.objects.get()
+        self.assertEqual((mail.status, mail.anhaenge, mail.stapel.quelle), ("UEBERNOMMEN", 1, "EMAIL"))
+        self.assertEqual(mail.stapel.dokumente.get().partner.ust_id, "DE811569869")
         self.assertTrue(docs.filter(art=Dokumentart.VERTRAG, tags__name="Rahmenvertrag").exists())
         call_command("dms_demodaten", verbosity=0)  # zweiter Lauf legt nichts doppelt an
         self.assertEqual(Stapel.objects.filter(bezeichnung="Demodaten Dokumentenmanagement").count(), 1)
@@ -939,3 +945,238 @@ class RestApiTests(DmsTestBasis):
         gast = get_user_model().objects.create_user("ohne_rolle", password="x")
         api.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=gast).key}")
         self.assertEqual(api.get("/api/v1/dms/dokumente/").status_code, 403)
+
+
+class FakeImap:
+    """Minimaler IMAP4_SSL-Ersatz: Postfach mit Ordnern, UIDs und Flags (kein Netzwerk)."""
+
+    postfach = {}
+    instanzen = []
+
+    def __init__(self, host, port, ssl_context=None, timeout=None):
+        if host == "unerreichbar":
+            raise OSError("Name or service not known")
+        self.host, self.port, self.ssl_context = host, port, ssl_context
+        self.capabilities = ("IMAP4REV1", "MOVE")
+        self.ordner, self.angemeldet, self.expunged = None, False, 0
+        FakeImap.instanzen.append(self)
+
+    def login(self, user, passwort):
+        import imaplib
+
+        if passwort != "geheim":
+            raise imaplib.IMAP4.error("AUTHENTICATIONFAILED")
+        self.angemeldet = True
+        return "OK", [b"angemeldet"]
+
+    def select(self, ordner):
+        ordner = ordner.strip('"')
+        if ordner not in self.postfach:
+            return "NO", [b"unbekannt"]
+        self.ordner = ordner
+        return "OK", [str(len(self.postfach[ordner])).encode()]
+
+    def uid(self, befehl, *args):
+        mails = self.postfach[self.ordner]
+        if befehl == "SEARCH":
+            uids = [u for u, m in mails.items() if args[1] == "ALL" or "\\Seen" not in m["flags"]]
+            return "OK", [b" ".join(str(u).encode() for u in sorted(uids))]
+        uid = int(args[0])
+        if befehl == "FETCH":
+            if mails[uid].get("kaputt"):
+                return "NO", [None]
+            return "OK", [(f"{uid} (UID {uid} BODY[] {{1}}".encode(), mails[uid]["roh"]), b")"]
+        if befehl == "STORE":
+            mails[uid]["flags"].update(args[2].strip("()").split())
+            return "OK", [b""]
+        if befehl in ("MOVE", "COPY"):
+            ziel = args[1].strip('"')
+            self.postfach.setdefault(ziel, {})[uid] = {"roh": mails[uid]["roh"], "flags": set()}
+            if befehl == "MOVE":
+                del mails[uid]
+            return "OK", [b""]
+        raise AssertionError(befehl)
+
+    def expunge(self):
+        self.expunged += 1
+        for u in [u for u, m in self.postfach[self.ordner].items() if "\\Deleted" in m["flags"]]:
+            del self.postfach[self.ordner][u]
+        return "OK", [b""]
+
+    def logout(self):
+        return "BYE", [b""]
+
+
+def _mail(betreff="Rechnung RE-2026-0815", von="Buchhaltung Schneider <rechnung@schneider-buero.de>",
+          anhaenge=(), message_id="<a1@schneider-buero.de>", text="Anbei unsere Rechnung."):
+    from email.message import EmailMessage
+
+    m = EmailMessage()
+    m["From"], m["To"], m["Subject"] = von, "rechnungen@pyron.de", betreff
+    m["Date"] = "Thu, 12 Mar 2026 09:30:00 +0100"
+    if message_id:
+        m["Message-ID"] = message_id
+    m.set_content(text)
+    for name, daten, typ in anhaenge:
+        haupt, unter = typ.split("/")
+        m.add_attachment(daten, maintype=haupt, subtype=unter, filename=name)
+    return m.as_bytes()
+
+
+class MailabrufTests(DmsTestBasis):
+    """dms_mailabruf mit gemocktem IMAP: Anhänge → Stapel, Protokoll, Dubletten, Kennzeichnung, Fehler."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.lieferant = Geschaeftspartner.objects.create(name="Bürobedarf Schneider GmbH", ist_lieferant=True,
+                                                         ust_id="DE811569869",
+                                                         email_rechnung="rechnung@schneider-buero.de")
+
+    def setUp(self):
+        from unittest import mock
+
+        FakeImap.postfach = {"INBOX": {}, "ERP/Verarbeitet": {}, "ERP/Fehler": {}}
+        FakeImap.instanzen = []
+        p = mock.patch("apps.dms.mailabruf.imaplib.IMAP4_SSL", FakeImap)
+        p.start()
+        self.addCleanup(p.stop)
+        self.einstellungen = self.settings(
+            ERP_DMS_IMAP_HOST="imap.example.de", ERP_DMS_IMAP_USER="rechnungen@pyron.de",
+            ERP_DMS_IMAP_PASSWORD="geheim", ERP_DMS_IMAP_ORDNER="INBOX", ERP_DMS_IMAP_ZIELORDNER="ERP/Verarbeitet",
+            ERP_DMS_IMAP_FEHLERORDNER="ERP/Fehler", ERP_DMS_IMAP_ABSENDER=[])
+        self.einstellungen.enable()
+        self.addCleanup(self.einstellungen.disable)
+
+    def einwerfen(self, roh, uid=None, ordner="INBOX", **extra):
+        uid = uid or (max(FakeImap.postfach[ordner], default=0) + 1)
+        FakeImap.postfach[ordner][uid] = {"roh": roh, "flags": set(), **extra}
+        return uid
+
+    def abruf(self, *args):
+        ausgabe = io.StringIO()
+        call_command("dms_mailabruf", *args, stdout=ausgabe)
+        return ausgabe.getvalue()
+
+    def test_anhaenge_als_stapel_mit_protokoll_und_verschieben(self):
+        from .models import MailEingang, Stapel
+
+        self.einwerfen(_mail(anhaenge=[("RE-2026-0815.pdf", T.pdf(), "application/pdf"),
+                                       ("xrechnung.xml", T.cii_xml(), "application/xml"),
+                                       ("agb.docx", b"PK\x03\x04", "application/octet-stream")]))
+        self.einwerfen(_mail(betreff="Newsletter", message_id="<n1@x.de>", von="info@x.de"))
+        ausgabe = self.abruf("--ohne-verarbeitung")
+        self.assertIn("1 übernommen (2 Dokumente)", ausgabe)
+        self.assertIn("1 ohne Anhang", ausgabe)
+        mail = MailEingang.objects.get(message_id="<a1@schneider-buero.de>")
+        self.assertEqual((mail.status, mail.anhaenge, mail.absender), ("UEBERNOMMEN", 2, "rechnung@schneider-buero.de"))
+        self.assertIn("agb.docx", mail.hinweise)
+        self.assertEqual(mail.stapel.quelle, Stapel.Quelle.EMAIL)
+        docs = list(mail.stapel.dokumente.order_by("pk"))
+        self.assertEqual([d.titel for d in docs], ["RE-2026-0815", "xrechnung"])
+        self.assertEqual(docs[0].partner, self.lieferant)  # über die Rechnungs-E-Mail-Adresse
+        self.assertEqual(docs[0].metadaten["email"]["message_id"], "<a1@schneider-buero.de>")
+        eingang = docs[0].protokoll.get(aktion="Eingang").text
+        for teil in ("rechnung@schneider-buero.de", "Rechnung RE-2026-0815", "<a1@schneider-buero.de>"):
+            self.assertIn(teil, eingang)
+        # Kennzeichnung: übernommene Mail im Zielordner, Mail ohne Anhang im Fehlerordner, Posteingang leer
+        self.assertEqual(len(FakeImap.postfach["ERP/Verarbeitet"]), 1)
+        self.assertEqual(len(FakeImap.postfach["ERP/Fehler"]), 1)
+        self.assertEqual(FakeImap.postfach["INBOX"], {})
+        self.assertEqual(MailEingang.objects.get(message_id="<n1@x.de>").status, "OHNE_ANHANG")
+        self.assertIsNotNone(FakeImap.instanzen[0].ssl_context)  # SSL/TLS mit Zertifikatsprüfung
+
+    def test_dublette_per_message_id_und_datei(self):
+        from .models import MailEingang
+
+        pdf = T.pdf()  # einmal erzeugen: PDFs enthalten einen Zeitstempel
+        roh = _mail(anhaenge=[("re.pdf", pdf, "application/pdf")])
+        self.einwerfen(roh)
+        self.abruf("--ohne-verarbeitung")
+        # dieselbe Mail erneut (z. B. wieder auf ungelesen gesetzt) und dieselbe Datei in neuer Mail
+        self.einwerfen(roh)
+        self.einwerfen(_mail(message_id="<a2@schneider-buero.de>", anhaenge=[("kopie.pdf", pdf, "application/pdf")]))
+        ausgabe = self.abruf("--ohne-verarbeitung")
+        self.assertIn("1 bereits bekannt", ausgabe)
+        self.assertEqual(Dokument.objects.count(), 1)
+        zweite = MailEingang.objects.get(message_id="<a2@schneider-buero.de>")
+        self.assertIn("identisch mit", zweite.hinweise)
+        self.assertIsNone(zweite.stapel)
+        self.assertEqual(MailEingang.objects.count(), 2)
+
+    def test_ohne_zielordner_nur_gelesen_und_ohne_message_id(self):
+        uid = self.einwerfen(_mail(message_id=None, anhaenge=[("scan.tif", T.tiff(), "image/tiff")]))
+        with self.settings(ERP_DMS_IMAP_ZIELORDNER=""):
+            self.abruf("--ohne-verarbeitung")
+        self.assertIn("\\Seen", FakeImap.postfach["INBOX"][uid]["flags"])
+        from .models import MailEingang
+
+        self.assertTrue(MailEingang.objects.get().message_id.startswith("<sha256-"))
+        # zweiter Lauf findet nichts Ungelesenes mehr
+        self.assertIn("0 Mail(s)", self.abruf())
+
+    def test_absenderfilter_und_trockenlauf(self):
+        from .models import MailEingang
+
+        self.einwerfen(_mail(von="spam@werbung.de", message_id="<s@w.de>",
+                             anhaenge=[("x.pdf", T.pdf(), "application/pdf")]))
+        ausgabe = self.abruf("--trocken")
+        self.assertIn("spam@werbung.de", ausgabe)
+        self.assertFalse(MailEingang.objects.exists())
+        self.assertEqual(FakeImap.postfach["INBOX"][1]["flags"], set())
+        with self.settings(ERP_DMS_IMAP_ABSENDER=["@schneider-buero.de"]):
+            self.assertIn("1 ignoriert", self.abruf())
+        self.assertEqual(MailEingang.objects.get().status, "IGNORIERT")
+        self.assertFalse(Dokument.objects.exists())
+
+    def test_fehler_robust_und_wiederholung(self):
+        from unittest import mock
+
+        from .models import MailEingang
+
+        self.einwerfen(_mail(anhaenge=[("re.pdf", T.pdf(), "application/pdf")]))
+        self.einwerfen(b"", kaputt=True)
+        with mock.patch("apps.dms.services.dokument_anlegen", side_effect=RuntimeError("Platte voll")):
+            ausgabe = self.abruf("--ohne-verarbeitung")
+        self.assertIn("Platte voll", ausgabe)
+        self.assertIn("nicht geladen", ausgabe)
+        m = MailEingang.objects.get()
+        self.assertEqual((m.status, m.versuche), ("FEHLER", 1))
+        self.assertEqual(len(FakeImap.postfach["INBOX"]), 2)  # bleibt ungelesen → neuer Versuch
+        self.assertFalse(Dokument.objects.exists())
+        self.abruf("--ohne-verarbeitung")
+        m.refresh_from_db()
+        self.assertEqual((m.status, m.versuche, m.anhaenge), ("UEBERNOMMEN", 2, 1))
+        self.assertEqual(Dokument.objects.count(), 1)
+
+    def test_konfiguration_und_verbindungsfehler(self):
+        from django.core.management.base import CommandError
+
+        with self.settings(ERP_DMS_IMAP_HOST=""):
+            self.assertIn("deaktiviert", self.abruf())
+        with self.settings(ERP_DMS_IMAP_PASSWORD="falsch"), self.assertRaisesMessage(CommandError, "Anmeldung"):
+            self.abruf()
+        with self.settings(ERP_DMS_IMAP_HOST="unerreichbar"), self.assertRaisesMessage(CommandError, "Verbindung"):
+            self.abruf()
+        with self.assertRaisesMessage(CommandError, "nicht vorhanden"):
+            self.abruf("--ordner", "Gibtsnicht")
+
+    @skipUnless(O.tesseract_verfuegbar(), "Tesseract nicht installiert")
+    def test_mit_verarbeitung_erkannt(self):
+        self.einwerfen(_mail(anhaenge=[("re.pdf", T.pdf(), "application/pdf")]))
+        self.abruf()
+        d = Dokument.objects.get()
+        self.assertEqual(d.wert("rechnungsnummer"), "RE-2026-0815")
+        self.assertIn(d.status, (Dokument.Status.ERKANNT, Dokument.Status.PRUEFEN))
+
+
+class MailEingangSeiteTests(DmsTestBasis):
+    def test_seite_zeigt_protokoll(self):
+        from .models import MailEingang
+
+        MailEingang.objects.create(message_id="<x@y>", absender="rechnung@schneider-buero.de", betreff="RE 4711",
+                                   status=MailEingang.Status.OHNE_ANHANG)
+        self.client.force_login(self.user)
+        r = self.client.get(reverse("dms:mails"))
+        self.assertContains(r, "RE 4711")
+        self.assertContains(r, "nicht eingerichtet")

@@ -1,0 +1,11 @@
+# ERP Mittelstand – Zeitplan E-Mail-Rechnungseingang (alle 5 Minuten)
+[Unit]
+Description=ERP Mittelstand – DMS-Mailabruf alle 5 Minuten
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

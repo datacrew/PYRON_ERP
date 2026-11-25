@@ -198,6 +198,32 @@ ERP_DMS_OCR_TIMEOUT = int(os.environ.get("ERP_DMS_OCR_TIMEOUT", "180"))
 # Eingangsordner (Hotfolder) für Scanner/E-Mail-Ablage – eingelesen von „manage.py dms_eingang“
 ERP_DMS_EINGANG = Path(os.environ.get("ERP_DMS_EINGANG", BASE_DIR / "eingang"))
 
+
+def _env_oder_datei(name, standard=""):
+    """Wert aus NAME oder – für Docker-/systemd-Secrets – aus der Datei in NAME_FILE."""
+    datei = os.environ.get(f"{name}_FILE")
+    if datei and Path(datei).is_file():
+        return Path(datei).read_text(encoding="utf-8").strip()
+    return os.environ.get(name, standard)
+
+
+# Rechnungseingang per E-Mail („manage.py dms_mailabruf", IMAP über SSL/TLS). Ohne Host ist der Abruf deaktiviert.
+# Zugangsdaten nur über Umgebung/.env bzw. ERP_DMS_IMAP_PASSWORD_FILE – nie im Code.
+ERP_DMS_IMAP_HOST = os.environ.get("ERP_DMS_IMAP_HOST", "")
+ERP_DMS_IMAP_PORT = int(os.environ.get("ERP_DMS_IMAP_PORT", "993"))
+ERP_DMS_IMAP_USER = os.environ.get("ERP_DMS_IMAP_USER", "")
+ERP_DMS_IMAP_PASSWORD = _env_oder_datei("ERP_DMS_IMAP_PASSWORD")
+ERP_DMS_IMAP_ORDNER = os.environ.get("ERP_DMS_IMAP_ORDNER", "INBOX")
+# Zielordner für verarbeitete Mails (leer = nur als gelesen markieren) und für Mails ohne verwertbaren Anhang/Fehler
+ERP_DMS_IMAP_ZIELORDNER = os.environ.get("ERP_DMS_IMAP_ZIELORDNER", "")
+ERP_DMS_IMAP_FEHLERORDNER = os.environ.get("ERP_DMS_IMAP_FEHLERORDNER", "")
+# Optional: nur Absender (Adressen oder @domain, kommagetrennt) übernehmen
+ERP_DMS_IMAP_ABSENDER = [a.strip().lower() for a in os.environ.get("ERP_DMS_IMAP_ABSENDER", "").split(",")
+                         if a.strip()]
+ERP_DMS_IMAP_ART = os.environ.get("ERP_DMS_IMAP_ART", "ER")
+ERP_DMS_IMAP_MAX_MAILS = int(os.environ.get("ERP_DMS_IMAP_MAX_MAILS", "50"))
+ERP_DMS_IMAP_TIMEOUT = int(os.environ.get("ERP_DMS_IMAP_TIMEOUT", "60"))
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "login"

@@ -191,7 +191,8 @@ class DokumentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
                 return Response({"stapel": ["Unbekannter Stapel."]}, status=status.HTTP_400_BAD_REQUEST)
             neu = False
         else:
-            stapel = S.stapel_anlegen(bezeichnung=cd["bezeichnung"] or f"API-Upload {timezone.localtime():%d.%m.%Y %H:%M}",
+            stapel = S.stapel_anlegen(quelle=Stapel.Quelle.API,
+                                      bezeichnung=cd["bezeichnung"] or f"API-Upload {timezone.localtime():%d.%m.%Y %H:%M}",
                                       art=cd["art"], automatisch_trennen=cd["automatisch_trennen"],
                                       benutzer=request.user)
             neu = True

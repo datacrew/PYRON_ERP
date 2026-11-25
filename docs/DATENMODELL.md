@@ -658,15 +658,17 @@ erDiagram
     Dokument }o--o| Eingangsrechnung : "nach Verbuchung"
     Kontierungsregel }o--|| Geschaeftspartner : Lieferant
     Kontierungsregel }o--|| Konto : Aufwandskonto
+    MailEingang }o--o| Stapel : "Anhänge einer Mail"
 ```
 
 | Modell | Zweck / wichtige Felder |
 |---|---|
-| Stapel | Verarbeitungsstapel: Nummer (Kreis `DMS_STAPEL`), Quelle UPLOAD/EINGANGSORDNER/TRENNUNG, Vorgabe-Dokumentart, `automatisch_trennen`; Fortschritt aus den Status der Dokumente |
+| Stapel | Verarbeitungsstapel: Nummer (Kreis `DMS_STAPEL`), Quelle UPLOAD/EINGANGSORDNER/TRENNUNG/EMAIL/API, Vorgabe-Dokumentart, `automatisch_trennen`; Fortschritt aus den Status der Dokumente |
 | Dokument | Nummer (Kreis `DMS_DOKUMENT`), Titel, Art (ER/AR/VERTRAG/LIEFERSCHEIN/SONSTIGES), Status (NEU, OCR, ERKANNT, PRUEFEN, GEBUCHT, ABGELEGT, FEHLER), Stapel, `eltern`/`seiten_von`/`seiten_bis`/`aufgeteilt` (Sammel-PDF), Partner, Tags, Dokumentdatum, Bemerkung, `metadaten` (JSON), Bezüge `beleg`, `buchung`, `eingangsrechnung`, `seiten`, `textquelle` (textlayer/ocr/xml), `ocr_text`, `suchvektor` (tsvector, GIN-Index `dms_dokument_suche`), `erkennung` (JSON: Felder mit Wert + Konfidenz, Positionen, Plausibilität), `konfidenz`, `fehlermeldung`, `archiviert`/`archiviert_am`/`archiviert_von`, `aufbewahren_bis` |
 | DokumentVersion | Unveränderbare Datei: Version, Art ORIGINAL/PDFA, `quelle` (Original einer PDF/A-Ableitung), Datei (`media/dms/JJJJ/MM/`), Dateiname, MIME, Größe, `sha256` |
 | DokumentProtokoll | Revisionsprotokoll: Zeitpunkt, Benutzer(name), Aktion (Eingang, Texterkennung, Belegerkennung, Korrektur, Verbucht, Archiviert, …), Text |
 | Tag | Schlagwort mit Farbe |
+| MailEingang | E-Mail-Rechnungseingang (`dms_mailabruf`, Migration 0003): `message_id` (eindeutig → Dublettenschutz; ohne Header SHA-256 der Rohmail), Absender, Betreff, `gesendet_am`, Postfach, Status UEBERNOMMEN/OHNE_ANHANG/IGNORIERT/FEHLER/ABGEBROCHEN, Anzahl Anhänge, Hinweise (abgelehnte Anhänge), Fehler, Versuche (max. 3), `stapel`. Absender/Betreff/Message-ID stehen zusätzlich im Dokumentprotokoll und in `Dokument.metadaten["email"]` |
 | Kontierungsregel | Lernregel je Lieferant (+ optional Stichwort in der Positionsbeschreibung): Konto, Steuerschlüssel, Anzahl Verwendungen, gelernt/manuell, zuletzt verwendet |
 
 Regeln:

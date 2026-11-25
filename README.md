@@ -741,6 +741,12 @@ Systempakete und Betrieb: [deploy/INSTALLATION.md, Abschnitt 11](deploy/INSTALLA
   Docker-Dienst) bilden einen `Stapel`; Warteschlange mit Status *Neu → In OCR → Erkannt/Zu prüfen → Gebucht*
   bzw. *Abgelegt/Fehler*; Fortschrittsbalken im Browser (ein Dokument je Anfrage, kein Celery nötig);
   `dms_verarbeiten` arbeitet Rückstände ab.
+- **E-Mail-Rechnungseingang** (`dms_mailabruf`, IMAP über SSL/TLS, Zugangsdaten nur per Umgebung `ERP_DMS_IMAP_*`):
+  Anhänge (PDF, PNG/JPEG, TIFF, XML) jeder ungelesenen Mail werden ein Stapel (Quelle „E-Mail-Eingang"),
+  Absender/Betreff/Message-ID im Protokoll, Lieferant über die (Rechnungs-)E-Mail-Adresse; Dubletten per
+  Message-ID und SHA-256; verarbeitete Mails werden in einen Zielordner verschoben bzw. als gelesen markiert,
+  Mails ohne Anhang in einen Fehlerordner; technische Fehler werden bis zu 3-mal wiederholt. Übersicht unter
+  **Dokumente → E-Mail-Eingang**; systemd-Timer `erp-dms-mailabruf.timer` bzw. Docker-Dienst `dms-mailabruf`.
 - **Sammel-PDFs**: automatische Trennung an Trennblättern (Barcode „PYRON-TRENNBLATT“ per zbar oder Text
   „TRENNBLATT“; Vorlage unter „Hochladen → Trennblatt“) oder manuell nach Seitenbereichen („1-2, 3, 4-6“).
 - **OCR**: digitale PDFs über den Textlayer (PyMuPDF), Scans/Bilder über OCRmyPDF + Tesseract (`deu`) mit
@@ -779,6 +785,7 @@ Systempakete und Betrieb: [deploy/INSTALLATION.md, Abschnitt 11](deploy/INSTALLA
 ### Befehle
 ```bash
 python3 manage.py dms_eingang [--ordner PFAD] [--art VERTRAG] [--ohne-verarbeitung]   # Eingangsordner einlesen
+python3 manage.py dms_mailabruf [--trocken] [--alle] [--limit 50] [--ordner INBOX]          # E-Mail-Postfach abrufen
 python3 manage.py dms_verarbeiten [--limit 20]                                       # Warteschlange abarbeiten
 python3 manage.py dms_demodaten [--ohne-ocr]                                         # Beispielrechnungen (Demo)
 python3 manage.py erp_pruefen                                                        # inkl. SHA-256 der DMS-Dateien
@@ -788,7 +795,8 @@ python3 manage.py erp_pruefen                                                   
 `dms_demodaten` (nach `erp_demodaten`; im Docker-/`install.sh`-Demobetrieb automatisch) legt den Lieferanten
 „Bürobedarf Schneider GmbH“ und einen Stapel mit **synthetischen** Rechnungen an: ZUGFeRD-Rechnung (wird direkt
 verbucht), digitale PDF-Rechnung (wartet auf Freigabe), gescannte Rechnung (OCR), Sammel-PDF mit Trennblatt
-(wird in zwei Dokumente geteilt) und einen Rahmenvertrag mit Schlagwort.
+(wird in zwei Dokumente geteilt), einen Rahmenvertrag mit Schlagwort und eine simulierte Lieferanten-E-Mail mit
+PDF-Anhang (E-Mail-Eingang ohne echtes Postfach).
 1. **Dokumente** → Übersicht: Warteschlange und „Zu prüfen“/„Erkannt“.
 2. Rechnung öffnen → **Prüfmaske**: Felder kontrollieren, Konto anpassen → „Speichern, freigeben und verbuchen“.
 3. Weiterleitung zur Eingangsrechnung in der Fibu (Kreditor-OP, Buchung mit Vorsteuer) mit Link zum Originalbeleg.

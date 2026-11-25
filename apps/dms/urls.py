@@ -15,6 +15,7 @@ urlpatterns = [
     path("dokumente/<int:pk>/verarbeiten/", views.verarbeiten, name="verarbeiten"),
     path("dokumente/<int:pk>/archivieren/", views.archivieren, name="archivieren"),
     path("dokumente/<int:pk>/loeschen/", views.loeschen, name="loeschen"),
+    path("mails/", views.mails, name="mails"),
     path("stapel/", views.stapel_liste, name="stapel_liste"),
     path("stapel/<int:pk>/", views.stapel_detail, name="stapel"),
     path("stapel/<int:pk>/status/", views.stapel_status, name="stapel_status"),

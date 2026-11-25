@@ -88,6 +88,26 @@ services:
       - ${DMS_EINGANG_HOST_VERZEICHNIS:-./eingang}:/app/eingang
     <<: *protokoll
 
+  dms-mailabruf:
+    # Rechnungseingang per E-Mail (IMAP über SSL) alle 5 Minuten; Zugangsdaten ERP_DMS_IMAP_* in .env.
+    # Ohne ERP_DMS_IMAP_HOST meldet der Befehl „deaktiviert" und der Dienst wartet nur.
+    image: erp-mittelstand:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      ERP_MEDIA_ROOT: /app/media
+      TZ: Europe/Berlin
+    entrypoint: ["sh", "-c"]
+    command: ["while true; do python manage.py dms_mailabruf; sleep 300; done"]
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - media:/app/media
+    <<: *protokoll
+
   caddy:
     image: caddy:2
     restart: unless-stopped

@@ -19,7 +19,8 @@ from . import verbuchung as VB
 from . import verarbeitung as V
 from .forms import (MetadatenForm, PruefKopfForm, PruefPositionFormSet, RegelForm, TagForm, UploadForm,
                     VersionForm)
-from .models import Dokument, DokumentVersion, DmsGesperrt, Dokumentart, Kontierungsregel, Stapel, Tag
+from .models import (Dokument, DokumentVersion, DmsGesperrt, Dokumentart, Kontierungsregel, MailEingang, Stapel,
+                     Tag)
 
 M = "dms"
 FEHLER = (S.DmsFehler, DmsGesperrt)
@@ -159,6 +160,21 @@ def stapel_liste(request):
     seite = Paginator(Stapel.objects.annotate(n=Count("dokumente")).order_by("-erstellt_am", "-pk"), 50) \
         .get_page(request.GET.get("page"))
     return render(request, "dms/stapel_liste.html", {"page_obj": seite, "aktiv": "stapel"})
+
+
+@recht_erforderlich(M)
+def mails(request):
+    """Protokoll des E-Mail-Rechnungseingangs (dms_mailabruf)."""
+    from django.conf import settings
+
+    qs = MailEingang.objects.select_related("stapel")
+    if request.GET.get("status"):
+        qs = qs.filter(status=request.GET["status"])
+    seite = Paginator(qs.order_by("-erstellt_am", "-pk"), 50).get_page(request.GET.get("page"))
+    return render(request, "dms/mails.html", {
+        "page_obj": seite, "aktiv": "mails", "status": MailEingang.Status.choices,
+        "konfiguriert": bool(settings.ERP_DMS_IMAP_HOST),
+        "postfach": f"{settings.ERP_DMS_IMAP_USER}@{settings.ERP_DMS_IMAP_HOST}/{settings.ERP_DMS_IMAP_ORDNER}"})
 
 
 # ------------------------------------------------------------------ Dokument
