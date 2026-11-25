@@ -765,6 +765,9 @@ Systempakete und Betrieb: [deploy/INSTALLATION.md, Abschnitt 11](deploy/INSTALLA
 - **Prüfmaske (Split-Ansicht)**: Dokument links (PDF/Bild), rechts editierbare Kopffelder mit Konfidenz-Ampel,
   Positionen mit Konto/Steuerschlüssel, Live-Summen, Plausibilitätsmeldungen; „Speichern“, „Kontierung neu
   vorschlagen“, „Speichern, freigeben und verbuchen“.
+- **WORM-Speicher**: Archivierte Dateien werden inhaltsadressiert (SHA-256) und nicht überschreib-/löschbar abgelegt,
+  ein Append-only-Manifest mit Hash-Kette dokumentiert jede Ablage; `python manage.py dms_worm_pruefen` prüft Hashes und
+  Kette. Optional `chattr +i` (Produktion) und S3 Object Lock – siehe deploy/INSTALLATION.md.
 - **Skonto automatisch**: Zahlungsbedingungen wie „14 Tage 2 % Skonto, 30 Tage netto“ werden aus dem Text bzw.
   aus ZUGFeRD/XRechnung (BT-20, strukturierte Skontoangaben, XRechnung-Syntax `#SKONTO#…#`) erkannt; Skontosatz,
   -frist und -betrag sind in der Prüfmaske korrigierbar und werden beim Verbuchen in Eingangsrechnung und offenen

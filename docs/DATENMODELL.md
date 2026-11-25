@@ -684,6 +684,9 @@ Regeln:
 - Verbuchung legt **keine eigene Buchungsstruktur** an: `fibu.Eingangsrechnung` + `ERPosition` (Kreis `FIBU_ER`),
   gebucht über `fibu.services.er_buchen` (Aufwand + Vorsteuer an Kreditor, `OffenerPosten` Art K, Hash-Kette der Fibu).
   Danach zeigen `Dokument.eingangsrechnung`/`Dokument.buchung` auf das Ergebnis (Rückverweis `dms_dokumente`).
+- **WormEintrag** (`dms_wormeintrag`, Migrationen `dms/0004`, `0005`): Append-only-Manifest des WORM-Speichers –
+  `version` (1:1 DokumentVersion), `sha256`, `pfad` (`<sha[:2]>/<sha256>`), `groesse`, `aufbewahren_bis`, `s3_ziel`,
+  `vorgaenger_hash`, `kettenhash` (SHA-256 über Vorgänger|SHA|Pfad|Frist|Version); Trigger verbietet UPDATE/DELETE.
 - **Skonto** (Migration `fibu/0004_skonto_eingangsrechnung`): `fibu.Eingangsrechnung` erhält `skonto_prozent`,
   `skonto_tage`, `skonto_bis`, `skontobetrag` (aus der Rechnung, Vorrang vor der Zahlungsbedingung des Lieferanten);
   `fibu.OffenerPosten` erhält `skontobetrag` (fester Skontobetrag laut Rechnung; 0 = Satz × Betrag). Die

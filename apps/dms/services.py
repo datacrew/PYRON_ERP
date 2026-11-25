@@ -146,6 +146,12 @@ def archivieren(dokument, benutzer=None):
         dokument._archivierung = False
         protokollieren(dokument, "Archiviert", f"Revisionssicher archiviert, aufzubewahren bis "
                                                f"{dokument.aufbewahren_bis:%d.%m.%Y}.", benutzer)
+        from . import worm
+
+        eintraege = [worm.ablegen(v, dokument.aufbewahren_bis) for v in dokument.versionen.order_by("pk")]
+        if any(eintraege):
+            protokollieren(dokument, "WORM", f"{len(eintraege)} Datei(en) im WORM-Speicher abgelegt "
+                                             f"(Modus {worm.modus()}, Hash-Kette fortgeschrieben).", benutzer)
     return dokument
 
 

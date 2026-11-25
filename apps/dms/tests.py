@@ -1447,3 +1447,84 @@ class SkontoVerbuchungTests(DmsTestBasis):
         # Skontoerträge (19 %/7 %) und Vorsteuerkorrekturen ergeben zusammen den Skontobetrag
         self.assertEqual(sum(v for k, v in salden.items() if v < 0 and k != "1200"), Decimal("-6.59"))
 
+
+# ------------------------------------------------------------------ WORM-Speicher (Punkt l)
+
+class WormTests(DmsTestBasis):
+    def archiv(self, inhalt=b"<xml>WORM</xml>"):
+        d = S.dokument_anlegen(inhalt, "w.xml", art=Dokumentart.SONSTIGES, benutzer=self.user)
+        return S.archivieren(d, self.user)
+
+    def test_ablage_manifest_und_pruefung(self):
+        from . import worm
+        from .models import WormEintrag
+
+        d1, d2 = self.archiv(), self.archiv(b"<xml>Zwei</xml>")
+        e1, e2 = WormEintrag.objects.get(version=d1.original), WormEintrag.objects.get(version=d2.original)
+        self.assertEqual(e1.pfad, f"{e1.sha256[:2]}/{e1.sha256}")
+        self.assertEqual(e2.vorgaenger_hash, e1.kettenhash)
+        self.assertEqual(e1.aufbewahren_bis, d1.aufbewahren_bis)
+        self.assertEqual(worm.pruefen(), [])
+        self.assertTrue(d1.protokoll.filter(aktion="WORM").exists())
+        out = io.StringIO()
+        call_command("dms_worm_pruefen", stdout=out)
+        self.assertIn("in Ordnung", out.getvalue())
+        # Gleicher Inhalt → gleiche Datei (Content-Adressierung), eigener Manifesteintrag
+        d3 = self.archiv()
+        self.assertEqual(WormEintrag.objects.get(version=d3.original).pfad, e1.pfad)
+        self.assertEqual(worm.pruefen(), [])
+
+    def test_speicher_verweigert_ueberschreiben_und_loeschen(self):
+        from django.core.files.base import ContentFile
+
+        from . import worm
+
+        d = self.archiv()
+        sp, pfad = worm.WormSpeicher(), d.original.worm.pfad
+        with self.assertRaises(worm.WormVerletzung):
+            sp.save(pfad, ContentFile(b"manipuliert"))
+        with self.assertRaises(worm.WormVerletzung):
+            sp.delete(pfad)
+
+    def test_manipulation_wird_erkannt(self):
+        from . import worm
+
+        d = self.archiv(b"<xml>Manipulationstest</xml>")
+        # Manipulation am Dateisystem vorbei (simuliert Angriff) – nur in der temporären Test-Ablage
+        with open(worm.WormSpeicher().path(d.original.worm.pfad), "wb") as f:
+            f.write(b"manipuliert")
+        fehler = worm.pruefen()
+        self.assertTrue(any("weicht vom SHA-256 ab" in f for f in fehler))
+        with self.assertRaises(SystemExit) as cm:
+            call_command("dms_worm_pruefen", stdout=io.StringIO(), stderr=io.StringIO())
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_manifest_append_only_trigger(self):
+        from .models import WormEintrag
+
+        e = self.archiv().original.worm
+        with self.assertRaises(DatabaseError), transaction.atomic():
+            WormEintrag.objects.filter(pk=e.pk).update(sha256="0" * 64)
+        with self.assertRaises(DatabaseError), transaction.atomic():
+            WormEintrag.objects.filter(pk=e.pk).delete()
+
+    @override_settings(ERP_DMS_WORM_MODUS="aus")
+    def test_modus_aus(self):
+        from .models import WormEintrag
+
+        self.archiv()
+        self.assertEqual(WormEintrag.objects.count(), 0)
+
+    @override_settings(ERP_DMS_WORM_S3_BUCKET="archiv-bucket")
+    def test_s3_object_lock_gemockt(self):
+        from unittest import mock
+
+        from . import worm
+
+        client = mock.Mock()
+        with mock.patch.object(worm, "s3_client", return_value=client):
+            d = self.archiv()
+        args = client.put_object.call_args.kwargs
+        self.assertEqual((args["Bucket"], args["ObjectLockMode"]), ("archiv-bucket", "COMPLIANCE"))
+        self.assertEqual(args["ObjectLockRetainUntilDate"].date(), d.aufbewahren_bis)
+        self.assertTrue(d.original.worm.s3_ziel.startswith("s3://archiv-bucket/worm/"))

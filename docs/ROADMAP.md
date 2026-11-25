@@ -135,6 +135,8 @@ Ursprünglicher Umfang:
   `SpecifiedTradePaymentTerms`/`ApplicableTradePaymentDiscountTerms`, UBL `PaymentTerms`) erkennen, Skontosatz/-frist/
   -betrag in Eingangsrechnung und offenem Posten, Zahlungsvorschlag/SEPA-Lauf mit Skontoabzug in der Frist,
   Skontobuchung SKR03 (3736/3731) bzw. SKR04 (5736/5731) mit Vorsteuerberichtigung
+- ✅ WORM-Speicher: Content-Adressierung (SHA-256), Append-only-Manifest mit Hash-Kette, Modi aus/logisch/os,
+  `dms_worm_pruefen`, optional S3 Object Lock (COMPLIANCE, Retain until = Aufbewahrungsfrist)
 - offen: Validierung an einer größeren Zahl echter Lieferantenrechnungen (bisher nur synthetische Testrechnungen),
   bessere Tabellenerkennung für Positionen (ggf. Layout-Analyse/ML), Test des Mailabrufs gegen ein echtes
   Postfach (Exchange/M365 ggf. OAuth2 statt Passwort), Positionszuordnung im Dreifach-Abgleich an echten

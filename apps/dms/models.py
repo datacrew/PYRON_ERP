@@ -338,3 +338,25 @@ class MailEingang(models.Model):
 
     def __str__(self):
         return f"{self.absender}: {self.betreff}"[:120]
+
+
+class WormEintrag(models.Model):
+    """Append-only-Manifest des WORM-Speichers mit Hash-Kette (PostgreSQL-Trigger: nur INSERT)."""
+
+    version = models.OneToOneField(DokumentVersion, on_delete=models.PROTECT, related_name="worm")
+    sha256 = models.CharField("SHA-256", max_length=64, db_index=True)
+    pfad = models.CharField("WORM-Pfad", max_length=200)
+    groesse = models.PositiveBigIntegerField("Größe (Bytes)", default=0)
+    aufbewahren_bis = models.DateField("Aufbewahren bis", null=True, blank=True)
+    s3_ziel = models.CharField("S3-Ziel", max_length=500, blank=True)
+    vorgaenger_hash = models.CharField("Vorgänger-Hash", max_length=64)
+    kettenhash = models.CharField("Kettenhash", max_length=64, unique=True)
+    erstellt_am = models.DateTimeField("Erstellt am", default=timezone.now)
+
+    class Meta:
+        verbose_name = "WORM-Manifesteintrag"
+        verbose_name_plural = "WORM-Manifest"
+        ordering = ["pk"]
+
+    def __str__(self):
+        return f"WORM {self.pk}: {self.sha256[:12]}…"

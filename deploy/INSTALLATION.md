@@ -539,3 +539,21 @@ Archivierte Dokumente sind per Datenbank-Trigger unveränderbar und nicht lösch
 in der Fassung ab 2025), Verträge 10 Jahre (vorsichtig gewählt), Lieferscheine/Sonstiges 6 Jahre.
 Abweichende Fristen über `ERP_DMS_AUFBEWAHRUNG` in den Settings (z. B. `{"VERTRAG": 6}`) – bitte mit dem
 Steuerberater abstimmen. Nach Fristende wird **nichts** automatisch gelöscht.
+
+### WORM-Speicher (revisionssichere Ablage)
+
+Beim Archivieren legt das DMS jede Dateiversion zusätzlich inhaltsadressiert unter `ERP_DMS_WORM_PFAD`
+(Standard `media/worm/<sha[:2]>/<sha256>`) ab und schreibt einen Eintrag in das Append-only-Manifest
+(`dms_wormeintrag`, Hash-Kette, PostgreSQL-Trigger verbietet UPDATE/DELETE). Prüfung (z. B. nächtlich per Cron/systemd):
+
+    python manage.py dms_worm_pruefen   # Exit-Code 1 bei Abweichungen
+
+- `ERP_DMS_WORM_MODUS=logisch` (Standard): Schutz auf Applikations- und Datenbankebene.
+- `ERP_DMS_WORM_MODUS=os` (nur Produktion, optional): zusätzlich `chattr +i` je WORM-Datei; benötigt ein
+  Dateisystem mit Immutable-Flag (ext4/xfs) und CAP_LINUX_IMMUTABLE. Schlägt es fehl, bleibt der logische Schutz
+  aktiv. Achtung: unveränderliche Dateien lassen sich erst nach `chattr -i` durch root wieder löschen – nach Ablauf
+  der Aufbewahrungsfrist bewusst manuell durchführen. In Entwicklungs-/Testumgebungen nicht verwenden.
+- `ERP_DMS_WORM_MODUS=aus`: keine WORM-Ablage.
+- S3 Object Lock (optional, `pip install boto3`): `ERP_DMS_WORM_S3_BUCKET` (Bucket mit aktiviertem Object Lock),
+  `ERP_DMS_WORM_S3_PRAEFIX`, `ERP_DMS_WORM_S3_ENDPOINT` (z. B. MinIO), `ERP_DMS_WORM_S3_REGION`; Zugangsdaten über
+  die üblichen AWS-Umgebungsvariablen. Upload im Modus COMPLIANCE mit „Retain until“ = Aufbewahrungsfrist.

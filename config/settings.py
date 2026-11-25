@@ -209,6 +209,13 @@ def _env_oder_datei(name, standard=""):
 
 # Rechnungseingang per E-Mail („manage.py dms_mailabruf", IMAP über SSL/TLS). Ohne Host ist der Abruf deaktiviert.
 # Zugangsdaten nur über Umgebung/.env bzw. ERP_DMS_IMAP_PASSWORD_FILE – nie im Code.
+# WORM-Speicher: aus | logisch (Standard) | os (chattr +i, nur Produktion); optional S3 Object Lock
+ERP_DMS_WORM_MODUS = os.environ.get("ERP_DMS_WORM_MODUS", "logisch")
+ERP_DMS_WORM_PFAD = os.environ.get("ERP_DMS_WORM_PFAD", "")
+ERP_DMS_WORM_S3_BUCKET = os.environ.get("ERP_DMS_WORM_S3_BUCKET", "")
+ERP_DMS_WORM_S3_PRAEFIX = os.environ.get("ERP_DMS_WORM_S3_PRAEFIX", "worm/")
+ERP_DMS_WORM_S3_ENDPOINT = os.environ.get("ERP_DMS_WORM_S3_ENDPOINT", "")
+ERP_DMS_WORM_S3_REGION = os.environ.get("ERP_DMS_WORM_S3_REGION", "")
 ERP_DMS_IMAP_HOST = os.environ.get("ERP_DMS_IMAP_HOST", "")
 ERP_DMS_IMAP_PORT = int(os.environ.get("ERP_DMS_IMAP_PORT", "993"))
 ERP_DMS_IMAP_USER = os.environ.get("ERP_DMS_IMAP_USER", "")
