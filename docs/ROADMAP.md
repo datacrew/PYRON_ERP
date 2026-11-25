@@ -141,15 +141,23 @@ Ursprünglicher Umfang:
   Belege und Events aus Phase 1
 - Migrationen abwärtskompatibel, Doku (`README.md`, `docs/DATENMODELL.md`) fortschreiben
 
-## SEPA-Schnittstelle (Branch `feature/sepa-schnittstelle`, in Arbeit)
+## SEPA-Schnittstelle (Branch `feature/sepa-schnittstelle`)
 
-Umgesetzt (Grundlage):
-- Prüfung von IBAN (Prüfziffer mod 97, Länderlänge), BIC und Gläubiger-ID (`apps/core/bankdaten.py`), aktiv an Geschäftspartner, Bankkonto und Mandant (neues Feld Gläubiger-ID).
-- Datenmodell `apps/fibu_sepa`: SEPA-Mandate (CORE/B2B, automatische Sequenz FRST/RCUR/OOFF/FNAL, Verfall nach 36 Monaten), Zahlungsläufe mit Posten (nach Export im ORM eingefroren), Rücklastschriften.
-- XML-Erzeugung pain.001.001.09 und pain.008.001.08 mit SEPA-Zeichensatzkonvertierung, Betrags- und Längengrenzen; XSD-Validierung gegen die gebündelten ISO-20022-Basisschemata (`apps/fibu_sepa/xsd/`). DK-spezifische Einschränkungen (Anlage 3) werden nur im Code geprüft, das DK-XSD von ebics.de ist nicht gebündelt.- Oberfläche unter `/fibu/sepa/` (Modul `fibu_sepa` im Rechtesystem und Menü, Rolle Buchhaltung): SEPA-Mandate (Liste mit Filter, Anlegen/Bearbeiten, Nutzungshistorie, Sperren/Beenden), Zahlungsläufe (Überweisungs-/Lastschriftvorschlag, Posten entfernen, Freigabe und Export mit Recht „freigeben“, XML-Download, Storno mit Bestätigung). IBAN/BIC im Geschäftspartner-Formular, Gläubiger-ID in den Firmendaten.
+Umgesetzt:
+- Prüfung von IBAN (mod 97, Länderlänge), BIC und Gläubiger-ID (`apps/core/bankdaten.py`) an Geschäftspartner, Bankkonto und Mandant.
+- Datenmodell `apps/fibu_sepa`: SEPA-Mandate (CORE/B2B, Sequenz FRST/RCUR/OOFF/FNAL automatisch, Verfall nach 36 Monaten), Zahlungsläufe mit Posten, Rücklastschriften.
+- XML pain.001.001.09 (Überweisung) und pain.008.001.08 (Lastschrift) mit XSD-Prüfung gegen die gebündelten ISO-20022-Schemata.
+- Workflow: Überweisungsvorschlag (Fälligkeit, Skonto), Lastschriftvorschlag (gültiges Mandat, Vorlaufzeit in TARGET2-Bankarbeitstagen), Freigabe, Export mit Buchung gegen Geldtransit, Storno per Gegenbuchung.
+- Sperre exportierter Läufe in ORM und per PostgreSQL-Trigger (`erp_pruefen` prüft 7/7 Trigger).
+- Oberfläche `/fibu/sepa/` mit eigenem Recht „freigeben“ (Freigabe/Export/Storno), Rolle Buchhaltung.
+- CAMT-Import füllt Sammlerreferenz und Rückgabegrund; Abgleich der Sammelbuchung (automatisch oder per Button) bucht Bank gegen Geldtransit.
+- Rücklastschriften: OP per Gegenausgleich wieder offen (erscheint im Mahnlauf), Gebühr auf Nebenkosten des Geldverkehrs (4970 SKR03 / 6855 SKR04), Mandat sperren (z. B. AC04, MD01) bzw. vermerken (MD06), Übersicht `/fibu/sepa/ruecklastschriften/`.
+- Vorabankündigung (Pre-Notification) auf dem Rechnungs-PDF bei gültigem Mandat; ZUGFeRD/XRechnung mit Zahlungsart 59, Mandatsreferenz (BT-89), Gläubiger-ID (BT-90) und IBAN des Zahlers (BT-91).
+- Demodaten: Gläubiger-ID DE98ZZZ09999999999, Mandate für Müller Maschinenbau (CORE) und Autoteile Weber (B2B).
 
-Offen:
-- CAMT-Sammlerabgleich und Rücklastschrift-Verarbeitung in fibu_bank, DB-Trigger für exportierte Läufe.
-- Vorabankündigung in Rechnungs-PDF und ZUGFeRD-Zahlungsart 59.
-- Demodaten (Mandate, Gläubiger-ID DE98ZZZ09999999999), Doku in README/DATENMODELL.
-- Keine EBICS/FinTS-Direktübertragung (Weg: Datei-Upload ins Online-Banking); bankspezifische Tests mit echten Bankportalen.
+Bewusste Grenzen / offen:
+- Keine EBICS/FinTS-Direktübertragung: Die XML-Datei wird ins Online-Banking hochgeladen, Kontoauszüge kommen per CAMT/MT940-Import.
+- Das DK-spezifische XSD (ebics.de) ist nicht gebündelt; DK-Regeln (Anlage 3) werden im Code geprüft.
+- Noch kein Test mit einer echten Bank – vor dem Produktivstart einen Testlauf mit der Hausbank einplanen.
+- Geldtransit ist je Kontenrahmen ein Konto: 1360 (SKR03) bzw. 1460 (SKR04).
+- Eigene DB-Belegvorlagen (Verwaltung → Belegvorlagen) zeigen die Vorabankündigung nur, wenn sie den Block `{% if lastschrift %}` aus der Standardvorlage übernehmen.
