@@ -5,6 +5,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from apps.core.bankdaten import bic_validator, iban_validator
+
 
 class Einheit(models.Model):
     code = models.CharField("Kürzel", max_length=10, unique=True)
@@ -149,7 +151,10 @@ class Geschaeftspartner(models.Model):
     debitorenkonto = models.CharField("Debitorenkonto", max_length=10, blank=True)
     kreditorenkonto = models.CharField("Kreditorenkonto", max_length=10, blank=True)
     gln = models.CharField("GLN (EDI)", max_length=13, blank=True)
-    iban = models.CharField("IBAN (Zahlungsabgleich)", max_length=34, blank=True)
+    iban = models.CharField("IBAN", max_length=34, blank=True, validators=[iban_validator],
+                            help_text="Bankverbindung für Zahlungsabgleich und SEPA-Überweisungen")
+    bic = models.CharField("BIC", max_length=11, blank=True, validators=[bic_validator],
+                           help_text="Optional (IBAN-only im SEPA-Raum)")
     mahnsperre = models.BooleanField("Mahnsperre", default=False)
     aktiv = models.BooleanField("Aktiv", default=True)
 

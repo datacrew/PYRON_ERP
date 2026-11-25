@@ -140,3 +140,17 @@ Ursprünglicher Umfang:
 - Neue Module registrieren sich über `erp_modul` in `apps.py` und nutzen Rechte, Nummernkreise, Audit-Log,
   Belege und Events aus Phase 1
 - Migrationen abwärtskompatibel, Doku (`README.md`, `docs/DATENMODELL.md`) fortschreiben
+
+## SEPA-Schnittstelle (Branch `feature/sepa-schnittstelle`, in Arbeit)
+
+Umgesetzt (Grundlage):
+- Prüfung von IBAN (Prüfziffer mod 97, Länderlänge), BIC und Gläubiger-ID (`apps/core/bankdaten.py`), aktiv an Geschäftspartner, Bankkonto und Mandant (neues Feld Gläubiger-ID).
+- Datenmodell `apps/fibu_sepa`: SEPA-Mandate (CORE/B2B, automatische Sequenz FRST/RCUR/OOFF/FNAL, Verfall nach 36 Monaten), Zahlungsläufe mit Posten (nach Export im ORM eingefroren), Rücklastschriften.
+- XML-Erzeugung pain.001.001.09 und pain.008.001.08 mit SEPA-Zeichensatzkonvertierung, Betrags- und Längengrenzen; XSD-Validierung gegen die gebündelten ISO-20022-Basisschemata (`apps/fibu_sepa/xsd/`). DK-spezifische Einschränkungen (Anlage 3) werden nur im Code geprüft, das DK-XSD von ebics.de ist nicht gebündelt.
+
+Offen:
+- Zahlungsvorschlag/Lastschriftvorschlag, Freigabe, Export mit Geldtransit-Buchung (1360/1460), UI-Seiten und Rechte-Verdrahtung.
+- CAMT-Sammlerabgleich und Rücklastschrift-Verarbeitung in fibu_bank, DB-Trigger für exportierte Läufe.
+- Vorabankündigung in Rechnungs-PDF und ZUGFeRD-Zahlungsart 59.
+- Demodaten (Mandate, Gläubiger-ID DE98ZZZ09999999999), Doku in README/DATENMODELL.
+- Keine EBICS/FinTS-Direktübertragung (Weg: Datei-Upload ins Online-Banking); bankspezifische Tests mit echten Bankportalen.
