@@ -126,9 +126,10 @@ Ursprünglicher Umfang:
 - ✅ OCR: Textlayer, OCRmyPDF/Tesseract `deu` mit PDF/A, ZUGFeRD/XRechnung direkt aus XML
 - ✅ Belegerkennung ER mit Konfidenzen, Lieferantenzuordnung, Plausibilität, Dubletten, Lernregeln für die Kontierung
 - ✅ Prüfmaske (Split-Ansicht) und Verbuchung über `fibu.er_buchen` mit Rückverweis
+- ✅ REST-API `/api/v1/dms/` (Upload/Stapel, Suche, Detail, Status, Download, Tags, Verbuchen, Protokoll), Schema `docs/schema.yml`
 - offen: Validierung an einer größeren Zahl echter Lieferantenrechnungen (bisher nur synthetische Testrechnungen),
   bessere Tabellenerkennung für Positionen (ggf. Layout-Analyse/ML), E-Mail-Postfach als Eingang,
-  Rechnungsprüfung gegen Bestellung/Wareneingang beim Verbuchen, REST-API für Upload/Status, Skonto aus
+  Rechnungsprüfung gegen Bestellung/Wareneingang beim Verbuchen, Skonto aus
   Zahlungsbedingungen automatisch übernehmen, WORM-/Objektspeicher mit Object-Lock, Hintergrundverarbeitung
   für große Stapel (derzeit Browser-Schleife bzw. Timer)
 

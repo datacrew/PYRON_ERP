@@ -831,3 +831,111 @@ class DemodatenTests(DmsTestBasis):
         self.assertTrue(docs.filter(art=Dokumentart.VERTRAG, tags__name="Rahmenvertrag").exists())
         call_command("dms_demodaten", verbosity=0)  # zweiter Lauf legt nichts doppelt an
         self.assertEqual(Stapel.objects.filter(bezeichnung="Demodaten Dokumentenmanagement").count(), 1)
+
+
+class RestApiTests(DmsTestBasis):
+    """REST-API /api/v1/dms/…: Token-Auth, Rechte, Upload als Stapel, Suche, Detail, Download, Tags, Verbuchen."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from apps.fibu import services as F
+
+        F.geschaeftsjahr_anlegen(2026)
+        cls.lieferant = Geschaeftspartner.objects.create(name="Bürobedarf Schneider GmbH", ist_lieferant=True,
+                                                         ust_id="DE811569869")
+
+    def setUp(self):
+        from rest_framework.authtoken.models import Token
+        from rest_framework.test import APIClient
+
+        self.api = APIClient()
+        self.api.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}")
+
+    def hochladen(self, *dateien, **felder):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        daten = {"dateien": [SimpleUploadedFile(n, b) for n, b in dateien], **felder}
+        return self.api.post("/api/v1/dms/dokumente/", daten, format="multipart")
+
+    def test_ohne_anmeldung_abgewiesen(self):
+        from rest_framework.test import APIClient
+
+        self.assertIn(APIClient().get("/api/v1/dms/dokumente/").status_code, (401, 403))
+
+    def test_upload_stapel_detail_und_download(self):
+        r = self.hochladen(("a.xml", T.cii_xml()), ("b.pdf", T.pdf()), ("x.exe", b"MZ"))
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(len(r.data["dokumente"]), 2)
+        self.assertEqual(len(r.data["fehler"]), 1)
+        self.assertEqual(r.data["stapel"]["fortschritt"]["gesamt"], 2)
+        sid = r.data["stapel"]["id"]
+        # Stapel abarbeiten und Status abfragen
+        r = self.api.post(f"/api/v1/dms/stapel/{sid}/verarbeiten/")
+        self.assertEqual((r.status_code, r.data["ok"], r.data["fehler"]), (200, 2, 0))
+        d = Dokument.objects.filter(stapel_id=sid).order_by("pk").last()
+        r = self.api.get(f"/api/v1/dms/dokumente/{d.pk}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("RE-2026-0815", r.data["ocr_text"])
+        self.assertEqual(r.data["erkennung"]["felder"]["rechnungsnummer"]["wert"], "RE-2026-0815")
+        self.assertEqual(r.data["versionen"][0]["art"], "ORIGINAL")
+        self.assertEqual(self.api.get(f"/api/v1/dms/dokumente/{d.pk}/status/").data["status"], d.status)
+        # Download Original mit Hash
+        v = d.original
+        r = self.api.get(f"/api/v1/dms/dokumente/{d.pk}/datei/?version={v.pk}")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(S.sha256(b"".join(r.streaming_content)), v.sha256)
+        self.assertEqual(r["X-Sha256"], v.sha256)
+        self.assertEqual(self.api.get(f"/api/v1/dms/dokumente/{d.pk}/datei/?version=999999").status_code, 404)
+        # Protokoll
+        aktionen = [p["aktion"] for p in self.api.get(f"/api/v1/dms/dokumente/{d.pk}/protokoll/").data]
+        self.assertEqual(aktionen[0], "Eingang")
+
+    def test_liste_filter_volltext_und_tags(self):
+        a = S.dokument_anlegen(b"<a/>", "a.xml", art=Dokumentart.VERTRAG, titel="Wartungsvertrag Heizung")
+        S.dokument_anlegen(b"<b/>", "b.xml", art=Dokumentart.SONSTIGES, titel="Kantinenplan")
+        r = self.api.get("/api/v1/dms/dokumente/", {"q": "Wartungsvertrag"})
+        self.assertEqual([x["nummer"] for x in r.data["results"]], [a.nummer])
+        self.assertEqual(self.api.get("/api/v1/dms/dokumente/", {"art": "SONSTIGES"}).data["count"], 1)
+        r = self.api.post(f"/api/v1/dms/dokumente/{a.pk}/tags/", {"tags": ["Heizung", "2026"]}, format="json")
+        self.assertEqual(sorted(t["name"] for t in r.data), ["2026", "Heizung"])
+        r = self.api.post(f"/api/v1/dms/dokumente/{a.pk}/tags/", {"tags": ["2026"], "modus": "entfernen"},
+                          format="json")
+        self.assertEqual([t["name"] for t in r.data], ["Heizung"])
+        self.assertEqual(self.api.get("/api/v1/dms/dokumente/", {"tag": "Heizung"}).data["count"], 1)
+        self.assertEqual(self.api.get("/api/v1/dms/tags/").data["count"], 2)
+        # Metadaten ändern, Archivieren, danach gesperrt
+        r = self.api.patch(f"/api/v1/dms/dokumente/{a.pk}/", {"bemerkung": "Laufzeit 3 Jahre"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.api.post(f"/api/v1/dms/dokumente/{a.pk}/archivieren/").data["archiviert"], True)
+        self.assertEqual(self.api.patch(f"/api/v1/dms/dokumente/{a.pk}/", {"titel": "x"}, format="json")
+                         .status_code, 409)
+        self.assertEqual(self.api.delete(f"/api/v1/dms/dokumente/{a.pk}/").status_code, 409)
+
+    def test_verbuchen_ueber_api(self):
+        r = self.hochladen(("re.pdf", T.pdf()), sofort_verarbeiten="true")
+        self.assertEqual(r.status_code, 201, r.content)
+        did = r.data["dokumente"][0]["id"]
+        r = self.api.post(f"/api/v1/dms/dokumente/{did}/verbuchen/")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertTrue(r.data["eingangsrechnung"].startswith("ER-"))
+        self.assertTrue(r.data["dokument"]["archiviert"])
+        self.assertEqual(self.api.post(f"/api/v1/dms/dokumente/{did}/verbuchen/").status_code, 409)
+
+    def test_rechte_pro_modul(self):
+        from rest_framework.authtoken.models import Token
+        from rest_framework.test import APIClient
+
+        d = S.dokument_anlegen(T.pdf(), "re.pdf", art=Dokumentart.EINGANGSRECHNUNG)
+        vertrieb = get_user_model().objects.create_user("vertrieb_api", password="x")
+        vertrieb.erp_rollen.add(Rolle.objects.get(name="Vertrieb"))  # dms: nur lesen
+        api = APIClient()
+        api.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=vertrieb).key}")
+        self.assertEqual(api.get("/api/v1/dms/dokumente/").status_code, 200)
+        self.assertEqual(api.post(f"/api/v1/dms/dokumente/{d.pk}/verarbeiten/").status_code, 403)
+        self.assertEqual(api.post(f"/api/v1/dms/dokumente/{d.pk}/tags/", {"tags": ["x"]}, format="json")
+                         .status_code, 403)
+        self.assertEqual(api.post(f"/api/v1/dms/dokumente/{d.pk}/verbuchen/").status_code, 403)
+        gast = get_user_model().objects.create_user("ohne_rolle", password="x")
+        api.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=gast).key}")
+        self.assertEqual(api.get("/api/v1/dms/dokumente/").status_code, 403)
