@@ -6,6 +6,7 @@ from django.db import connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
+from apps.core.management.commands.erp_pruefen import PFLICHT_TRIGGER
 from apps.core.events import abonnieren, veroeffentlichen
 from apps.core.models import AuditLog, Modul, Nummernkreis, Recht, Rolle
 from apps.core.nummernkreise import naechste_nummer
@@ -260,5 +261,5 @@ class BetriebTests(TestCase):
         self.assertTrue(Rolle.objects.get(name="Administrator").benutzer.filter(pk=user.pk).exists())
         ausgabe = StringIO()
         call_command("erp_pruefen", stdout=ausgabe)
-        self.assertIn("Trigger: 10/10", ausgabe.getvalue())
+        self.assertIn(f"Trigger: {len(PFLICHT_TRIGGER)}/{len(PFLICHT_TRIGGER)}", ausgabe.getvalue())
         self.assertIn("bestanden", ausgabe.getvalue())

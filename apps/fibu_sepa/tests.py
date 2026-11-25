@@ -9,6 +9,7 @@ from django.db import DatabaseError, connection, transaction
 from django.test import TestCase
 from django.utils import timezone
 
+from apps.core.management.commands.erp_pruefen import PFLICHT_TRIGGER
 from apps.core import bankdaten as B
 from apps.core.models import Mandant
 from apps.fibu import services as F
@@ -309,7 +310,7 @@ class SepaWorkflowTests(TestCase):
             ZahlungslaufPosten.objects.get(pk=entwurf_posten.pk).delete()
         ausgabe = StringIO()
         call_command("erp_pruefen", "--ohne-pdf", stdout=ausgabe)
-        self.assertIn("Trigger: 7/7", ausgabe.getvalue())
+        self.assertIn(f"Trigger: {len(PFLICHT_TRIGGER)}/{len(PFLICHT_TRIGGER)}", ausgabe.getvalue())
 
     # ---------------------------------------------------------------- 6. Rückgabegründe
 
