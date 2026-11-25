@@ -74,6 +74,13 @@ def version_speichern(dokument, daten, dateiname, art=DokumentVersion.Art.ORIGIN
     return v
 
 
+def dublette_datei(daten):
+    """Bereits abgelegtes Dokument mit identischer Originaldatei (gleicher SHA-256) oder None."""
+    v = (DokumentVersion.objects.filter(sha256=sha256(daten), art=DokumentVersion.Art.ORIGINAL)
+         .select_related("dokument").order_by("pk").first())
+    return v.dokument if v else None
+
+
 def dokument_anlegen(daten, dateiname, art=Dokumentart.SONSTIGES, titel="", stapel=None, partner=None,
                      benutzer=None, eltern=None, seiten_von=None, seiten_bis=None, quelle_text="Upload"):
     """Neuer Dokumenteingang: Prüfung, Nummer, Original-Version mit SHA-256, Protokoll. Status NEU (Warteschlange)."""

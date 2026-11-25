@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Sammel-PDF trennen {{ d.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-scissors"></i> Sammel-PDF {{ d.nummer }} trennen</h1>
+  <div class="ms-auto"><a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:detail' d.pk %}">Zurück</a></div></div>
+{% include "dms/_nav.html" %}
+<div class="row g-3">
+  <div class="col-xl-7"><iframe class="w-100 border rounded bg-light" style="height:75vh" src="{% url 'dms:datei' d.pk %}" title="Dokumentvorschau"></iframe></div>
+  <div class="col-xl-5"><form method="post" class="card">{% csrf_token %}<div class="card-body">
+    <p class="small">Das Dokument hat <b>{{ seiten }}</b> Seite(n). Seitenbereiche je Einzeldokument angeben, getrennt durch Semikolon – z. B. <code>1-2; 3; 4-6</code>. Nicht genannte Seiten (z. B. Leer- oder Trennblätter) werden verworfen.</p>
+    <label class="form-label small" for="bereiche">Seitenbereiche</label>
+    <input class="form-control" id="bereiche" name="bereiche" value="{{ vorschlag }}" required>
+    <div class="form-text">Das Sammel-PDF bleibt als Original unverändert erhalten; die Einzeldokumente verweisen darauf und werden anschließend verarbeitet.</div>
+    <button class="btn btn-primary mt-3"><i class="bi bi-scissors"></i> Aufteilen</button>
+  </div></form></div>
+</div>
+{% endblock %}

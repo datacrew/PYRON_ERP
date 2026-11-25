@@ -249,3 +249,156 @@ class VerarbeitungTests(DmsTestBasis):
         S.archivieren(d)
         with self.assertRaises(S.DmsFehler):
             V.verarbeiten(d)
+
+
+# ------------------------------------------------------------------ Stapel, Eingangsordner, Trennung
+
+import os  # noqa: E402
+import time  # noqa: E402
+
+from pypdf import PdfReader, PdfWriter  # noqa: E402
+
+from . import trennung as TR  # noqa: E402
+from .models import Stapel  # noqa: E402
+
+
+def sammel_pdf(*teile):
+    w = PdfWriter()
+    for daten in teile:
+        for seite in PdfReader(io.BytesIO(daten)).pages:
+            w.add_page(seite)
+    puffer = io.BytesIO()
+    w.write(puffer)
+    return puffer.getvalue()
+
+
+def trennblatt_scan():
+    """Trennblatt als Bild-PDF (wie vom Scanner, ohne Textlayer) – nur per Barcode erkennbar."""
+    import pymupdf
+    from PIL import Image
+
+    with pymupdf.open(stream=TR.trennblatt_pdf(), filetype="pdf") as doc:
+        bild = Image.open(io.BytesIO(doc[0].get_pixmap(dpi=150).tobytes("png"))).convert("L")
+    puffer = io.BytesIO()
+    bild.save(puffer, "PDF", resolution=150.0)
+    return puffer.getvalue()
+
+
+class TrennungTests(DmsTestBasis):
+    def test_bereiche(self):
+        self.assertEqual(TR.bereiche_aus_trennern(7, [0, 3]), [(2, 3), (5, 7)])
+        self.assertEqual(TR.bereiche_aus_trennern(4, [3]), [(1, 3)])
+        self.assertEqual(TR.bereiche_parsen("1-2; 3,4-5", 5), [(1, 2), (3, 3), (4, 5)])
+        for falsch in ("1-2; 2-3", "0-1; 2", "1-9; 2", "abc; 1", "1-3"):
+            with self.subTest(falsch=falsch), self.assertRaises(S.DmsFehler):
+                TR.bereiche_parsen(falsch, 5)
+
+    def test_trennblatt_text_und_barcode(self):
+        self.assertEqual(TR.trennseiten(sammel_pdf(T.pdf(), TR.trennblatt_pdf(), T.pdf())), [1])
+        if TR.zbar_verfuegbar():
+            self.assertEqual(TR.trennseiten(sammel_pdf(T.pdf(), trennblatt_scan(), T.pdf(), T.pdf())), [1])
+
+    def test_automatische_trennung_im_stapel(self):
+        r2 = T.beispiel(rechnungsnummer="RE-2026-0999")
+        stapel = S.stapel_anlegen(automatisch_trennen=True, benutzer=self.user)
+        d = S.dokument_anlegen(sammel_pdf(T.pdf(), TR.trennblatt_pdf(), T.pdf(r2), T.pdf(r2)), "stapelscan.pdf",
+                               art=Dokumentart.SONSTIGES, stapel=stapel, benutzer=self.user)
+        V.verarbeiten(d, self.user)
+        d.refresh_from_db()
+        self.assertEqual((d.status, d.aufgeteilt, d.seiten), (Dokument.Status.ABGELEGT, True, 4))
+        teile = list(d.teile.order_by("seiten_von"))
+        self.assertEqual([(t.seiten_von, t.seiten_bis) for t in teile], [(1, 1), (3, 4)])
+        self.assertTrue(all(t.stapel == stapel and t.status == Dokument.Status.NEU for t in teile))
+        self.assertEqual(V.warteschlange_abarbeiten(stapel=stapel), (2, 0))
+        self.assertIn("RE-2026-0999", Dokument.objects.get(pk=teile[1].pk).ocr_text)
+        self.assertTrue(d.original.hash_pruefen())  # Sammel-PDF unverändert
+        f = stapel.fortschritt()
+        self.assertEqual((f["gesamt"], f["offen"], f["prozent"]), (3, 0, 100))
+
+    def test_ohne_trennung_bleibt_dokument_ganz(self):
+        stapel = S.stapel_anlegen(automatisch_trennen=False)
+        d = S.dokument_anlegen(sammel_pdf(T.pdf(), TR.trennblatt_pdf(), T.pdf()), "s.pdf", stapel=stapel)
+        V.verarbeiten(d)
+        self.assertEqual((d.status, d.teile.count()), (Dokument.Status.ERKANNT, 0))
+
+    def test_manuelle_trennung_oberflaeche(self):
+        self.client.force_login(self.user)
+        d = S.dokument_anlegen(sammel_pdf(T.pdf(), T.pdf(), T.pdf()), "s.pdf", stapel=S.stapel_anlegen())
+        self.assertEqual(self.client.get(reverse("dms:trennen", args=[d.pk])).status_code, 200)
+        self.client.post(reverse("dms:trennen", args=[d.pk]), {"bereiche": "1-1; 2-2; 3-3"})
+        self.assertEqual(d.teile.count(), 3)
+        r = self.client.post(reverse("dms:trennen", args=[d.pk]), {"bereiche": "1; 2"})
+        self.assertEqual(d.teile.count(), 3)  # zweite Trennung abgelehnt
+        self.assertEqual(r.status_code, 200)
+        r = self.client.get(reverse("dms:trennblatt"))
+        self.assertTrue(r.content.startswith(b"%PDF"))
+
+
+class StapelTests(DmsTestBasis):
+    def test_fortschritt_und_schrittweise_verarbeitung(self):
+        self.client.force_login(self.user)
+        stapel = S.stapel_anlegen()
+        for i in range(3):
+            S.dokument_anlegen(T.pdf(T.beispiel(rechnungsnummer=f"RE-{i}")), f"r{i}.pdf", stapel=stapel)
+        r = self.client.get(reverse("dms:stapel_status", args=[stapel.pk])).json()
+        self.assertEqual((r["gesamt"], r["offen"], r["prozent"]), (3, 3, 0))
+        self.assertEqual(self.client.get(reverse("dms:stapel", args=[stapel.pk]) + "?start=1").status_code, 200)
+        url = reverse("dms:stapel_verarbeiten", args=[stapel.pk])
+        self.assertEqual(self.client.get(url).status_code, 405)
+        r = self.client.post(url).json()
+        self.assertEqual((r["offen"], r["prozent"]), (2, 33))
+        self.client.post(url)
+        r = self.client.post(url).json()
+        self.assertEqual((r["offen"], r["prozent"]), (0, 100))
+        self.assertIsNone(self.client.post(url).json()["verarbeitet"])
+
+    def test_upload_warnt_bei_dublette(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_login(self.user)
+        S.dokument_anlegen(b"<a/>", "a.xml")
+        r = self.client.post(reverse("dms:hochladen"), {"dateien": [SimpleUploadedFile("a.xml", b"<a/>")],
+                                                        "art": Dokumentart.SONSTIGES}, follow=True)
+        self.assertContains(r, "identische Datei bereits")
+
+
+class EingangsordnerTests(DmsTestBasis):
+    def setUp(self):
+        self.ordner = tempfile.mkdtemp(prefix="dms_eingang_", dir=TEMP_MEDIA)
+
+    def _datei(self, name, daten, alt=True):
+        pfad = os.path.join(self.ordner, name)
+        os.makedirs(os.path.dirname(pfad), exist_ok=True)
+        with open(pfad, "wb") as f:
+            f.write(daten)
+        if alt:
+            os.utime(pfad, (time.time() - 60, time.time() - 60))
+        return pfad
+
+    def test_hotfolder(self):
+        self._datei("rechnung.pdf", T.pdf())
+        self._datei("vertrag/mietvertrag.xml", b"<vertrag>Miete</vertrag>")
+        self._datei("virus.exe", b"MZ")
+        self._datei("noch_im_schreiben.pdf", T.pdf(T.beispiel(rechnungsnummer="X")), alt=False)
+        aus = io.StringIO()
+        call_command("dms_eingang", ordner=self.ordner, stdout=aus)
+        self.assertIn("2 übernommen", aus.getvalue())
+        stapel = Stapel.objects.get(quelle=Stapel.Quelle.EINGANGSORDNER)
+        arten = dict(stapel.dokumente.values_list("titel", "art"))
+        self.assertEqual(arten, {"rechnung": Dokumentart.EINGANGSRECHNUNG, "mietvertrag": Dokumentart.VERTRAG})
+        self.assertFalse(stapel.dokumente.filter(status=Dokument.Status.NEU).exists())  # gleich verarbeitet
+        self.assertTrue(os.path.exists(os.path.join(self.ordner, "noch_im_schreiben.pdf")))
+        self.assertTrue(os.path.exists(os.path.join(self.ordner, "fehler", "virus.exe.txt")))
+        verarbeitet = os.listdir(os.path.join(self.ordner, "verarbeitet"))
+        self.assertEqual(len(verarbeitet), 1)
+        # Erneut eingeworfene identische Datei → „doppelt“
+        self._datei("rechnung_kopie.pdf", T.pdf())
+        call_command("dms_eingang", ordner=self.ordner, stdout=io.StringIO())
+        self.assertTrue(os.path.exists(os.path.join(self.ordner, "doppelt", "rechnung_kopie.pdf")))
+        self.assertEqual(Dokument.objects.count(), 2)
+
+    def test_fehlender_ordner(self):
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("dms_eingang", ordner=os.path.join(self.ordner, "gibtsnicht"))

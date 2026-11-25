@@ -454,7 +454,37 @@ ZUGFeRD/Factur-X und XRechnung (XML) brauchen **kein** OCR.
 Dokumente werden unter `MEDIA_ROOT/dms/JJJJ/MM/` abgelegt und sind Teil der normalen Datensicherung
 (Abschnitt 6). `python manage.py erp_pruefen` prüft zusätzlich die SHA-256-Siegel aller DMS-Dateien.
 
-### 11.3 Aufbewahrung
+### 11.3 Eingangsordner (Hotfolder) und Stapelverarbeitung
+
+Scanner oder Mail-Ablage legen Dateien in den Eingangsordner; `python manage.py dms_eingang` übernimmt sie in
+einen Stapel, teilt Sammel-PDFs an Trennblättern und führt OCR/Belegerkennung aus – ohne Celery/Redis.
+
+| Betrieb | Eingangsordner | Zeitplan |
+|---|---|---|
+| nativ (`install.sh`) | `/var/lib/erp/eingang` (Gruppe `erp` darf schreiben, setgid) | `erp-dms-eingang.timer` alle 5 Minuten |
+| Docker | `deploy/eingang/` (`DMS_EINGANG_HOST_VERZEICHNIS`) | Dienst `dms-eingang` (Schleife, 5 Minuten) |
+
+- Dateien im Hauptordner gelten als **Eingangsrechnung** (`--art` ändert die Vorgabe); Unterordner mit dem Namen
+  einer Dokumentart (`vertrag/`, `lieferschein/`, `ausgangsrechnung/`, `sonstiges/`) legen die Art fest.
+- Übernommene Dateien wandern nach `verarbeitet/JJJJ-MM-TT/`, abgelehnte nach `fehler/` (mit `.txt`-Begründung),
+  bereits vorhandene (gleicher SHA-256) nach `doppelt/`. Dateien, die jünger als 10 s sind (Scanner schreibt noch),
+  sowie `.part`/`.tmp` werden erst beim nächsten Lauf übernommen. Eine Sperrdatei verhindert parallele Läufe.
+- `python manage.py dms_verarbeiten [--limit N]` arbeitet zusätzlich alle wartenden Dokumente ab
+  (z. B. aus Uploads, die nicht sofort verarbeitet wurden).
+- **Trennblatt:** Im DMS unter „Hochladen“ → „Trennblatt“ (PDF) ausdrucken und vor jedes Dokument eines
+  Stapelscans legen. Erkannt wird der Barcode „PYRON-TRENNBLATT“ (zbar) bzw. das Wort „TRENNBLATT“ im Textlayer.
+  Alternativ lassen sich Sammel-PDFs im Dokument über „Trennen“ manuell nach Seitenbereichen aufteilen.
+- Uploads über die Oberfläche werden im Browser schrittweise verarbeitet (ein Dokument je Anfrage,
+  Fortschrittsbalken) – auch das braucht keinen Hintergrunddienst.
+
+Manuell testen (nativ):
+
+```bash
+sudo systemctl start erp-dms-eingang.service && journalctl -u erp-dms-eingang -n 20
+systemctl list-timers erp-dms-eingang.timer
+```
+
+### 11.4 Aufbewahrung
 
 Archivierte Dokumente sind per Datenbank-Trigger unveränderbar und nicht löschbar. Die Frist läuft bis zum
 31.12. des Jahres „Dokumentdatum + N Jahre": Eingangs-/Ausgangsrechnungen 8 Jahre (Buchungsbelege, § 147 AO

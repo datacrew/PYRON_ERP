@@ -194,6 +194,8 @@ MEDIA_URL = "/media/"
 # Dokumentenmanagement (DMS): OCR-Sprache(n) für Tesseract und Zeitlimit je Seite (Sekunden)
 ERP_DMS_OCR_SPRACHE = os.environ.get("ERP_DMS_OCR_SPRACHE", "deu")
 ERP_DMS_OCR_TIMEOUT = int(os.environ.get("ERP_DMS_OCR_TIMEOUT", "180"))
+# Eingangsordner (Hotfolder) für Scanner/E-Mail-Ablage – eingelesen von „manage.py dms_eingang“
+ERP_DMS_EINGANG = Path(os.environ.get("ERP_DMS_EINGANG", BASE_DIR / "eingang"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

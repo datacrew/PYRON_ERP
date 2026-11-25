@@ -3,8 +3,9 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
@@ -12,6 +13,7 @@ from django.views.decorators.http import require_POST
 from apps.core.permissions import hat_recht, recht_erforderlich
 
 from . import services as S
+from . import trennung as TR
 from . import verarbeitung as V
 from .forms import MetadatenForm, TagForm, UploadForm, VersionForm
 from .models import Dokument, DokumentVersion, DmsGesperrt, Dokumentart, Stapel, Tag
@@ -84,6 +86,11 @@ def hochladen(request):
                                   benutzer=request.user)
         angelegt, fehler = [], []
         for datei in cd["dateien"]:
+            vorhanden = S.dublette_datei(datei.read())
+            datei.seek(0)
+            if vorhanden:
+                messages.warning(request, f"{datei.name}: identische Datei bereits als {vorhanden.nummer} "
+                                          "abgelegt – trotzdem übernommen.")
             try:
                 angelegt.append(S.dokument_anlegen(datei.read(), datei.name, art=cd["art"], stapel=stapel,
                                                    partner=cd["partner"], benutzer=request.user))
@@ -102,8 +109,6 @@ def hochladen(request):
 
 
 def stapel_url(stapel):
-    from django.urls import reverse
-
     return reverse("dms:stapel", args=[stapel.pk])
 
 
@@ -114,6 +119,36 @@ def stapel_detail(request, pk):
         "stapel": stapel, "fortschritt": stapel.fortschritt(), "aktiv": "stapel",
         "dokumente": stapel.dokumente.select_related("partner").order_by("pk"),
         "autostart": request.GET.get("start") == "1" and hat_recht(request.user, M, "anlegen")})
+
+
+def _stapel_json(stapel):
+    f = stapel.fortschritt()
+    return {"nummer": stapel.nummer, "gesamt": f["gesamt"], "fertig": f["fertig"], "offen": f["offen"],
+            "prozent": f["prozent"],
+            "zaehlung": {str(dict(Dokument.Status.choices)[k]): v for k, v in f["zaehlung"].items()},
+            "dokumente": [{"pk": d.pk, "nummer": d.nummer, "status": d.status, "status_text": d.get_status_display(),
+                           "titel": d.titel, "fehler": d.fehlermeldung[:120]}
+                          for d in stapel.dokumente.order_by("pk")]}
+
+
+@recht_erforderlich(M)
+def stapel_status(request, pk):
+    """Fortschritt als JSON (Abfrage durch die Fortschrittsanzeige)."""
+    return JsonResponse(_stapel_json(get_object_or_404(Stapel, pk=pk)))
+
+
+@require_POST
+@recht_erforderlich(M, "anlegen")
+def stapel_verarbeiten(request, pk):
+    """Verarbeitet das nächste wartende Dokument des Stapels (ein Dokument je Anfrage → kurze Requests,
+    Fortschritt im Browser sichtbar, kein Hintergrunddienst nötig)."""
+    stapel = get_object_or_404(Stapel, pk=pk)
+    d = V.warteschlange().filter(stapel=stapel).first()
+    if d:
+        V.verarbeiten(d, request.user)
+    daten = _stapel_json(stapel)
+    daten["verarbeitet"] = d.nummer if d else None
+    return JsonResponse(daten)
 
 
 @recht_erforderlich(M)
@@ -201,6 +236,44 @@ def verarbeiten(request, pk):
         else:
             messages.success(request, f"{d.nummer} verarbeitet ({d.get_status_display()}, Quelle {d.textquelle}).")
     return redirect("dms:detail", pk)
+
+
+@recht_erforderlich(M, "anlegen")
+def trennen(request, pk):
+    """Manuelle Trennung eines Sammel-PDFs nach Seitenbereichen."""
+    d = get_object_or_404(Dokument, pk=pk)
+    vorschlag = ""
+    if request.method == "POST":
+        try:
+            bereiche = TR.bereiche_parsen(request.POST.get("bereiche"), d.seiten or _seitenzahl(d))
+            teile = TR.aufteilen(d, bereiche, request.user)
+        except FEHLER as exc:
+            _fehler(request, exc)
+            vorschlag = request.POST.get("bereiche", "")
+        else:
+            messages.success(request, f"{len(teile)} Einzeldokumente angelegt – sie stehen in der Warteschlange.")
+            return redirect(stapel_url(d.stapel) if d.stapel else reverse("dms:detail", args=[pk]))
+    seiten = d.seiten or _seitenzahl(d)
+    return render(request, "dms/trennen.html", {"d": d, "seiten": seiten, "aktiv": "liste",
+                                                "vorschlag": vorschlag or "; ".join(str(i) for i in range(1, seiten + 1))})
+
+
+def _seitenzahl(d):
+    import pymupdf
+
+    v = d.original
+    if not v or not v.dateiname.lower().endswith(".pdf"):
+        return 0
+    with v.datei.open("rb") as f, pymupdf.open(stream=f.read(), filetype="pdf") as doc:
+        return doc.page_count
+
+
+@recht_erforderlich(M)
+def trennblatt(request):
+    """Druckvorlage Trennblatt (PDF) für Stapelscans."""
+    antwort = HttpResponse(TR.trennblatt_pdf(), content_type="application/pdf")
+    antwort["Content-Disposition"] = 'inline; filename="PYRON-Trennblatt.pdf"'
+    return antwort
 
 
 @require_POST

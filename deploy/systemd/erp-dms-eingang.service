@@ -1,0 +1,18 @@
+# ERP Mittelstand – DMS-Eingangsordner einlesen und OCR-Warteschlange abarbeiten (ausgelöst von erp-dms-eingang.timer)
+[Unit]
+Description=ERP Mittelstand – DMS-Eingangsordner (OCR/Belegerkennung)
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=erp
+Group=erp
+WorkingDirectory=__BASIS__/app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__BASIS__/venv/bin/python manage.py dms_eingang
+ExecStartPost=__BASIS__/venv/bin/python manage.py dms_verarbeiten --limit 200
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=1h

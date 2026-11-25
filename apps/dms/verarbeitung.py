@@ -10,6 +10,7 @@ from django.db import transaction
 
 from . import ocr as O
 from . import services as S
+from . import trennung as T
 from .models import Dokument, DokumentVersion
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,8 @@ def verarbeiten(dokument, benutzer=None):
     try:
         with original.datei.open("rb") as f:
             daten = f.read()
+        if _trennen_pruefen(dokument, original, daten, benutzer):
+            return dokument
         erg = O.analysieren(daten, original.dateiname)
         with transaction.atomic():
             if erg.pdfa:
@@ -66,6 +69,26 @@ def verarbeiten(dokument, benutzer=None):
         _status(dokument, Dokument.Status.FEHLER, fehlermeldung=str(exc)[:2000])
         S.protokollieren(dokument, "Fehler", str(exc)[:500], benutzer)
     return dokument
+
+
+def _trennen_pruefen(dokument, original, daten, benutzer):
+    """Sammel-PDF an Trennblättern aufteilen (nur wenn im Stapel aktiviert). True = aufgeteilt."""
+    if not (dokument.stapel and dokument.stapel.automatisch_trennen) or dokument.eltern_id:
+        return False
+    if not original.dateiname.lower().endswith(".pdf"):
+        return False
+    import pymupdf
+
+    try:
+        with pymupdf.open(stream=daten, filetype="pdf") as doc:
+            seiten = doc.page_count
+    except Exception:  # noqa: BLE001 – defekte PDFs meldet die Texterkennung
+        return False
+    teile = T.automatisch_aufteilen(dokument, daten, seiten, benutzer)
+    if teile:
+        Dokument.objects.filter(pk=dokument.pk).update(seiten=seiten)
+        dokument.refresh_from_db()
+    return bool(teile)
 
 
 def nachverarbeiten(dokument, erg, benutzer=None):
