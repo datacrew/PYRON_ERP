@@ -1,0 +1,17 @@
+# ERP Mittelstand – Rechnungseingang per E-Mail (IMAP) abrufen (ausgelöst von erp-dms-mailabruf.timer)
+# Zugangsdaten stehen in der .env (ERP_DMS_IMAP_*) bzw. in der Datei aus ERP_DMS_IMAP_PASSWORD_FILE.
+[Unit]
+Description=ERP Mittelstand – DMS-Rechnungseingang per E-Mail
+After=postgresql.service network-online.target
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=erp
+Group=erp
+WorkingDirectory=__BASIS__/app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__BASIS__/venv/bin/python manage.py dms_mailabruf
+Nice=10
+TimeoutStartSec=1h

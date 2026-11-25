@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Dokument {{ d.nummer }}{% endblock %}
+{% block content %}
+{% hat_recht "dms" "aendern" as darf_aendern %}{% hat_recht "dms" "loeschen" as darf_loeschen %}{% hat_recht "dms" "anlegen" as darf_anlegen %}
+<div class="d-flex align-items-center mb-3 flex-wrap gap-2"><h1 class="h4 m-0"><i class="bi bi-file-earmark-text"></i> {{ d.nummer }} <small class="text-muted">{{ d.titel }}</small>
+  {% include "dms/_status.html" with s=d.status text=d.get_status_display %}{% if d.archiviert %} <span class="badge text-bg-dark"><i class="bi bi-lock-fill"></i> archiviert bis {{ d.aufbewahren_bis|date:"d.m.Y" }}</span>{% endif %}</h1>
+  <div class="ms-auto d-flex gap-2">
+    {% block detail_aktionen %}{% endblock %}
+    {% if d.art == 'ER' and d.erkennung %}<a class="btn btn-sm {% if d.status == 'PRUEFEN' or d.status == 'ERKANNT' %}btn-warning{% else %}btn-outline-secondary{% endif %}" href="{% url 'dms:pruefen' d.pk %}"><i class="bi bi-ui-checks"></i> Prüfmaske</a>{% endif %}
+    {% if darf_anlegen and not d.archiviert and not d.aufgeteilt and not d.eingangsrechnung and d.seiten > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:trennen' d.pk %}"><i class="bi bi-scissors"></i> Trennen</a>{% endif %}
+    {% if darf_anlegen and not d.archiviert and d.status != 'GEBUCHT' %}<form method="post" action="{% url 'dms:verarbeiten' d.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-primary" title="Texterkennung (erneut) ausführen"><i class="bi bi-cpu"></i> {% if d.status == 'NEU' %}Verarbeiten{% else %}Erneut verarbeiten{% endif %}</button></form>{% endif %}
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:datei' d.pk %}?download=1"><i class="bi bi-download"></i> Download</a>
+    {% if darf_aendern and not d.archiviert %}<form method="post" action="{% url 'dms:archivieren' d.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-dark" onclick="return confirm('Dokument revisionssicher archivieren? Das ist nicht umkehrbar.')"><i class="bi bi-lock"></i> Archivieren</button></form>{% endif %}
+    {% if darf_loeschen and not d.archiviert %}<form method="post" action="{% url 'dms:loeschen' d.pk %}">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" onclick="return confirm('Dokument endgültig löschen?')"><i class="bi bi-trash"></i></button></form>{% endif %}
+  </div></div>
+{% include "dms/_nav.html" %}
+{% if d.fehlermeldung %}<div class="alert alert-danger py-2 small">{{ d.fehlermeldung }}</div>{% endif %}
+<div class="row g-3">
+  <div class="col-xl-6">{% if d.anzeigeversion %}<iframe class="w-100 border rounded bg-light" style="height:75vh" src="{% url 'dms:datei' d.pk %}" title="Dokumentvorschau"></iframe>{% else %}<p class="text-muted">Keine Datei.</p>{% endif %}</div>
+  <div class="col-xl-6">
+    <div class="card mb-3"><div class="card-header bg-white fw-semibold">Metadaten</div><div class="card-body small">
+      <dl class="row mb-2">
+        <dt class="col-4">Art</dt><dd class="col-8">{{ d.get_art_display }}</dd>
+        <dt class="col-4">Eingang</dt><dd class="col-8">{{ d.erstellt_am|date:"d.m.Y H:i" }}{% if d.stapel %} · Stapel <a href="{% url 'dms:stapel' d.stapel.pk %}">{{ d.stapel.nummer }}</a>{% endif %}</dd>
+        {% if d.eltern %}<dt class="col-4">Aus Sammel-PDF</dt><dd class="col-8"><a href="{% url 'dms:detail' d.eltern.pk %}">{{ d.eltern.nummer }}</a> (Seiten {{ d.seiten_von }}–{{ d.seiten_bis }})</dd>{% endif %}
+        <dt class="col-4">Seiten / Textquelle</dt><dd class="col-8">{{ d.seiten|default:"–" }} / {{ d.textquelle|default:"–" }}{% if d.konfidenz is not None %} · Konfidenz {{ d.konfidenz|zahl:2 }}{% endif %}</dd>
+        {% if d.beleg %}<dt class="col-4">Beleg</dt><dd class="col-8"><a href="{% url 'belege:detail' d.beleg.pk %}">{{ d.beleg.nummer }}</a></dd>{% endif %}
+        {% if d.eingangsrechnung %}<dt class="col-4">Eingangsrechnung</dt><dd class="col-8"><a href="{% url 'fibu:er' d.eingangsrechnung.pk %}">{{ d.eingangsrechnung.nummer }}</a></dd>{% endif %}
+        {% if d.buchung %}<dt class="col-4">Buchung</dt><dd class="col-8"><a href="{% url 'fibu:buchung' d.buchung.pk %}">{{ d.buchung.nummer }}</a></dd>{% endif %}
+      </dl>
+      {% if form %}<form method="post">{% csrf_token %}{% include "generic/_formfelder.html" %}<button class="btn btn-sm btn-primary mt-2">Metadaten speichern</button>{% if d.archiviert %}<div class="form-text">Archiviert: Nummer, Art, Volltext und Dateien sind unveränderbar; Metadaten werden protokolliert.</div>{% endif %}</form>
+      {% else %}<dl class="row mb-0"><dt class="col-4">Partner</dt><dd class="col-8">{{ d.partner.name|default:"–" }}</dd><dt class="col-4">Datum</dt><dd class="col-8">{{ d.belegdatum|date:"d.m.Y"|default:"–" }}</dd>
+        <dt class="col-4">Schlagwörter</dt><dd class="col-8">{% for t in d.tags.all %}<span class="badge text-bg-{{ t.farbe }}">{{ t.name }}</span> {% empty %}–{% endfor %}</dd><dt class="col-4">Bemerkung</dt><dd class="col-8">{{ d.bemerkung|linebreaksbr|default:"–" }}</dd></dl>{% endif %}
+    </div></div>
+    {% block detail_zusatz %}{% endblock %}
+    {% if d.ocr_text %}<div class="card mb-3"><div class="card-header bg-white fw-semibold d-flex"><span>Erkannter Volltext</span><span class="ms-auto small text-muted">{{ d.ocr_text|length }} Zeichen</span></div><div class="card-body p-0"><pre class="small mb-0 p-2" style="max-height:240px;overflow:auto;white-space:pre-wrap">{{ d.ocr_text }}</pre></div></div>{% endif %}
+    {% if teile %}<div class="card mb-3"><div class="card-header bg-white fw-semibold">Einzeldokumente aus diesem Sammel-PDF</div><ul class="list-group list-group-flush small">{% for t in teile %}<li class="list-group-item"><a href="{% url 'dms:detail' t.pk %}">{{ t.nummer }}</a> Seiten {{ t.seiten_von }}–{{ t.seiten_bis }} {% include "dms/_status.html" with s=t.status text=t.get_status_display %}</li>{% endfor %}</ul></div>{% endif %}
+    <div class="card mb-3"><div class="card-header bg-white fw-semibold">Versionen (SHA-256-versiegelt)</div><div class="table-responsive"><table class="table table-sm mb-0 small">
+      <thead class="table-light"><tr><th>V.</th><th>Art</th><th>Datei</th><th>SHA-256</th><th>Erstellt</th></tr></thead>
+      <tbody>{% for v in versionen %}<tr><td>{{ v.version }}</td><td>{{ v.get_art_display }}</td><td><a href="{% url 'dms:datei_version' d.pk v.pk %}" target="_blank">{{ v.dateiname|truncatechars:30 }}</a> <span class="text-muted">({{ v.groesse|filesizeformat }})</span>{% if v.kommentar %}<div class="text-muted">{{ v.kommentar }}</div>{% endif %}</td><td><code title="{{ v.sha256 }}">{{ v.sha256|truncatechars:17 }}</code></td><td>{{ v.erstellt_am|date:"d.m.Y H:i" }} {{ v.erstellt_von.username|default:"" }}</td></tr>{% endfor %}</tbody></table></div>
+      {% if versionform %}<div class="card-body border-top"><form method="post" action="{% url 'dms:version_neu' d.pk %}" enctype="multipart/form-data" class="row g-2 small">{% csrf_token %}
+        <div class="col-md-5">{{ versionform.datei }}</div><div class="col-md-5">{{ versionform.kommentar }}</div><div class="col-md-2"><button class="btn btn-sm btn-outline-primary w-100">Neue Version</button></div></form></div>{% endif %}
+    </div>
+    <div class="card"><div class="card-header bg-white fw-semibold">Protokoll</div><ul class="list-group list-group-flush small">{% for p in protokoll %}
+      <li class="list-group-item"><span class="text-muted">{{ p.zeitpunkt|date:"d.m.Y H:i" }} · {{ p.benutzername|default:"System" }}</span> <b>{{ p.aktion }}</b> {{ p.text }}</li>{% endfor %}</ul></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}DMS-Lernregeln{% endblock %}
+{% block content %}
+{% hat_recht "dms" "aendern" as darf_aendern %}
+<h1 class="h4 mb-3"><i class="bi bi-lightbulb"></i> Lernregeln (Kontierungsvorschläge je Lieferant)</h1>
+{% include "dms/_nav.html" %}
+<p class="small text-muted">Beim Verbuchen erkannter Eingangsrechnungen merkt sich das System je Lieferant das verwendete Aufwandskonto (gelernt). Regeln mit Stichwort gelten nur für Positionen, deren Beschreibung das Stichwort enthält, und haben Vorrang. Ohne Regel wird das häufigste Konto früherer Eingangsrechnungen des Lieferanten bzw. das Standard-Aufwandskonto vorgeschlagen.</p>
+<div class="row g-3"><div class="col-lg-8"><div class="card"><div class="table-responsive"><table class="table table-sm mb-0 small">
+  <thead class="table-light"><tr><th>Lieferant</th><th>Stichwort</th><th>Konto</th><th>Steuerschl.</th><th class="text-end">Verwendet</th><th>Herkunft</th><th>Zuletzt</th><th></th></tr></thead>
+  <tbody>{% for r in regeln %}<tr><td>{{ r.partner.name }}</td><td>{{ r.stichwort|default:"(alle Positionen)" }}</td><td>{{ r.konto.nummer }} {{ r.konto.bezeichnung }}</td><td>{{ r.steuerschluessel|default:"–" }}</td><td class="text-end">{{ r.anzahl }}</td><td>{% if r.gelernt %}gelernt{% else %}manuell{% endif %}</td><td>{{ r.zuletzt|date:"d.m.Y" }}</td>
+    <td>{% if darf_aendern %}<form method="post">{% csrf_token %}<button class="btn btn-sm btn-link text-danger p-0" name="loeschen" value="{{ r.pk }}" onclick="return confirm('Regel löschen?')"><i class="bi bi-trash"></i></button></form>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="8" class="text-muted">Noch keine Lernregeln – sie entstehen beim Verbuchen erkannter Rechnungen.</td></tr>{% endfor %}</tbody></table></div></div></div>
+{% if darf_aendern %}<div class="col-lg-4"><form method="post" class="card">{% csrf_token %}<div class="card-header bg-white fw-semibold">Regel manuell anlegen</div><div class="card-body">{% include "generic/_formfelder.html" %}<button class="btn btn-sm btn-primary mt-2">Anlegen</button></div></form></div>{% endif %}</div>
+{% endblock %}

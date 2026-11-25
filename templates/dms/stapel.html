@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Stapel {{ stapel.nummer }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center mb-3"><h1 class="h4 m-0"><i class="bi bi-stack"></i> Stapel {{ stapel.nummer }} <small class="text-muted">{{ stapel.bezeichnung }}</small></h1>
+  <div class="ms-auto"><a class="btn btn-sm btn-outline-secondary" href="{% url 'dms:stapel_liste' %}">Alle Stapel</a></div></div>
+{% include "dms/_nav.html" %}
+{% hat_recht "dms" "anlegen" as darf_anlegen %}
+<div class="card mb-3"><div class="card-body">
+  <div class="d-flex align-items-center small mb-1 gap-2"><span id="fs-text">Fortschritt: {{ fortschritt.fertig }} von {{ fortschritt.gesamt }} verarbeitet</span>
+    <span class="ms-auto" id="fs-prozent">{{ fortschritt.prozent }} %</span>
+    {% if darf_anlegen %}<button type="button" class="btn btn-sm btn-primary" id="fs-start" {% if not fortschritt.offen %}disabled{% endif %}><i class="bi bi-play-fill"></i> Verarbeitung starten</button>{% endif %}</div>
+  <div class="progress" style="height:1.2rem"><div class="progress-bar" id="fs-balken" role="progressbar" style="width: {{ fortschritt.prozent }}%" aria-valuenow="{{ fortschritt.prozent }}" aria-valuemin="0" aria-valuemax="100"></div></div>
+  <div class="small text-muted mt-1" id="fs-info">Quelle: {{ stapel.get_quelle_display }} · Sammel-PDFs an Trennblättern teilen: {{ stapel.automatisch_trennen|yesno:"ja,nein" }} · <a href="{% url 'dms:trennblatt' %}" target="_blank">Trennblatt drucken</a></div>
+</div></div>
+<script>
+(function () {
+  const start = document.getElementById("fs-start");
+  const csrf = "{{ csrf_token }}";
+  let laeuft = false;
+  function anzeigen(d) {
+    document.getElementById("fs-balken").style.width = d.prozent + "%";
+    document.getElementById("fs-prozent").textContent = d.prozent + " %";
+    document.getElementById("fs-text").textContent = "Fortschritt: " + d.fertig + " von " + d.gesamt + " verarbeitet"
+      + (d.verarbeitet ? " – zuletzt " + d.verarbeitet : "");
+    d.dokumente.forEach(function (dok) {
+      const zelle = document.querySelector('[data-status-pk="' + dok.pk + '"]');
+      if (zelle) { zelle.textContent = dok.status_text; }
+    });
+  }
+  async function schritt() {
+    const r = await fetch("{% url 'dms:stapel_verarbeiten' stapel.pk %}", {method: "POST", headers: {"X-CSRFToken": csrf}});
+    if (!r.ok) { throw new Error("HTTP " + r.status); }
+    return r.json();
+  }
+  async function lauf() {
+    if (laeuft) return;
+    laeuft = true; if (start) { start.disabled = true; start.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Verarbeitung läuft …'; }
+    try {
+      let d;
+      do { d = await schritt(); anzeigen(d); } while (d.offen > 0 && d.verarbeitet);
+    } catch (e) { alert("Verarbeitung unterbrochen: " + e.message); }
+    laeuft = false;
+    window.location.replace("{% url 'dms:stapel' stapel.pk %}");
+  }
+  if (start) start.addEventListener("click", lauf);
+  {% if autostart and fortschritt.offen %}lauf();{% endif %}
+})();
+</script>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th>Dokument</th><th>Titel</th><th>Art</th><th>Seiten</th><th>Partner</th><th>Status</th><th>Hinweis</th></tr></thead>
+<tbody>{% for d in dokumente %}<tr><td><a href="{% url 'dms:detail' d.pk %}">{{ d.nummer }}</a>{% if d.eltern_id %} <i class="bi bi-scissors text-muted" title="aus Sammel-PDF"></i>{% endif %}</td><td>{{ d.titel|truncatechars:50 }}</td><td>{{ d.get_art_display }}</td><td>{{ d.seiten|default:"" }}</td><td>{{ d.partner.name|default:"–" }}</td>
+  <td data-status-pk="{{ d.pk }}">{% include "dms/_status.html" with s=d.status text=d.get_status_display %}</td><td class="small text-danger">{{ d.fehlermeldung|truncatechars:60 }}</td></tr>
+{% empty %}<tr><td colspan="7" class="text-muted text-center">Keine Dokumente.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

@@ -24,5 +24,6 @@ if [ "${ERP_GRUNDDATEN:-1}" = "1" ]; then python manage.py erp_grunddaten; fi
 if [ "${ERP_DEMODATEN:-0}" = "1" ]; then
     echo "[erp] WARNUNG: ERP_DEMODATEN=1 – Demodaten mit bekannten Passwörtern werden geladen!"
     python manage.py erp_demodaten
+    python manage.py dms_demodaten   # Beispielrechnungen im Dokumentenmanagement (OCR)
 fi
 exec "$@"

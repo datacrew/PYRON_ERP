@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}E-Mail-Eingang{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3"><i class="bi bi-envelope-paper"></i> E-Mail-Rechnungseingang</h1>
+{% include "dms/_nav.html" %}
+{% if konfiguriert %}
+<p class="small text-muted">Postfach <code>{{ postfach }}</code> – Abruf über <code>manage.py dms_mailabruf</code> (systemd-Timer bzw. Docker-Dienst alle 5 Minuten).</p>
+{% else %}
+<div class="alert alert-info small">Der E-Mail-Abruf ist nicht eingerichtet. Zugangsdaten über <code>ERP_DMS_IMAP_HOST</code>, <code>ERP_DMS_IMAP_USER</code> und <code>ERP_DMS_IMAP_PASSWORD</code> in der <code>.env</code> setzen (Installationsanleitung, Abschnitt 11.5).</div>
+{% endif %}
+<form class="row g-2 mb-2" method="get"><div class="col-auto"><select name="status" class="form-select form-select-sm" onchange="this.form.submit()"><option value="">Alle Status</option>{% for code, text in status %}<option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ text }}</option>{% endfor %}</select></div></form>
+<div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0">
+<thead class="table-light"><tr><th>Abgerufen</th><th>Absender</th><th>Betreff</th><th>Status</th><th class="text-end">Anhänge</th><th>Stapel</th><th>Hinweise / Fehler</th></tr></thead>
+<tbody>{% for m in page_obj %}<tr>
+<td class="text-nowrap">{{ m.erstellt_am|date:"d.m.Y H:i" }}</td><td>{{ m.absender }}</td>
+<td title="{{ m.message_id }}">{{ m.betreff|truncatechars:70 }}</td>
+<td><span class="badge text-bg-{% if m.status == 'UEBERNOMMEN' %}success{% elif m.status == 'FEHLER' or m.status == 'ABGEBROCHEN' %}danger{% else %}secondary{% endif %}">{{ m.get_status_display }}</span>{% if m.versuche > 1 %} <small class="text-muted">({{ m.versuche }} Versuche)</small>{% endif %}</td>
+<td class="text-end">{{ m.anhaenge }}</td>
+<td>{% if m.stapel %}<a href="{% url 'dms:stapel' m.stapel.pk %}">{{ m.stapel.nummer }}</a>{% endif %}</td>
+<td class="small">{{ m.fehler|default:m.hinweise|linebreaksbr }}</td></tr>
+{% empty %}<tr><td colspan="7" class="text-muted text-center">Noch keine Mails abgerufen.</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "generic/_seiten.html" %}
+{% endblock %}

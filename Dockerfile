@@ -3,10 +3,12 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
     ERP_STATIC_ROOT=/app/staticfiles ERP_MEDIA_ROOT=/app/media
-# Systembibliotheken für WeasyPrint (Pango/HarfBuzz) und Schriften für die PDF-Belege
+# Systembibliotheken für WeasyPrint (Pango/HarfBuzz) und Schriften für die PDF-Belege;
+# DMS: Tesseract (deutsch), Ghostscript (PDF/A), Poppler, unpaper/pngquant (OCRmyPDF), zbar (Trennblatt-Barcodes)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0 \
         fonts-dejavu fonts-liberation tzdata \
+        tesseract-ocr tesseract-ocr-deu ghostscript poppler-utils unpaper pngquant libzbar0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

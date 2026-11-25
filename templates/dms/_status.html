@@ -1,0 +1,1 @@
+<span class="badge text-bg-{% if s == 'GEBUCHT' or s == 'ABGELEGT' %}success{% elif s == 'PRUEFEN' %}warning{% elif s == 'ERKANNT' %}info{% elif s == 'FEHLER' %}danger{% elif s == 'OCR' %}primary{% else %}secondary{% endif %}">{{ text }}</span>

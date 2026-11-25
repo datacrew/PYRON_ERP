@@ -9,9 +9,11 @@
     <dt class="col-5">Rechnungsnr.</dt><dd class="col-7">{{ er.rechnungsnummer }}</dd>
     <dt class="col-5">Rechnungsdatum</dt><dd class="col-7">{{ er.rechnungsdatum|date:"d.m.Y" }}</dd>
     <dt class="col-5">Fällig am</dt><dd class="col-7">{{ er.faellig_am|date:"d.m.Y"|default:"aus Zahlungsbedingung" }}</dd>
+    <dt class="col-5">Skonto</dt><dd class="col-7">{% if er.skonto_prozent %}{{ er.skonto_prozent|zahl }} %{% if er.skonto_bis %} bis {{ er.skonto_bis|date:"d.m.Y" }}{% elif er.skonto_tage is not None %} innerhalb {{ er.skonto_tage }} Tagen{% endif %}{% if er.skontobetrag %} · {{ er.skontobetrag|euro }}{% endif %} <span class="text-muted">(laut Rechnung)</span>{% elif er.zahlungsbedingung.skonto_prozent %}{{ er.zahlungsbedingung.skonto_prozent|zahl }} % in {{ er.zahlungsbedingung.skonto_tage }} Tagen <span class="text-muted">(Zahlungsbedingung)</span>{% else %}–{% endif %}</dd>
     <dt class="col-5">Bestellung</dt><dd class="col-7">{{ er.bestellung.nummer|default:"–" }}</dd>
     <dt class="col-5">Netto / USt / Brutto</dt><dd class="col-7">{{ er.summe_netto|euro }} / {{ er.summe_steuer|euro }} / <b>{{ er.summe_brutto|euro }}</b></dd>
     {% if er.buchung %}<dt class="col-5">Buchung</dt><dd class="col-7"><a href="{% url 'fibu:buchung' er.buchung.pk %}">{{ er.buchung.nummer }}</a></dd>{% endif %}
+    {% for dok in er.dms_dokumente.all %}<dt class="col-5">Originalbeleg (DMS)</dt><dd class="col-7"><a href="{% url 'dms:detail' dok.pk %}"><i class="bi bi-file-earmark-pdf"></i> {{ dok.nummer }}</a>{% if dok.archiviert %} <i class="bi bi-lock-fill text-muted" title="revisionssicher archiviert"></i>{% endif %}</dd>{% endfor %}
     {% for op in ops %}<dt class="col-5">OP</dt><dd class="col-7"><a href="{% url 'fibu:op' op.pk %}">{{ op.belegnr }}</a> offen {{ op.offen|euro }}</dd>{% endfor %}
   </dl></div></div></div>
   <div class="col-lg-7"><div class="card h-100 {% if er.abweichung and not er.abweichung_akzeptiert %}border-danger{% endif %}"><div class="card-header bg-white fw-semibold">Rechnungsprüfung gegen Bestellung / Wareneingang</div><div class="card-body small">

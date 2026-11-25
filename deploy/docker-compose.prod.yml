@@ -53,6 +53,7 @@ services:
       POSTGRES_PORT: "5432"
       ERP_STATIC_ROOT: /app/staticfiles
       ERP_MEDIA_ROOT: /app/media
+      ERP_DMS_EINGANG: /app/eingang
       GUNICORN_BIND: 0.0.0.0:8000
       TZ: Europe/Berlin
     depends_on:
@@ -61,8 +62,50 @@ services:
     volumes:
       - media:/app/media          # Belegarchiv (GoBD-PDFs) – dauerhaft
       - static:/app/staticfiles   # wird von Caddy direkt ausgeliefert
+      - ${DMS_EINGANG_HOST_VERZEICHNIS:-./eingang}:/app/eingang
     expose:
       - "8000"
+    <<: *protokoll
+
+  # DMS: Eingangsordner (Hotfolder) alle 5 Minuten einlesen und OCR-Warteschlange abarbeiten (ohne Celery)
+  dms-eingang:
+    image: erp-mittelstand:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      ERP_MEDIA_ROOT: /app/media
+      ERP_DMS_EINGANG: /app/eingang
+      TZ: Europe/Berlin
+    entrypoint: ["sh", "-c"]
+    command: ["while true; do python manage.py dms_eingang; python manage.py dms_verarbeiten --limit 200; sleep 300; done"]
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - media:/app/media
+      - ${DMS_EINGANG_HOST_VERZEICHNIS:-./eingang}:/app/eingang
+    <<: *protokoll
+
+  dms-mailabruf:
+    # Rechnungseingang per E-Mail (IMAP über SSL) alle 5 Minuten; Zugangsdaten ERP_DMS_IMAP_* in .env.
+    # Ohne ERP_DMS_IMAP_HOST meldet der Befehl „deaktiviert" und der Dienst wartet nur.
+    image: erp-mittelstand:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      ERP_MEDIA_ROOT: /app/media
+      TZ: Europe/Berlin
+    entrypoint: ["sh", "-c"]
+    command: ["while true; do python manage.py dms_mailabruf; sleep 300; done"]
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - media:/app/media
     <<: *protokoll
 
   caddy:

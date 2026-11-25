@@ -1,0 +1,10 @@
+# ERP Mittelstand – Zeitplan DMS-Eingangsordner (alle 5 Minuten)
+[Unit]
+Description=ERP Mittelstand – DMS-Eingangsordner alle 5 Minuten
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

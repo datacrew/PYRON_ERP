@@ -418,6 +418,142 @@ aufsetzen, Sicherung mit `restore.sh` einspielen, prüfen.
 | `erp_pruefen`: „Archiv-PDF fehlt/verändert“ | Belegarchiv nicht aus derselben Sicherung wie die Datenbank wiederhergestellt – Media aus passender Sicherung einspielen. |
 | GoBD-Fehlermeldung „Festgeschriebener Beleg … unveränderbar“ | Gewolltes Verhalten. Korrekturen nur per Storno/Gutschrift bzw. Gegenbuchung. |
 | Timeout bei großen Berichten/PDF-Läufen | `GUNICORN_TIMEOUT` erhöhen (Standard 120 s). |
+| DMS: Dokument bleibt im Status „Fehler: Tesseract ist nicht installiert" | Pakete aus Abschnitt 11.1 installieren, danach im Stapel „Erneut verarbeiten". |
+| DMS: OCRmyPDF meldet Ghostscript-Regression | Ghostscript 10.0.0–10.02.0 ist bei `--skip-text` fehlerhaft; das ERP nutzt deshalb `--force-ocr` (nur für Seiten ohne Textlayer). Bei anderen Fehlern Ghostscript aktualisieren. |
 
 Hilfe zur Diagnose: `python manage.py check --deploy`, `python manage.py erp_pruefen`,
 `deploy/scripts/gesundheit.sh`.
+
+---
+
+## 11. Dokumentenmanagement (DMS) und OCR
+
+### 11.1 Systempakete
+
+Die Texterkennung nutzt Tesseract (Sprachpaket Deutsch) über OCRmyPDF; Ghostscript erzeugt das durchsuchbare
+PDF/A, zbar liest Barcode-Trennblätter. Im Docker-Image und in `install.sh` sind die Pakete bereits enthalten.
+Manuell (Ubuntu/Debian):
+
+```bash
+sudo apt-get install -y tesseract-ocr tesseract-ocr-deu ghostscript poppler-utils unpaper pngquant libzbar0
+tesseract --list-langs   # muss „deu" enthalten
+```
+
+Die Python-Pakete (`ocrmypdf`, `pytesseract`, `pymupdf`, `pikepdf`, `pypdf`, `pyzbar`) stehen in
+`requirements.txt`. Fehlt OCRmyPDF/Ghostscript, liest das System Scans hilfsweise nur mit pytesseract
+(Volltext ja, aber kein PDF/A); fehlt Tesseract ganz, landen Scans im Status „Fehler". Digitale PDFs,
+ZUGFeRD/Factur-X und XRechnung (XML) brauchen **kein** OCR.
+
+### 11.2 Einstellungen (`.env` bzw. `config/settings.py`)
+
+| Variable | Bedeutung | Standard |
+|---|---|---|
+| `ERP_DMS_OCR_SPRACHE` | Tesseract-Sprache(n), z. B. `deu+eng` | `deu` |
+| `ERP_DMS_OCR_TIMEOUT` | Zeitlimit je Seite in Sekunden | `180` |
+| `ERP_DMS_IMAP_*` | E-Mail-Rechnungseingang, siehe 11.4 | deaktiviert |
+| `ERP_DMS_TOLERANZ_MENGE_PROZENT` | Dreifach-Abgleich: zulässige Mehrmenge gegenüber geliefert − bereits berechnet (%) | `0` |
+| `ERP_DMS_TOLERANZ_PREIS_PROZENT` | Dreifach-Abgleich: zulässige Preisabweichung gegenüber Wareneingang/Bestellung (%) | `1` |
+| `ERP_DMS_TOLERANZ_BETRAG` | Preisabweichung je Position erst ab diesem Betrag in € (beide Grenzen müssen überschritten sein) | `0.50` |
+| `ERP_DMS_ABWEICHUNG_RECHTE` | Rechte (Modul.Aktion, kommagetrennt), die Abweichungen mit Begründung freigeben dürfen | `einkauf.freigeben,fibu.freigeben` |
+
+Dokumente werden unter `MEDIA_ROOT/dms/JJJJ/MM/` abgelegt und sind Teil der normalen Datensicherung
+(Abschnitt 6). `python manage.py erp_pruefen` prüft zusätzlich die SHA-256-Siegel aller DMS-Dateien.
+
+### 11.3 Eingangsordner (Hotfolder) und Stapelverarbeitung
+
+Scanner oder Mail-Ablage legen Dateien in den Eingangsordner; `python manage.py dms_eingang` übernimmt sie in
+einen Stapel, teilt Sammel-PDFs an Trennblättern und führt OCR/Belegerkennung aus – ohne Celery/Redis.
+
+| Betrieb | Eingangsordner | Zeitplan |
+|---|---|---|
+| nativ (`install.sh`) | `/var/lib/erp/eingang` (Gruppe `erp` darf schreiben, setgid) | `erp-dms-eingang.timer` alle 5 Minuten |
+| Docker | `deploy/eingang/` (`DMS_EINGANG_HOST_VERZEICHNIS`) | Dienst `dms-eingang` (Schleife, 5 Minuten) |
+
+- Dateien im Hauptordner gelten als **Eingangsrechnung** (`--art` ändert die Vorgabe); Unterordner mit dem Namen
+  einer Dokumentart (`vertrag/`, `lieferschein/`, `ausgangsrechnung/`, `sonstiges/`) legen die Art fest.
+- Übernommene Dateien wandern nach `verarbeitet/JJJJ-MM-TT/`, abgelehnte nach `fehler/` (mit `.txt`-Begründung),
+  bereits vorhandene (gleicher SHA-256) nach `doppelt/`. Dateien, die jünger als 10 s sind (Scanner schreibt noch),
+  sowie `.part`/`.tmp` werden erst beim nächsten Lauf übernommen. Eine Sperrdatei verhindert parallele Läufe.
+- `python manage.py dms_verarbeiten [--limit N]` arbeitet zusätzlich alle wartenden Dokumente ab
+  (z. B. aus Uploads, die nicht sofort verarbeitet wurden).
+- **Trennblatt:** Im DMS unter „Hochladen“ → „Trennblatt“ (PDF) ausdrucken und vor jedes Dokument eines
+  Stapelscans legen. Erkannt wird der Barcode „PYRON-TRENNBLATT“ (zbar) bzw. das Wort „TRENNBLATT“ im Textlayer.
+  Alternativ lassen sich Sammel-PDFs im Dokument über „Trennen“ manuell nach Seitenbereichen aufteilen.
+- Uploads über die Oberfläche werden im Browser schrittweise verarbeitet (ein Dokument je Anfrage,
+  Fortschrittsbalken) – auch das braucht keinen Hintergrunddienst.
+
+Manuell testen (nativ):
+
+```bash
+sudo systemctl start erp-dms-eingang.service && journalctl -u erp-dms-eingang -n 20
+systemctl list-timers erp-dms-eingang.timer
+```
+
+Demo-/Schulungsinstanz: `python manage.py dms_demodaten` legt synthetische Beispielrechnungen an (bei
+`ERP_DEMODATEN=1` bzw. `install.sh --demo` automatisch) – **nie im Produktivsystem**.
+
+### 11.4 Rechnungseingang per E-Mail (IMAP)
+
+`python manage.py dms_mailabruf` ruft ein Postfach über **IMAP mit SSL/TLS** (Port 993, Zertifikatsprüfung) ab und
+legt die Anhänge jeder ungelesenen Mail als Stapel im DMS an (anschließend OCR/Belegerkennung wie beim
+Eingangsordner). Zugangsdaten stehen **nur** in der `.env` (bzw. als Datei über `ERP_DMS_IMAP_PASSWORD_FILE`),
+nie im Code. Am besten ein eigenes Postfach (z. B. `rechnungen@ihre-firma.de`) nur für Eingangsrechnungen anlegen.
+
+| Variable | Bedeutung | Standard |
+|---|---|---|
+| `ERP_DMS_IMAP_HOST` | IMAP-Server; leer = Abruf deaktiviert | – |
+| `ERP_DMS_IMAP_PORT` | Port (IMAPS) | `993` |
+| `ERP_DMS_IMAP_USER` / `ERP_DMS_IMAP_PASSWORD` | Anmeldung (App-Passwort empfohlen) | – |
+| `ERP_DMS_IMAP_PASSWORD_FILE` | Alternativ: Datei mit dem Passwort (z. B. Docker-Secret, Rechte 600) | – |
+| `ERP_DMS_IMAP_ORDNER` | abzurufender Ordner | `INBOX` |
+| `ERP_DMS_IMAP_ZIELORDNER` | verarbeitete Mails dorthin verschieben (Ordner vorher anlegen); leer = nur als gelesen markieren | leer |
+| `ERP_DMS_IMAP_FEHLERORDNER` | Mails ohne verwertbaren Anhang bzw. nach 3 Fehlversuchen | leer |
+| `ERP_DMS_IMAP_ABSENDER` | optional nur diese Absender (`a@b.de,@lieferant.de`), andere werden als gelesen markiert | alle |
+| `ERP_DMS_IMAP_ART` | Dokumentart der Anhänge | `ER` |
+| `ERP_DMS_IMAP_MAX_MAILS` / `ERP_DMS_IMAP_TIMEOUT` | Mails je Lauf / Netzwerk-Zeitlimit (s) | `50` / `60` |
+
+| Betrieb | Zeitplan |
+|---|---|
+| nativ (`install.sh`) | `erp-dms-mailabruf.timer` alle 5 Minuten (Dienst `erp-dms-mailabruf.service`) |
+| Docker | Dienst `dms-mailabruf` in `deploy/docker-compose.prod.yml` (Schleife, 5 Minuten) |
+
+- **Dubletten:** Jede Message-ID wird in „E-Mail-Eingang" gespeichert und nie zweimal übernommen – auch wenn die
+  Mail im Postfach wieder auf „ungelesen" gesetzt wird. Identische Dateien (SHA-256) werden ebenfalls übersprungen.
+- **Fehler:** Verbindungs-/Anmeldefehler beenden den Lauf mit Fehlermeldung (Exit-Code ≠ 0, im Journal sichtbar).
+  Fehler bei einer einzelnen Mail stoppen den Lauf nicht; die Mail bleibt ungelesen und wird bis zu 3-mal erneut
+  versucht. Parallele Läufe verhindert eine PostgreSQL-Sperre (Advisory Lock).
+- **Prüfen ohne Änderungen:** `python manage.py dms_mailabruf --trocken` listet die Mails nur auf.
+- Microsoft 365/Exchange Online erlaubt IMAP mit Passwort teils nicht mehr (nur OAuth2) – dann ein Postfach mit
+  App-Passwort verwenden oder Mails per Weiterleitungsregel an ein IMAP-fähiges Postfach senden.
+- **Nicht getestet:** Der Abruf ist nur mit einem simulierten IMAP-Server automatisiert getestet; vor dem
+  Produktivbetrieb mit dem echten Postfach `--trocken` und einen ersten Lauf prüfen.
+
+```bash
+sudo systemctl start erp-dms-mailabruf.service && journalctl -u erp-dms-mailabruf -n 20
+```
+
+### 11.5 Aufbewahrung
+
+Archivierte Dokumente sind per Datenbank-Trigger unveränderbar und nicht löschbar. Die Frist läuft bis zum
+31.12. des Jahres „Dokumentdatum + N Jahre": Eingangs-/Ausgangsrechnungen 8 Jahre (Buchungsbelege, § 147 AO
+in der Fassung ab 2025), Verträge 10 Jahre (vorsichtig gewählt), Lieferscheine/Sonstiges 6 Jahre.
+Abweichende Fristen über `ERP_DMS_AUFBEWAHRUNG` in den Settings (z. B. `{"VERTRAG": 6}`) – bitte mit dem
+Steuerberater abstimmen. Nach Fristende wird **nichts** automatisch gelöscht.
+
+### WORM-Speicher (revisionssichere Ablage)
+
+Beim Archivieren legt das DMS jede Dateiversion zusätzlich inhaltsadressiert unter `ERP_DMS_WORM_PFAD`
+(Standard `media/worm/<sha[:2]>/<sha256>`) ab und schreibt einen Eintrag in das Append-only-Manifest
+(`dms_wormeintrag`, Hash-Kette, PostgreSQL-Trigger verbietet UPDATE/DELETE). Prüfung (z. B. nächtlich per Cron/systemd):
+
+    python manage.py dms_worm_pruefen   # Exit-Code 1 bei Abweichungen
+
+- `ERP_DMS_WORM_MODUS=logisch` (Standard): Schutz auf Applikations- und Datenbankebene.
+- `ERP_DMS_WORM_MODUS=os` (nur Produktion, optional): zusätzlich `chattr +i` je WORM-Datei; benötigt ein
+  Dateisystem mit Immutable-Flag (ext4/xfs) und CAP_LINUX_IMMUTABLE. Schlägt es fehl, bleibt der logische Schutz
+  aktiv. Achtung: unveränderliche Dateien lassen sich erst nach `chattr -i` durch root wieder löschen – nach Ablauf
+  der Aufbewahrungsfrist bewusst manuell durchführen. In Entwicklungs-/Testumgebungen nicht verwenden.
+- `ERP_DMS_WORM_MODUS=aus`: keine WORM-Ablage.
+- S3 Object Lock (optional, `pip install boto3`): `ERP_DMS_WORM_S3_BUCKET` (Bucket mit aktiviertem Object Lock),
+  `ERP_DMS_WORM_S3_PRAEFIX`, `ERP_DMS_WORM_S3_ENDPOINT` (z. B. MinIO), `ERP_DMS_WORM_S3_REGION`; Zugangsdaten über
+  die üblichen AWS-Umgebungsvariablen. Upload im Modus COMPLIANCE mit „Retain until“ = Aufbewahrungsfrist.

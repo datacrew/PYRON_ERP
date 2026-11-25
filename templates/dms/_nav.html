@@ -1,0 +1,10 @@
+<ul class="nav nav-tabs small mb-3">
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'index' %}active{% endif %}" href="{% url 'dms:index' %}">Übersicht</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'liste' %}active{% endif %}" href="{% url 'dms:liste' %}">Dokumente &amp; Suche</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'stapel' %}active{% endif %}" href="{% url 'dms:stapel_liste' %}">Stapel / Warteschlange</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'mails' %}active{% endif %}" href="{% url 'dms:mails' %}">E-Mail-Eingang</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'hochladen' %}active{% endif %}" href="{% url 'dms:hochladen' %}">Hochladen</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'fristen' %}active{% endif %}" href="{% url 'dms:fristen' %}">Aufbewahrungsfristen</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'regeln' %}active{% endif %}" href="{% url 'dms:regeln' %}">Lernregeln</a></li>
+  <li class="nav-item"><a class="nav-link {% if aktiv == 'tags' %}active{% endif %}" href="{% url 'dms:tags' %}">Schlagwörter</a></li>
+</ul>

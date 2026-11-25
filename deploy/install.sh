@@ -22,7 +22,9 @@
 #   /opt/erp/staticfiles  Static-Dateien (von Caddy ausgeliefert)
 #   /var/lib/erp/media  Belegarchiv (GoBD-PDFs)
 #   /var/log/erp        Protokolle
-#   systemd: erp.service (Gunicorn 127.0.0.1:8000), erp-backup.timer (tägliche Sicherung)
+#   systemd: erp.service (Gunicorn 127.0.0.1:8000), erp-backup.timer (tägliche Sicherung),
+#            erp-dms-eingang.timer (DMS-Eingangsordner /var/lib/erp/eingang alle 5 Minuten)
+#            erp-dms-mailabruf.timer (E-Mail-Rechnungseingang per IMAP alle 5 Minuten, aktiv nur mit ERP_DMS_IMAP_HOST)
 # =====================================================================================
 set -euo pipefail
 
@@ -52,7 +54,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 APP="$BASIS/app"; VENV="$BASIS/venv"; STATIC="$BASIS/staticfiles"
-MEDIA="/var/lib/erp/media"; LOGDIR="/var/log/erp"; ENV_DATEI="$APP/.env"
+MEDIA="/var/lib/erp/media"; EINGANG="/var/lib/erp/eingang"; LOGDIR="/var/log/erp"; ENV_DATEI="$APP/.env"
 
 # ------------------------------------------------------------------ Hilfsfunktionen (Trockenlauf-fähig)
 schritt() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -116,7 +118,9 @@ ok "Quelle: $QUELLE  →  Ziel: $BASIS"
 # ------------------------------------------------------------------ Pakete
 schritt "Systempakete installieren"
 PAKETE=(ca-certificates curl gnupg lsb-release rsync python3 python3-venv python3-dev build-essential libpq-dev
-        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu fonts-liberation tzdata)
+        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu fonts-liberation tzdata
+        tesseract-ocr tesseract-ocr-deu ghostscript poppler-utils unpaper pngquant libzbar0)
+# (DMS: Tesseract = OCR deutsch, Ghostscript = PDF/A, zbar = Barcode-Trennblätter)
 # ab Ubuntu 24.04 vorhanden (WeasyPrint nutzt es zur Schrift-Teilmengenbildung, optional)
 if apt-cache show libharfbuzz-subset0 >/dev/null 2>&1; then PAKETE+=(libharfbuzz-subset0); fi
 tu_sh "DEBIAN_FRONTEND=noninteractive apt-get update -q"
@@ -160,6 +164,8 @@ fi
 tu install -d -m 755 -o root -g root "$BASIS"
 tu install -d -m 755 -o erp -g erp "$STATIC"
 tu install -d -m 750 -o erp -g erp /var/lib/erp "$MEDIA" "$LOGDIR" "$BACKUP_DIR"
+# DMS-Eingangsordner (Hotfolder): Gruppe erp darf schreiben (z. B. Scanner-/Samba-Benutzer in Gruppe erp)
+tu install -d -m 2770 -o erp -g erp "$EINGANG"
 
 schritt "Programmcode nach $APP"
 if [[ "$(readlink -f "$QUELLE")" == "$(readlink -f "$APP" 2>/dev/null || echo -)" ]]; then
@@ -226,6 +232,7 @@ POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 ERP_STATIC_ROOT=${STATIC}
 ERP_MEDIA_ROOT=${MEDIA}
+ERP_DMS_EINGANG=${EINGANG}
 ERP_LOG_DATEI=${LOGDIR}/erp.log
 ERP_LOG_LEVEL=INFO
 ERP_MINDESTLOHN=13.90
@@ -256,6 +263,7 @@ als_erp "$VENV/bin/python" manage.py migrate --noinput
 als_erp "$VENV/bin/python" manage.py erp_grunddaten
 if [[ "$DEMO" == "1" ]]; then
     als_erp "$VENV/bin/python" manage.py erp_demodaten
+    als_erp "$VENV/bin/python" manage.py dms_demodaten
 fi
 als_erp "$VENV/bin/python" manage.py collectstatic --noinput -v0
 tu chmod -R a+rX "$STATIC"
@@ -263,14 +271,17 @@ als_erp "$VENV/bin/python" manage.py check --deploy --fail-level ERROR
 
 # ------------------------------------------------------------------ systemd
 schritt "systemd-Dienste"
-for einheit in erp.service erp-backup.service erp-backup.timer; do
+for einheit in erp.service erp-backup.service erp-backup.timer erp-dms-eingang.service erp-dms-eingang.timer \
+               erp-dms-mailabruf.service erp-dms-mailabruf.timer; do
     sed -e "s|__BASIS__|$BASIS|g" -e "s|__UHRZEIT__|$BACKUP_UHRZEIT|g" "$QUELLE/deploy/systemd/$einheit" \
         | datei_schreiben "/etc/systemd/system/$einheit" 644 root:root
 done
 tu systemctl daemon-reload
-tu systemctl enable erp.service erp-backup.timer
+tu systemctl enable erp.service erp-backup.timer erp-dms-eingang.timer erp-dms-mailabruf.timer
 tu systemctl restart erp.service
-tu systemctl start erp-backup.timer
+tu systemctl start erp-backup.timer erp-dms-eingang.timer
+# Mailabruf: ohne ERP_DMS_IMAP_HOST beendet sich der Dienst sofort (deaktiviert)
+tu systemctl start erp-dms-mailabruf.timer
 
 # ------------------------------------------------------------------ Caddy
 if [[ "$CADDY" == "1" ]]; then

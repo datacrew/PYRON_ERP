@@ -10,3 +10,11 @@ gunicorn>=22
 python-barcode>=0.15
 factur-x>=3.0
 lxml>=5.0
+# DMS: Texterkennung (OCR, PDF/A), PDF-Verarbeitung, Barcode-Trennblätter
+ocrmypdf>=16
+pytesseract>=0.3.10
+pymupdf>=1.24
+pikepdf>=8
+pypdf>=4
+Pillow>=10
+pyzbar>=0.1.9

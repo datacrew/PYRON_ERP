@@ -1,4 +1,4 @@
-# Roadmap – Phasen 2 bis 6 (alle erledigt)
+# Roadmap – Phasen 2 bis 6 und Dokumentenmanagement (erledigt)
 
 Die Aufwände sind **grobe Schätzungen** in Personentagen (PT) für eine erfahrene Django-Entwicklerin bzw.
 einen erfahrenen Django-Entwickler. Enthalten sind Umsetzung, Tests und Doku, **nicht** enthalten sind
@@ -13,6 +13,8 @@ Steuerberatung. Realistisch sind ±30 %, je nach Tiefe der Anforderungen.
 | 4 | Finanzbuchhaltung (**abgeschlossen**) | – |
 | 5 | Vertrieb, CRM, E-Rechnung, EDIFACT, Versand (**abgeschlossen**) | – |
 | 6 | Reporting und Feinschliff (**abgeschlossen**) | – |
+| DMS | Dokumentenmanagement mit OCR, Stapelverarbeitung, Belegerkennung ER (**umgesetzt**, PR offen) | – |
+| | DMS-Ausbau (E-Mail-Eingang, Rechnungsprüfung gegen Bestellung, API, Validierung an echten Belegen) | 10–20 PT |
 | | Betrieb/Härtung für den Produktivbetrieb (siehe unten) | 15–25 PT |
 | | Produktion-Ausbau (Kapazitätsplanung, Reservierung, Lohnexport-Formate) | 10–20 PT |
 
@@ -115,6 +117,32 @@ Ursprünglicher Umfang:
 - ✅ Berichtsvarianten je Benutzer mit Favoriten im Dashboard, REST-API `/api/v1/berichte/`
 - ✅ Feinschliff: Reporting-Platzhalter ersetzt, globale Suche in der Kopfzeile, Rolle Lager/Fertigungsleitung mit Reporting-Leserecht
 - offen: geplante Berichte per E-Mail, Berichtsdesigner
+
+## Dokumentenmanagement (DMS) mit OCR und Belegerkennung (**umgesetzt** auf Branch `feature/dokumentenmanagement`, siehe README „Dokumentenmanagement“, Testsuite siehe README)
+- ✅ Ablage mit Dokumentarten, Metadaten, Schlagwörtern, Versionierung, Verknüpfung Partner/Beleg/Buchung/Eingangsrechnung
+- ✅ GoBD: SHA-256 je Datei, Protokoll nur INSERT, Archivierung per PG-Trigger unveränderbar/nicht löschbar, Aufbewahrungsfristen
+- ✅ Volltextsuche (PostgreSQL-FTS `german`, GIN) inkl. globaler Suche
+- ✅ Stapelverarbeitung: Mehrfach-Upload mit Fortschritt, Eingangsordner (`dms_eingang`, systemd-Timer/Docker-Dienst), Trennblätter/manuelle Trennung
+- ✅ OCR: Textlayer, OCRmyPDF/Tesseract `deu` mit PDF/A, ZUGFeRD/XRechnung direkt aus XML
+- ✅ Belegerkennung ER mit Konfidenzen, Lieferantenzuordnung, Plausibilität, Dubletten, Lernregeln für die Kontierung
+- ✅ Prüfmaske (Split-Ansicht) und Verbuchung über `fibu.er_buchen` mit Rückverweis
+- ✅ E-Mail-Rechnungseingang `dms_mailabruf` (IMAP/SSL, Dubletten per Message-ID, Ziel-/Fehlerordner, systemd-Timer/Docker-Dienst) – nur mit gemocktem IMAP getestet
+- ✅ REST-API `/api/v1/dms/` (Upload/Stapel, Suche, Detail, Status, Download, Tags, Verbuchen, Protokoll), Schema `docs/schema.yml`
+- ✅ Dreifach-Abgleich Bestellung ↔ Wareneingang ↔ Rechnung in Prüfmaske und vor der Verbuchung (Bestellnummer aus
+  Text/BT-13 oder manuelle Auswahl, Toleranzen, Freigabe nur mit Begründung + Recht, Verknüpfung ER ↔ Bestellung)
+- ✅ Skonto automatisch übernehmen: Zahlungsbedingungen („14 Tage 2 % Skonto, 30 Tage netto“, „bis TT.MM.JJJJ
+  abzüglich 2 % Skonto“, XRechnung `#SKONTO#TAGE=..#PROZENT=..#`) aus Text bzw. ZUGFeRD/XRechnung (BT-20,
+  `SpecifiedTradePaymentTerms`/`ApplicableTradePaymentDiscountTerms`, UBL `PaymentTerms`) erkennen, Skontosatz/-frist/
+  -betrag in Eingangsrechnung und offenem Posten, Zahlungsvorschlag/SEPA-Lauf mit Skontoabzug in der Frist,
+  Skontobuchung SKR03 (3736/3731) bzw. SKR04 (5736/5731) mit Vorsteuerberichtigung
+- ✅ WORM-Speicher: Content-Adressierung (SHA-256), Append-only-Manifest mit Hash-Kette, Modi aus/logisch/os,
+  `dms_worm_pruefen`, optional S3 Object Lock (COMPLIANCE, Retain until = Aufbewahrungsfrist)
+- offen: Validierung an einer größeren Zahl echter Lieferantenrechnungen (bisher nur synthetische Testrechnungen),
+  bessere Tabellenerkennung für Positionen (ggf. Layout-Analyse/ML), Test des Mailabrufs gegen ein echtes
+  Postfach (Exchange/M365 ggf. OAuth2 statt Passwort), Positionszuordnung im Dreifach-Abgleich an echten
+  Lieferantenrechnungen (Artikelnummern/Mengeneinheiten der Lieferanten) prüfen, Skonto aus
+  Zahlungsbedingungen automatisch übernehmen, WORM-/Objektspeicher mit Object-Lock, Hintergrundverarbeitung
+  für große Stapel (derzeit Browser-Schleife bzw. Timer)
 
 ## Empfohlene nächste Schritte für den Produktivbetrieb
 1. **Eigener Server mit fester PostgreSQL-Datenbank und Backups** (tägliche Sicherung + regelmäßiger

@@ -1,4 +1,4 @@
-# Datenmodell – Phasen 1 bis 3
+# Datenmodell – Phasen 1 bis 6 und Dokumentenmanagement
 
 Stand: Phase 3 (Produktion). Lager, Einkauf und Wareneingang siehe Abschnitt [Phase 2](#phase-2--lager-einkauf-wareneingang), Fertigung/BDE/Akkord siehe [Phase 3](#phase-3--produktion-bde-akkord). Tabellennamen folgen dem Django-Schema `<app>_<modell>`
 (z. B. `belege_beleg`). Primärschlüssel ist jeweils `id` (bigint). Geldbeträge sind `numeric` (Decimal),
@@ -641,3 +641,61 @@ Ergänzte Felder: `Mandant.glaeubiger_id`, `Geschaeftspartner.bic`, `Bankumsatz.
 `Bankumsatz.rueckgabegrund`, Ausgleichsart `RUECKLAST`. Trigger `fibu_sepa_lauf_gesperrt` und
 `fibu_sepa_posten_gesperrt` (Migration `0002_sperre_trigger`).
 
+
+## Dokumentenmanagement (`apps/dms`)
+
+```mermaid
+erDiagram
+    Stapel ||--o{ Dokument : "Upload / Eingangsordner"
+    Dokument ||--|{ DokumentVersion : "Original, PDF/A"
+    DokumentVersion |o--o{ DokumentVersion : "quelle (Ableitung)"
+    Dokument ||--|{ DokumentProtokoll : "nur INSERT"
+    Dokument |o--o{ Dokument : "eltern (Sammel-PDF → Teile)"
+    Dokument }o--o{ Tag : Schlagwoerter
+    Dokument }o--o| Geschaeftspartner : partner
+    Dokument }o--o| Beleg : beleg
+    Dokument }o--o| Buchung : buchung
+    Dokument }o--o| Eingangsrechnung : "nach Verbuchung"
+    Kontierungsregel }o--|| Geschaeftspartner : Lieferant
+    Kontierungsregel }o--|| Konto : Aufwandskonto
+    MailEingang }o--o| Stapel : "Anhänge einer Mail"
+    Eingangsrechnung }o--o| Bestellung : "Dreifach-Abgleich"
+    ERPosition }o--o| BestellPosition : "zugeordnete Position"
+```
+
+| Modell | Zweck / wichtige Felder |
+|---|---|
+| Stapel | Verarbeitungsstapel: Nummer (Kreis `DMS_STAPEL`), Quelle UPLOAD/EINGANGSORDNER/TRENNUNG/EMAIL/API, Vorgabe-Dokumentart, `automatisch_trennen`; Fortschritt aus den Status der Dokumente |
+| Dokument | Nummer (Kreis `DMS_DOKUMENT`), Titel, Art (ER/AR/VERTRAG/LIEFERSCHEIN/SONSTIGES), Status (NEU, OCR, ERKANNT, PRUEFEN, GEBUCHT, ABGELEGT, FEHLER), Stapel, `eltern`/`seiten_von`/`seiten_bis`/`aufgeteilt` (Sammel-PDF), Partner, Tags, Dokumentdatum, Bemerkung, `metadaten` (JSON), Bezüge `beleg`, `buchung`, `eingangsrechnung`, `seiten`, `textquelle` (textlayer/ocr/xml), `ocr_text`, `suchvektor` (tsvector, GIN-Index `dms_dokument_suche`), `erkennung` (JSON: Felder mit Wert + Konfidenz inkl. `bestellnummer`, Positionen, Plausibilität, `abgleich` = Dreifach-Abgleich: Auswahl auto/manuell/ohne, Vorschläge offener Bestellungen, `bestellung_id`, Quelle, Vergleichszeilen je Position mit Abweichungen KEIN_WE/MENGE/PREIS, Positionen ohne Bezug, noch nicht berechnete Bestellpositionen, Toleranzen, `freigabe` mit Begründung/Benutzer/Signatur), `konfidenz`, `fehlermeldung`, `archiviert`/`archiviert_am`/`archiviert_von`, `aufbewahren_bis` |
+| DokumentVersion | Unveränderbare Datei: Version, Art ORIGINAL/PDFA, `quelle` (Original einer PDF/A-Ableitung), Datei (`media/dms/JJJJ/MM/`), Dateiname, MIME, Größe, `sha256` |
+| DokumentProtokoll | Revisionsprotokoll: Zeitpunkt, Benutzer(name), Aktion (Eingang, Texterkennung, Belegerkennung, Korrektur, Verbucht, Archiviert, …), Text |
+| Tag | Schlagwort mit Farbe |
+| MailEingang | E-Mail-Rechnungseingang (`dms_mailabruf`, Migration 0003): `message_id` (eindeutig → Dublettenschutz; ohne Header SHA-256 der Rohmail), Absender, Betreff, `gesendet_am`, Postfach, Status UEBERNOMMEN/OHNE_ANHANG/IGNORIERT/FEHLER/ABGEBROCHEN, Anzahl Anhänge, Hinweise (abgelehnte Anhänge), Fehler, Versuche (max. 3), `stapel`. Absender/Betreff/Message-ID stehen zusätzlich im Dokumentprotokoll und in `Dokument.metadaten["email"]` |
+| Kontierungsregel | Lernregel je Lieferant (+ optional Stichwort in der Positionsbeschreibung): Konto, Steuerschlüssel, Anzahl Verwendungen, gelernt/manuell, zuletzt verwendet |
+
+Regeln:
+- **GoBD**: PG-Trigger `dms_version_gobd` und `dms_protokoll_gobd` verbieten jedes UPDATE von Versionen und
+  Protokolleinträgen (nur Anfügen) sowie das Löschen, sobald das Dokument archiviert ist; `dms_dokument_gobd`
+  verbietet das Löschen archivierter Dokumente, das Zurücknehmen der Archivierung, Änderungen an `nummer`, `art`,
+  `ocr_text`, `archiviert_am`, `erstellt_am` und das Verkürzen von `aufbewahren_bis` (Code-Sperre zusätzlich in
+  `Dokument.save()`/`services.py`).
+- `aufbewahren_bis` = 31.12. des Jahres (Dokumentdatum bzw. Eingang) + Frist je Art (ER/AR 8, VERTRAG 10, sonst 6
+  Jahre; überschreibbar über `ERP_DMS_AUFBEWAHRUNG`). Es wird nichts automatisch gelöscht.
+- Verbuchung legt **keine eigene Buchungsstruktur** an: `fibu.Eingangsrechnung` + `ERPosition` (Kreis `FIBU_ER`),
+  gebucht über `fibu.services.er_buchen` (Aufwand + Vorsteuer an Kreditor, `OffenerPosten` Art K, Hash-Kette der Fibu).
+  Danach zeigen `Dokument.eingangsrechnung`/`Dokument.buchung` auf das Ergebnis (Rückverweis `dms_dokumente`).
+- **WormEintrag** (`dms_wormeintrag`, Migrationen `dms/0004`, `0005`): Append-only-Manifest des WORM-Speichers –
+  `version` (1:1 DokumentVersion), `sha256`, `pfad` (`<sha[:2]>/<sha256>`), `groesse`, `aufbewahren_bis`, `s3_ziel`,
+  `vorgaenger_hash`, `kettenhash` (SHA-256 über Vorgänger|SHA|Pfad|Frist|Version); Trigger verbietet UPDATE/DELETE.
+- **Skonto** (Migration `fibu/0004_skonto_eingangsrechnung`): `fibu.Eingangsrechnung` erhält `skonto_prozent`,
+  `skonto_tage`, `skonto_bis`, `skontobetrag` (aus der Rechnung, Vorrang vor der Zahlungsbedingung des Lieferanten);
+  `fibu.OffenerPosten` erhält `skontobetrag` (fester Skontobetrag laut Rechnung; 0 = Satz × Betrag). Die
+  DMS-Erkennung liefert die Felder `skonto_prozent`, `skonto_tage`, `skonto_bis`, `skonto_betrag`.
+- **Dreifach-Abgleich** (`apps/dms/abgleich.py`, keine eigene Tabelle, keine Migration): nutzt die vorhandenen
+  Felder `fibu.Eingangsrechnung.bestellung` (FK → `einkauf.Bestellung`, Rückverweis `eingangsrechnungen`) und
+  `fibu.ERPosition.bestellposition` (FK → `einkauf.BestellPosition`) sowie `BestellPosition.geliefert_menge` und
+  `wareneingang.WEPosition.lieferpreis`. Bereits berechnete Mengen = Summe der Positionen gebuchter
+  Eingangsrechnungen je Bestellposition. Die Verbuchung setzt `abweichung_akzeptiert`, weil die Prüfung samt
+  begründeter Freigabe im DMS erfolgt ist; das Ergebnis steht in `Dokument.erkennung["abgleich"]` und im Protokoll.
+- Dublettenprüfung: gleiche Datei (SHA-256 des Originals) beim Eingang; gleicher Lieferant + Rechnungsnummer
+  gegen andere DMS-Dokumente und `fibu.Eingangsrechnung` vor der Verbuchung.

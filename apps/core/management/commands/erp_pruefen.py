@@ -1,7 +1,7 @@
 """Integritätsprüfung nach Wiederherstellung oder Update.
 
-Prüft: GoBD-/Lagerjournal-/SEPA-Sperr-Trigger vorhanden und aktiv, Hash-Kette der Belege (inkl. Archiv-PDFs)
-und der Fibu-Buchungen. Exit-Code 1 bei Fehlern.
+Prüft: GoBD-/Lagerjournal-/SEPA-Sperr-/DMS-Trigger vorhanden und aktiv, Hash-Kette der Belege (inkl.
+Archiv-PDFs) und der Fibu-Buchungen sowie die SHA-256-Siegel aller DMS-Dateiversionen. Exit-Code 1 bei Fehlern.
 
     python manage.py erp_pruefen [--ohne-pdf]
 """
@@ -16,6 +16,9 @@ PFLICHT_TRIGGER = {
     "lager_bewegung_unveraenderlich": "lager_lagerbewegung",
     "fibu_sepa_lauf_gesperrt": "fibu_sepa_zahlungslauf",
     "fibu_sepa_posten_gesperrt": "fibu_sepa_zahlungslaufposten",
+    "dms_dokument_gobd": "dms_dokument",
+    "dms_version_gobd": "dms_dokumentversion",
+    "dms_protokoll_gobd": "dms_dokumentprotokoll",
 }
 
 
@@ -24,7 +27,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--ohne-pdf", action="store_true",
-                            help="Archiv-PDFs nicht prüfen (z. B. Datenbank ohne zugehörige Media-Dateien)")
+                            help="Archiv-PDFs und DMS-Dateien nicht prüfen (z. B. Datenbank ohne zugehörige Media-Dateien)")
 
     def handle(self, *args, **opt):
         from apps.belege import services as belege
@@ -61,6 +64,12 @@ class Command(BaseCommand):
             anzahl_b, fb = belege.kette_pruefen()
         anzahl_f, ff = fibu.kette_pruefen()
         fehler += fb + ff
+        if not opt["ohne_pdf"]:
+            from apps.dms.services import integritaet_pruefen
+
+            anzahl_d, fd = integritaet_pruefen()
+            fehler += fd
+            self.stdout.write(f"DMS-Dateien (SHA-256): {anzahl_d} geprüft, {len(fd)} Fehler")
         self.stdout.write(f"Hash-Kette Belege: {anzahl_b} geprüft, {len(fb)} Fehler")
         self.stdout.write(f"Hash-Kette Fibu-Buchungen: {anzahl_f} geprüft, {len(ff)} Fehler")
         if fehler:

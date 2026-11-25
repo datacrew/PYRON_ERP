@@ -1,0 +1,1 @@
+<div class="{{ breite|default:'col-md-6' }}"><label class="form-label small mb-0" for="{{ feld.id_for_label }}">{{ feld.label }}{% include "dms/_konfidenz.html" with k=k %}</label>{{ feld }}{% for e in feld.errors %}<div class="invalid-feedback d-block">{{ e }}</div>{% endfor %}</div>

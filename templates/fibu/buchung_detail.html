@@ -19,6 +19,7 @@
       <dt class="col-5">Kettenindex</dt><dd class="col-7">{{ b.ketten_index }}</dd>
       <dt class="col-5">Prüfsumme</dt><dd class="col-7"><code class="small text-break">{{ b.pruefsumme }}</code></dd>{% endif %}
       {% if b.storno_von %}<dt class="col-5">Storno von</dt><dd class="col-7"><a href="{% url 'fibu:buchung' b.storno_von.pk %}">{{ b.storno_von.nummer }}</a></dd>{% endif %}
+      {% for dok in b.dms_dokumente.all %}<dt class="col-5">Originalbeleg (DMS)</dt><dd class="col-7"><a href="{% url 'dms:detail' dok.pk %}"><i class="bi bi-file-earmark-pdf"></i> {{ dok.nummer }}</a></dd>{% endfor %}
       {% if storno %}<dt class="col-5">Storniert durch</dt><dd class="col-7"><a href="{% url 'fibu:buchung' storno.pk %}">{{ storno.nummer }}</a></dd>{% endif %}
     </dl></div></div></div>
   <div class="col-lg-8"><div class="card mb-3"><div class="card-header bg-white fw-semibold">Buchungszeilen</div>

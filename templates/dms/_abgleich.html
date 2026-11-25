@@ -1,0 +1,27 @@
+{% load erp %}{% if abgleich.bestellung_id %}
+<div class="card mb-3" id="abgleich"><div class="card-header bg-white fw-semibold d-flex align-items-center flex-wrap gap-2">
+  <span><i class="bi bi-diagram-3"></i> Dreifach-Abgleich Bestellung · Wareneingang · Rechnung</span>
+  <span class="ms-auto small text-muted">Bestellung <strong>{{ abgleich.bestellnummer }}</strong> ({{ abgleich.quelle }}) · Toleranz Menge {{ abgleich.toleranzen.menge_prozent }} %, Preis {{ abgleich.toleranzen.preis_prozent }} % bzw. {{ abgleich.toleranzen.betrag }} € je Position</span>
+  {% if abgleich.abweichung %}<span class="badge text-bg-warning">Abweichung</span>{% else %}<span class="badge text-bg-success">im Rahmen der Toleranz</span>{% endif %}</div>
+  <div class="table-responsive"><table class="table table-sm mb-0 small align-middle">
+    <thead class="table-light"><tr><th>Rechnung</th><th>Bestellposition</th><th class="text-end">Menge RE</th><th class="text-end">bestellt</th><th class="text-end">geliefert (WE)</th><th class="text-end">bereits berechnet</th><th class="text-end">Preis RE</th><th class="text-end">Preis Best./WE</th><th>Ergebnis</th></tr></thead>
+    <tbody>{% for z in abgleich.positionen %}<tr class="{% if z.abweichungen %}table-warning{% endif %}">
+      <td>{{ z.index|add:1 }}. {{ z.beschreibung|truncatechars:40 }}</td>
+      <td>Pos. {{ z.bp_position }} · {{ z.artikel }}<div class="text-muted" style="font-size:.75em">{{ z.bp_bezeichnung|truncatechars:40 }} · per {{ z.zuordnung }}</div></td>
+      <td class="text-end">{{ z.menge_rechnung|menge }}</td><td class="text-end">{{ z.menge_bestellt|menge }}</td><td class="text-end">{{ z.menge_geliefert|menge }}</td><td class="text-end">{{ z.menge_berechnet|menge }}</td>
+      <td class="text-end">{{ z.preis_rechnung|zahl:4 }}</td><td class="text-end">{{ z.preis_bestellung|zahl:4 }}{% if z.preis_we != z.preis_bestellung %} / {{ z.preis_we|zahl:4 }}{% endif %}</td>
+      <td>{% for a in z.abweichungen %}<div class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{ a.text }}</div>{% empty %}<span class="text-success"><i class="bi bi-check2"></i> ok</span>{% if z.hinweis %}<div class="text-muted">{{ z.hinweis }}</div>{% endif %}{% endfor %}</td></tr>{% endfor %}
+      {% for o in abgleich.ohne_bezug %}<tr><td>{{ o.index|add:1 }}. {{ o.beschreibung|truncatechars:40 }}</td><td colspan="8" class="text-muted">ohne Bestellbezug – Buchung auf das Aufwandskonto der Kontierung</td></tr>{% endfor %}
+      {% for n in abgleich.nicht_berechnet %}<tr class="text-muted"><td>–</td><td>Pos. {{ n.position }} · {{ n.artikel }}</td><td colspan="7">{{ n.offen|menge }} geliefert, aber in dieser Rechnung nicht berechnet</td></tr>{% endfor %}
+    </tbody></table></div>
+  {% if abgleich.hinweise %}<div class="card-body py-2 small text-danger">{% for h in abgleich.hinweise %}<div>{{ h }}</div>{% endfor %}</div>{% endif %}
+  {% if abgleich.abweichung %}<div class="card-footer bg-white small">
+    {% if abgleich.freigabe %}<i class="bi bi-shield-check text-success"></i> Freigegeben von {{ abgleich.freigabe.von }}: {{ abgleich.freigabe.begruendung }}
+    {% elif darf_buchen and darf_abweichung %}<label class="form-label mb-1" for="begruendung">Begründung für die Freigabe der Abweichung (Pflicht beim Verbuchen)</label>
+      <textarea class="form-control form-control-sm" name="begruendung" id="begruendung" rows="2" maxlength="500" placeholder="z. B. Preiserhöhung telefonisch mit Einkauf (Fr. Huber) abgestimmt"></textarea>
+    {% else %}<i class="bi bi-lock"></i> Verbuchung erst nach Freigabe durch Einkauf/Buchhaltung mit Freigaberecht (Begründung erforderlich).{% endif %}
+  </div>{% endif %}
+</div>
+{% elif abgleich.vorschlaege and abgleich.auswahl != 'ohne' %}
+<div class="alert alert-info small"><i class="bi bi-diagram-3"></i> Offene Bestellungen des Lieferanten: {% for b in abgleich.vorschlaege|slice:":5" %}{{ b.nummer }}{% if not forloop.last %}, {% endif %}{% endfor %} – oben unter „Bestellbezug“ wählen, um Mengen und Preise gegen Bestellung und Wareneingang zu prüfen.</div>
+{% endif %}

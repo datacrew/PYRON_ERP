@@ -149,8 +149,8 @@ class OPSerializer(serializers.ModelSerializer):
     class Meta:
         model = OffenerPosten
         fields = ["id", "art", "partner", "partner_name", "konto_nummer", "belegnr", "fremdbelegnr", "belegdatum",
-                  "faellig_am", "skonto_bis", "skonto_prozent", "betrag", "offen", "mahnstufe", "mahnsperre",
-                  "letzte_mahnung", "buchung"]
+                  "faellig_am", "skonto_bis", "skonto_prozent", "skontobetrag", "betrag", "offen", "mahnstufe",
+                  "mahnsperre", "letzte_mahnung", "buchung"]
 
 
 class OPViewSet(viewsets.ReadOnlyModelViewSet):

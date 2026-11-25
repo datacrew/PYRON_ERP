@@ -13,3 +13,5 @@ deploy/.env
 deploy/backups/
 deploy/rclone/
 deploy/ssh/
+/eingang/
+deploy/eingang/

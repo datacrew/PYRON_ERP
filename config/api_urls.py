@@ -4,6 +4,7 @@ from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.routers import DefaultRouter
 
 from apps.belege.api import BelegViewSet
+from apps.dms.api import DokumentViewSet, StapelViewSet, TagViewSet
 from apps.einkauf.api import BestellungViewSet
 from apps.fibu.api import BankumsatzViewSet, BuchungViewSet, OPViewSet, SachkontoViewSet
 from apps.reporting.api import BerichtAbrufView, BerichtListeView
@@ -47,6 +48,9 @@ router.register("vertrieb/leads", LeadViewSet, basename="lead")
 router.register("edi/nachrichten", EdiNachrichtViewSet, basename="edi-nachricht")
 router.register("versand/touren", TourViewSet, basename="tour")
 router.register("versand/lvs", LvsViewSet, basename="lvs")
+router.register("dms/dokumente", DokumentViewSet, basename="dms-dokument")
+router.register("dms/stapel", StapelViewSet, basename="dms-stapel")
+router.register("dms/tags", TagViewSet, basename="dms-tag")
 # Shop-API: Authentifizierung per Shop-Token (Header „Authorization: Shop <token>“)
 router.register("shop/artikel", ShopArtikelViewSet, basename="shop-artikel")
 router.register("shop/bestellungen", ShopBestellungViewSet, basename="shop-bestellung")

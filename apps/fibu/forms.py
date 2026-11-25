@@ -102,7 +102,7 @@ class ERKopfForm(ErpModelForm):
     class Meta:
         model = Eingangsrechnung
         fields = ["lieferant", "rechnungsnummer", "rechnungsdatum", "eingangsdatum", "faellig_am", "bestellung",
-                  "zahlungsbedingung"]
+                  "zahlungsbedingung", "skonto_prozent", "skonto_bis"]
 
     def __init__(self, *args, **kwargs):
         from apps.wareneingang.models import Wareneingang
@@ -112,8 +112,19 @@ class ERKopfForm(ErpModelForm):
         self.fields["wareneingang"].queryset = Wareneingang.objects.select_related("lieferant").order_by("-datum")
         self.fields["wareneingang"].widget.attrs["class"] = "form-select form-select-sm"
         self.fields["faellig_am"].help_text = "Leer = aus Zahlungsbedingung"
+        self.fields["skonto_prozent"].required = False
+        self.fields["skonto_prozent"].help_text = "Skonto laut Rechnung (Vorrang vor der Zahlungsbedingung)"
         if self.instance.pk:
             del self.fields["wareneingang"]
+
+    def clean_skonto_prozent(self):
+        return self.cleaned_data.get("skonto_prozent") or 0
+
+    def clean(self):
+        d = super().clean()
+        if d.get("skonto_prozent") and not d.get("skonto_bis"):
+            self.add_error("skonto_bis", "Bitte die Skontofrist angeben (oder Skonto leer lassen).")
+        return d
 
 
 class ERPositionForm(ErpModelForm):

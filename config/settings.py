@@ -89,6 +89,7 @@ ERP_APPS = [
     "apps.fibu_sepa",
     "apps.fibu_abschluss",
     "apps.reporting",
+    "apps.dms",
 ]
 
 INSTALLED_APPS = [
@@ -99,6 +100,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "django.contrib.postgres",
     "rest_framework",
     "rest_framework.authtoken",
     "drf_spectacular",
@@ -189,6 +191,54 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 # Belegarchiv – wird NICHT öffentlich ausgeliefert, sondern nur über rechtegeprüfte Views
 MEDIA_ROOT = Path(os.environ.get("ERP_MEDIA_ROOT", BASE_DIR / "media"))
 MEDIA_URL = "/media/"
+
+# Dokumentenmanagement (DMS): OCR-Sprache(n) für Tesseract und Zeitlimit je Seite (Sekunden)
+ERP_DMS_OCR_SPRACHE = os.environ.get("ERP_DMS_OCR_SPRACHE", "deu")
+ERP_DMS_OCR_TIMEOUT = int(os.environ.get("ERP_DMS_OCR_TIMEOUT", "180"))
+# Eingangsordner (Hotfolder) für Scanner/E-Mail-Ablage – eingelesen von „manage.py dms_eingang“
+ERP_DMS_EINGANG = Path(os.environ.get("ERP_DMS_EINGANG", BASE_DIR / "eingang"))
+
+
+def _env_oder_datei(name, standard=""):
+    """Wert aus NAME oder – für Docker-/systemd-Secrets – aus der Datei in NAME_FILE."""
+    datei = os.environ.get(f"{name}_FILE")
+    if datei and Path(datei).is_file():
+        return Path(datei).read_text(encoding="utf-8").strip()
+    return os.environ.get(name, standard)
+
+
+# Rechnungseingang per E-Mail („manage.py dms_mailabruf", IMAP über SSL/TLS). Ohne Host ist der Abruf deaktiviert.
+# Zugangsdaten nur über Umgebung/.env bzw. ERP_DMS_IMAP_PASSWORD_FILE – nie im Code.
+# WORM-Speicher: aus | logisch (Standard) | os (chattr +i, nur Produktion); optional S3 Object Lock
+ERP_DMS_WORM_MODUS = os.environ.get("ERP_DMS_WORM_MODUS", "logisch")
+ERP_DMS_WORM_PFAD = os.environ.get("ERP_DMS_WORM_PFAD", "")
+ERP_DMS_WORM_S3_BUCKET = os.environ.get("ERP_DMS_WORM_S3_BUCKET", "")
+ERP_DMS_WORM_S3_PRAEFIX = os.environ.get("ERP_DMS_WORM_S3_PRAEFIX", "worm/")
+ERP_DMS_WORM_S3_ENDPOINT = os.environ.get("ERP_DMS_WORM_S3_ENDPOINT", "")
+ERP_DMS_WORM_S3_REGION = os.environ.get("ERP_DMS_WORM_S3_REGION", "")
+ERP_DMS_IMAP_HOST = os.environ.get("ERP_DMS_IMAP_HOST", "")
+ERP_DMS_IMAP_PORT = int(os.environ.get("ERP_DMS_IMAP_PORT", "993"))
+ERP_DMS_IMAP_USER = os.environ.get("ERP_DMS_IMAP_USER", "")
+ERP_DMS_IMAP_PASSWORD = _env_oder_datei("ERP_DMS_IMAP_PASSWORD")
+ERP_DMS_IMAP_ORDNER = os.environ.get("ERP_DMS_IMAP_ORDNER", "INBOX")
+# Zielordner für verarbeitete Mails (leer = nur als gelesen markieren) und für Mails ohne verwertbaren Anhang/Fehler
+ERP_DMS_IMAP_ZIELORDNER = os.environ.get("ERP_DMS_IMAP_ZIELORDNER", "")
+ERP_DMS_IMAP_FEHLERORDNER = os.environ.get("ERP_DMS_IMAP_FEHLERORDNER", "")
+# Optional: nur Absender (Adressen oder @domain, kommagetrennt) übernehmen
+ERP_DMS_IMAP_ABSENDER = [a.strip().lower() for a in os.environ.get("ERP_DMS_IMAP_ABSENDER", "").split(",")
+                         if a.strip()]
+ERP_DMS_IMAP_ART = os.environ.get("ERP_DMS_IMAP_ART", "ER")
+ERP_DMS_IMAP_MAX_MAILS = int(os.environ.get("ERP_DMS_IMAP_MAX_MAILS", "50"))
+ERP_DMS_IMAP_TIMEOUT = int(os.environ.get("ERP_DMS_IMAP_TIMEOUT", "60"))
+
+# Dreifach-Abgleich Bestellung/Wareneingang/Rechnung: Toleranzen je Position. Eine Preisabweichung gilt erst als
+# Abweichung, wenn sie die Prozent- UND die Betragsgrenze überschreitet (Kleinstbeträge/Rundung).
+ERP_DMS_TOLERANZ_MENGE_PROZENT = os.environ.get("ERP_DMS_TOLERANZ_MENGE_PROZENT", "0")
+ERP_DMS_TOLERANZ_PREIS_PROZENT = os.environ.get("ERP_DMS_TOLERANZ_PREIS_PROZENT", "1")
+ERP_DMS_TOLERANZ_BETRAG = os.environ.get("ERP_DMS_TOLERANZ_BETRAG", "0.50")
+# Wer Abweichungen (mit Begründung) freigeben darf – eines der Rechte (Modul, Aktion) genügt
+ERP_DMS_ABWEICHUNG_RECHTE = [tuple(r.split(".", 1)) for r in _env_liste(
+    "ERP_DMS_ABWEICHUNG_RECHTE", "einkauf.freigeben,fibu.freigeben") if "." in r]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
