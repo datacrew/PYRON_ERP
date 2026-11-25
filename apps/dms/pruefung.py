@@ -31,7 +31,11 @@ def formular_daten(dokument):
     """Erkennung → (Kopf-Initialwerte, Positions-Initialwerte) für die Formulare."""
     erg = dokument.erkennung or {}
     f = erg.get("felder", {})
-    kopf = {"lieferant": (erg.get("lieferant") or {}).get("partner_id") or dokument.partner_id}
+    abgleich = erg.get("abgleich") or {}
+    kopf = {"lieferant": (erg.get("lieferant") or {}).get("partner_id") or dokument.partner_id,
+            "bestellung": ("ohne" if abgleich.get("auswahl") == "ohne" else
+                           str(abgleich["bestellung_id"]) if abgleich.get("auswahl") == "manuell"
+                           and abgleich.get("bestellung_id") else "")}
     for name in KOPF_FELDER:
         typ = "datum" if name in ("rechnungsdatum", "faellig_am") else (
             "betrag" if name in ("netto", "steuer", "brutto") else None)
@@ -80,7 +84,7 @@ def korrektur_speichern(dokument, kopf, positionen, benutzer=None):
         else:
             felder[name] = dict(alt[name], konfidenz=max(alt[name].get("konfidenz", 0), 0.99))
     # Zahlungsziel/Lieferantenname aus der Erkennung beibehalten (nicht Teil der Maske)
-    for name in ("zahlungsziel_tage", "lieferant_name"):
+    for name in ("zahlungsziel_tage", "lieferant_name", "bestellnummer"):
         if name in alt:
             felder[name] = alt[name]
     lieferant = kopf.get("lieferant")
@@ -129,6 +133,13 @@ def korrektur_speichern(dokument, kopf, positionen, benutzer=None):
     erg.update(felder=felder, positionen=neue_pos, korrigiert=True,
                korrigiert_am=timezone.now().isoformat(),
                korrigiert_von=getattr(benutzer, "username", "") or "")
+    if kopf.get("bestellung") is not None:
+        from . import abgleich as A
+
+        alt_auswahl = (erg.get("abgleich") or {}).get("auswahl"), (erg.get("abgleich") or {}).get("bestellung_id")
+        neu_auswahl = A.auswahl_setzen(erg, kopf["bestellung"])
+        if (neu_auswahl.get("auswahl"), neu_auswahl.get("bestellung_id")) != alt_auswahl:
+            geaendert.append("bestellbezug")
     E.bewerten(erg, dokument)
     status = Dokument.Status.PRUEFEN if fehler(erg) else Dokument.Status.ERKANNT
     aenderung = {"erkennung": erg, "konfidenz": Decimal(erg["gesamtkonfidenz"]), "status": status}

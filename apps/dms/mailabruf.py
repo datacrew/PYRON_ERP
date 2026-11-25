@@ -3,7 +3,7 @@
 Ablauf je ungelesener Mail im Ordner ERP_DMS_IMAP_ORDNER:
 1. Message-ID ermitteln (fehlt sie, dient ein SHA-256 der Rohmail als Ersatz) – bereits erfolgreich verarbeitete
    Message-IDs werden nicht erneut angelegt (Dublettenschutz, auch wenn die Mail wieder als ungelesen markiert wird).
-2. Anhänge PDF, PNG/JPEG, TIFF und XML (XRechnung) übernehmen – ein Stapel je Mail (Quelle „E-Mail-Eingang"),
+2. Anhänge PDF, PNG/JPEG, TIFF und XML (XRechnung) übernehmen – ein Stapel je Mail (Quelle „E-Mail-Eingang“),
    Absender, Betreff und Message-ID stehen im Dokumentprotokoll und in den Metadaten. Kleine eingebettete Bilder
    (Signatur-Logos) werden ignoriert, Dateien mit gleichem SHA-256 wie ein vorhandenes Dokument ebenfalls.
 3. Mail im Postfach kennzeichnen: in ERP_DMS_IMAP_ZIELORDNER verschieben (MOVE bzw. COPY + \\Deleted) oder – ohne

@@ -11,12 +11,15 @@ from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_serializer, inline_serializer
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.core.permissions import ModulRecht, hat_recht
 
+from . import abgleich as A
+from . import erkennung as E
+from . import pruefung as P
 from . import services as S
 from . import verarbeitung as V
 from . import verbuchung as VB
@@ -302,7 +305,12 @@ class DokumentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
         d = S.archivieren(self.get_object(), request.user)
         return Response(DokumentDetailSerializer(d).data)
 
-    @extend_schema(request=None, responses=inline_serializer("DmsVerbuchtAntwort", {
+    @extend_schema(request=inline_serializer("DmsVerbuchenAnfrage", {
+            "bestellung": serializers.CharField(required=False, help_text="Bestellbezug: ID der Bestellung, "
+                                                "„ohne“ oder leer = automatisch (Dreifach-Abgleich)"),
+            "begruendung": serializers.CharField(required=False, help_text="Pflicht, wenn der Dreifach-Abgleich "
+                                                 "eine Abweichung außerhalb der Toleranz meldet")}),
+        responses=inline_serializer("DmsVerbuchtAntwort", {
             "eingangsrechnung": serializers.CharField(), "eingangsrechnung_id": serializers.IntegerField(),
             "buchung": serializers.CharField(), "dokument": DokumentDetailSerializer()}))
     @action(detail=True, methods=["post"])
@@ -311,10 +319,28 @@ class DokumentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.U
         if not hat_recht(request.user, "fibu", "anlegen"):
             raise PermissionDenied("Kein Recht „anlegen“ im Modul „fibu“.")
         d = self.get_object()
-        er = VB.verbuchen(d, request.user)
+        if "bestellung" in request.data:
+            self._bestellbezug(d, request.data.get("bestellung"), request.user)
+        er = VB.verbuchen(d, request.user, begruendung=str(request.data.get("begruendung") or ""))
         d.refresh_from_db()
         return Response({"eingangsrechnung": er.nummer, "eingangsrechnung_id": er.pk, "buchung": er.buchung.nummer,
                          "dokument": DokumentDetailSerializer(d).data})
+
+    @staticmethod
+    def _bestellbezug(d, wert, benutzer):
+        from apps.einkauf.models import Bestellung
+
+        wert = str(wert or "").strip()
+        if wert not in ("", A.AUSWAHL_OHNE) and not (wert.isdigit() and Bestellung.objects.filter(pk=wert).exists()):
+            raise ValidationError({"bestellung": "Bestellung nicht gefunden."})
+        if not P.bearbeitbar(d):
+            raise S.DmsFehler(f"{d.nummer} kann nicht mehr geändert werden ({d.get_status_display()}).")
+        erg = dict(d.erkennung or {})
+        A.auswahl_setzen(erg, wert)
+        E.bewerten(erg, d)
+        Dokument.objects.filter(pk=d.pk).update(erkennung=erg)
+        d.refresh_from_db()
+        S.protokollieren(d, "Korrektur", f"Bestellbezug per API: {wert or 'automatisch'}", benutzer)
 
 
 @extend_schema(tags=["DMS"])

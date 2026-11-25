@@ -23,6 +23,8 @@
         {% include "dms/_kopffeld.html" with feld=kopf.rechnungsdatum k=konfidenz.rechnungsdatum breite="col-md-4" %}
         {% include "dms/_kopffeld.html" with feld=kopf.faellig_am k=konfidenz.faellig_am breite="col-md-4" %}
         {% include "dms/_kopffeld.html" with feld=kopf.zahlungsbedingung k=konfidenz.zahlungsbedingung breite="col-md-12" %}
+        {% include "dms/_kopffeld.html" with feld=kopf.bestellung k=konfidenz.bestellnummer breite="col-md-8" %}
+        <div class="col-md-4 small text-muted pt-4">{% if erg.felder.bestellnummer %}erkannt: „{{ erg.felder.bestellnummer.wert }}“{% endif %}</div>
         {% include "dms/_kopffeld.html" with feld=kopf.iban k=konfidenz.iban %}
         {% include "dms/_kopffeld.html" with feld=kopf.ust_id k=konfidenz.ust_id %}
         {% include "dms/_kopffeld.html" with feld=kopf.netto k=konfidenz.netto breite="col-md-4" %}
@@ -42,6 +44,7 @@
           <td>{{ f.DELETE }}</td></tr>{% endfor %}</tbody></table></div>
       <div class="card-footer bg-white small text-muted" id="summenhinweis"></div>
     </div>
+    {% include "dms/_abgleich.html" %}
     {% if darf %}<div class="d-flex gap-2 flex-wrap">
       <button class="btn btn-primary" name="aktion" value="speichern"><i class="bi bi-save"></i> Speichern und prüfen</button>
       {% if darf_buchen %}<button class="btn btn-success" name="aktion" value="verbuchen" onclick="return confirm('Rechnung freigeben und in der Finanzbuchhaltung verbuchen? Das Dokument wird danach revisionssicher archiviert.')"><i class="bi bi-check2-circle"></i> Speichern, freigeben und verbuchen</button>

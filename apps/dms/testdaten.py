@@ -47,6 +47,11 @@ def _de(betrag, stellen=2):
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _stellen(preis):
+    """Einzelpreise mit mehr als zwei Nachkommastellen (z. B. 0,0604 €) vollständig drucken."""
+    return 4 if preis != preis.quantize(D("0.01")) else 2
+
+
 def _iban_lesbar(iban):
     return " ".join(iban[i:i + 4] for i in range(0, len(iban), 4))
 
@@ -69,6 +74,9 @@ def zeilen(r):
     z.append((y, [(20, f'Rechnungsdatum: {r["datum"]:%d.%m.%Y}', "L", False)]))
     y += 6
     z.append((y, [(20, f'USt-IdNr.: {r["ust_id"]}', "L", False)]))
+    if r.get("bestellnummer"):
+        y += 6
+        z.append((y, [(20, f'Ihre Bestellung: {r["bestellnummer"]}', "L", False)]))
     y += 12
     z.append((y, [(20, "Pos.", "L", True), (32, "Menge", "L", True), (52, "Einheit", "L", True),
                   (70, "Bezeichnung", "L", True), (150, "Einzelpreis", "R", True), (165, "USt", "R", True),
@@ -76,7 +84,7 @@ def zeilen(r):
     for i, p in enumerate(r["positionen"], 1):
         y += 7
         z.append((y, [(20, str(i), "L", False), (32, _de(p["menge"]), "L", False), (52, p["einheit"], "L", False),
-                      (70, p["text"], "L", False), (150, _de(p["preis"]), "R", False),
+                      (70, p["text"], "L", False), (150, _de(p["preis"], _stellen(p["preis"])), "R", False),
                       (165, f'{p["satz"]} %', "R", False), (190, _de(p["betrag"]), "R", False)]))
     y += 12
     z.append((y, [(120, "Nettobetrag", "L", False), (190, f'{_de(r["netto"])} EUR', "R", False)]))
@@ -168,6 +176,9 @@ def cii_xml(r=None):
     steuern = "".join(f"""
    <ram:ApplicableTradeTax><ram:CalculatedAmount>{betrag}</ram:CalculatedAmount><ram:TypeCode>VAT</ram:TypeCode><ram:BasisAmount>{basis}</ram:BasisAmount><ram:CategoryCode>S</ram:CategoryCode><ram:RateApplicablePercent>{satz}</ram:RateApplicablePercent></ram:ApplicableTradeTax>"""
                       for satz, (basis, betrag) in r["steuern"].items())
+    bestellung = (f"""
+   <ram:BuyerOrderReferencedDocument><ram:IssuerAssignedID>{r["bestellnummer"]}</ram:IssuerAssignedID></ram:BuyerOrderReferencedDocument>"""
+                  if r.get("bestellnummer") else "")
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:100">
  <rsm:ExchangedDocumentContext><ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>urn:cen.eu:en16931:2017</ram:ID></ram:GuidelineSpecifiedDocumentContextParameter></rsm:ExchangedDocumentContext>
@@ -175,7 +186,7 @@ def cii_xml(r=None):
  <rsm:SupplyChainTradeTransaction>{"".join(pos)}
   <ram:ApplicableHeaderTradeAgreement>
    <ram:SellerTradeParty><ram:Name>{r["lieferant"]}</ram:Name><ram:PostalTradeAddress><ram:CountryID>DE</ram:CountryID></ram:PostalTradeAddress><ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">{r["ust_id"]}</ram:ID></ram:SpecifiedTaxRegistration></ram:SellerTradeParty>
-   <ram:BuyerTradeParty><ram:Name>{r["kunde"]}</ram:Name></ram:BuyerTradeParty>
+   <ram:BuyerTradeParty><ram:Name>{r["kunde"]}</ram:Name></ram:BuyerTradeParty>{bestellung}
   </ram:ApplicableHeaderTradeAgreement>
   <ram:ApplicableHeaderTradeDelivery/>
   <ram:ApplicableHeaderTradeSettlement>
@@ -205,13 +216,15 @@ def ubl_xml(r=None):
   <cac:Item><cbc:Name>{p["text"]}</cbc:Name><cac:ClassifiedTaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>{p["satz"]}</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item>
   <cac:Price><cbc:PriceAmount currencyID="EUR">{p["preis"]}</cbc:PriceAmount></cac:Price></cac:InvoiceLine>"""
                          for i, p in enumerate(r["positionen"], 1))
+    bestellung = f"""
+ <cac:OrderReference><cbc:ID>{r["bestellnummer"]}</cbc:ID></cac:OrderReference>""" if r.get("bestellnummer") else ""
     steuern = "".join(f"""<cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">{basis}</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">{betrag}</cbc:TaxAmount><cac:TaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>{satz}</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal>"""
                       for satz, (basis, betrag) in r["steuern"].items())
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID>
  <cbc:ID>{r["rechnungsnummer"]}</cbc:ID><cbc:IssueDate>{r["datum"]:%Y-%m-%d}</cbc:IssueDate><cbc:DueDate>{r["faellig"]:%Y-%m-%d}</cbc:DueDate>
- <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode><cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+ <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode><cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>{bestellung}
  <cac:AccountingSupplierParty><cac:Party><cac:PartyName><cbc:Name>{r["lieferant"]}</cbc:Name></cac:PartyName><cac:PartyTaxScheme><cbc:CompanyID>{r["ust_id"]}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme><cac:PartyLegalEntity><cbc:RegistrationName>{r["lieferant"]}</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingSupplierParty>
  <cac:AccountingCustomerParty><cac:Party><cac:PartyLegalEntity><cbc:RegistrationName>{r["kunde"]}</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingCustomerParty>
  <cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>{r["iban"]}</cbc:ID></cac:PayeeFinancialAccount></cac:PaymentMeans>

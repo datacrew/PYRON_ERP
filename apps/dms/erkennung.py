@@ -17,12 +17,15 @@ geprüft – nicht gegen eine große Zahl echter Lieferantenrechnungen. Deshalb 
 Verbuchung in der Prüfmaske.
 """
 import difflib
+import logging
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db.models import Count
 from django.utils import timezone
+
+log = logging.getLogger(__name__)
 
 D = Decimal
 NULL = D("0")
@@ -35,10 +38,13 @@ IBAN_LAENGEN = {"DE": 22, "AT": 20, "CH": 21, "LI": 21, "NL": 18, "BE": 16, "LU"
                 "ES": 24, "PL": 28, "CZ": 24, "DK": 18, "SE": 24, "GB": 22, "IE": 22, "PT": 25, "FI": 18}
 
 BETRAG = r"-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}"
+# Einzelpreise häufig mit 3–4 Nachkommastellen (Kleinteile), Mengen auch mit Tausenderpunkt („1.000,00“)
+EINZELPREIS = r"-?\d{1,3}(?:\.\d{3})*,\d{2,4}|-?\d+,\d{2,4}"
+MENGE = r"\d{1,3}(?:\.\d{3})+(?:,\d{1,3})?|\d+(?:[.,]\d{1,3})?"
 DATUM = r"\d{1,2}\.\s?\d{1,2}\.\s?(?:\d{4}|\d{2})\b"
 
 FELDER_KOPF = ("lieferant_name", "ust_id", "iban", "rechnungsnummer", "rechnungsdatum", "faellig_am",
-               "zahlungsziel_tage", "zahlungsbedingung", "netto", "steuer", "brutto")
+               "zahlungsziel_tage", "zahlungsbedingung", "bestellnummer", "netto", "steuer", "brutto")
 
 
 # ------------------------------------------------------------------ Hilfen
@@ -152,6 +158,8 @@ def _xml_cii(w):
         "iban": _txt(abr, "SpecifiedTradeSettlementPaymentMeans/PayeePartyCreditorFinancialAccount/IBANID"),
         "faellig_am": datum(_txt(bed, "DueDateDateTime/DateTimeString")) if bed is not None else None,
         "zahlungsbedingung": _txt(bed, "Description") if bed is not None else "",
+        # BT-13 Bestellnummer des Käufers
+        "bestellnummer": _txt(tx, "ApplicableHeaderTradeAgreement/BuyerOrderReferencedDocument/IssuerAssignedID"),
         "netto": zahl(_txt(summen, "TaxBasisTotalAmount") or _txt(summen, "LineTotalAmount")),
         "steuer": zahl(_txt(summen, "TaxTotalAmount")),
         "brutto": zahl(_txt(summen, "GrandTotalAmount")),
@@ -189,6 +197,7 @@ def _xml_ubl(w):
         "iban": _txt(w, "PaymentMeans/PayeeFinancialAccount/ID"),
         "faellig_am": datum(_txt(w, "DueDate")),
         "zahlungsbedingung": _txt(w, "PaymentTerms/Note"),
+        "bestellnummer": _txt(w, "OrderReference/ID"),  # BT-13
         "netto": zahl(_txt(summen, "TaxExclusiveAmount") or _txt(summen, "LineExtensionAmount")),
         "steuer": zahl(_txt(w, "TaxTotal/TaxAmount")),
         "brutto": zahl(_txt(summen, "TaxInclusiveAmount") or _txt(summen, "PayableAmount")),
@@ -237,6 +246,8 @@ RE_FAELLIG = re.compile(rf"(?:f[äa]llig\s+(?:am|bis|zum)?|zahlbar\s+bis(?:\s+zu
 RE_TAGE = re.compile(r"(?:innerhalb|binnen)\s+(?:von\s+)?(\d{1,3})\s+Tag(?:en)?|(\d{1,3})\s+Tage\s+netto", re.I)
 RE_SKONTO = re.compile(r"(\d{1,2}(?:,\d{1,2})?)\s?%\s+Skonto\s+(?:bei\s+Zahlung\s+)?(?:innerhalb|binnen)\s+"
                        r"(?:von\s+)?(\d{1,3})\s+Tag", re.I)
+RE_BESTELLNR = re.compile(r"\b(?:Ihre\s+|Unsere\s+)?(?:Bestell(?:ung|nummer|[\s-]?Nr\.?)|Auftrags?[\s-]?Nr\.?|"
+                          r"Order\s*(?:No\.?|Number))\s*(?:Nr\.?\s*)?[:#.]?\s*([A-Z0-9][A-Z0-9\-/_.]{2,40})", re.I)
 RE_UST_ID = re.compile(r"\b(DE\s?\d{3}\s?\d{3}\s?\d{3}|ATU\d{8}|(?:FR|IT|NL|BE|LU|ES|PL|CZ|DK)[0-9A-Z]{8,12})\b")
 RE_IBAN = re.compile(r"\b([A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){2,7}(?:\s?[A-Z0-9]{1,3})?)\b")
 RE_NETTO = re.compile(r"^\s*(?:Summe\s+netto|Netto[\s-]?(?:betrag|summe|wert)?|Zwischensumme|Warenwert|"
@@ -249,8 +260,8 @@ RE_STEUER_SUMME = re.compile(r"^\s*(?:Summe\s+(?:USt|MwSt|Umsatzsteuer)|(?:USt|M
                              r"Steuerbetrag)\b(?!.*%)", re.I)
 EINHEITEN = r"Stk\.?|St\.?|Stück|kg|g|t|l|ml|m|m²|m2|qm|h|Std\.?|Pck\.?|Paket|Karton|Ktn\.?|Psch\.?|pauschal|Pal\.?|x"
 RE_POSITION = re.compile(
-    rf"^\s*(?:(?P<pos>\d{{1,3}})\s+)?(?P<menge>\d+(?:[.,]\d{{1,3}})?)\s+(?:(?P<einheit>{EINHEITEN})\s+)?"
-    rf"(?P<text>\S.*?)\s+(?P<ep>{BETRAG})(?:\s?(?:€|EUR))?\s+(?:(?P<satz>\d{{1,2}})\s?%\s+)?"
+    rf"^\s*(?:(?P<pos>\d{{1,3}})\s+)?(?P<menge>{MENGE})\s+(?:(?P<einheit>{EINHEITEN})\s+)?"
+    rf"(?P<text>\S.*?)\s+(?P<ep>{EINZELPREIS})(?:\s?(?:€|EUR))?\s+(?:(?P<satz>\d{{1,2}})\s?%\s+)?"
     rf"(?P<betrag>{BETRAG})(?:\s?(?:€|EUR))?(?:\s+(?P<satz2>\d{{1,2}})\s?%)?\s*$", re.I)
 
 
@@ -338,6 +349,11 @@ def aus_text(text, eigene=None):
         bedingung.append(f"{r['zahlungsziel_tage']} Tage netto")
     if bedingung:
         r["zahlungsbedingung"], k["zahlungsbedingung"] = ", ".join(bedingung), 0.85
+
+    for m in RE_BESTELLNR.finditer(text):
+        if re.search(r"\d", m.group(1)) and not datum(m.group(1)):
+            r["bestellnummer"], k["bestellnummer"] = m.group(1).rstrip(".,"), 0.9
+            break
 
     eigene_ust = ust_id_normal(eigene.get("ust_id"))
     for kandidat in RE_UST_ID.findall(text):
@@ -632,6 +648,14 @@ def bewerten(erg, dokument=None):
     erg["positionen"] = kontierung_vorschlagen(partner, erg.get("positionen") or []) if not erg.get("korrigiert") \
         else erg.get("positionen") or []
     erg["plausibilitaet"] = plausibilitaet(erg, dokument)
+    # Dreifach-Abgleich Bestellung/Wareneingang (nur Hinweise; die Sperre greift bei der Verbuchung)
+    from . import abgleich as A
+
+    try:
+        erg["plausibilitaet"] += A.meldungen(A.berechnen(erg, dokument, partner))
+    except Exception as exc:  # noqa: BLE001 – Abgleich darf die Erkennung nie abbrechen
+        log.exception("Dreifach-Abgleich fehlgeschlagen")
+        erg["plausibilitaet"].append({"stufe": "warnung", "text": f"Dreifach-Abgleich nicht möglich: {exc}"})
     erg["gesamtkonfidenz"] = str(gesamtkonfidenz(erg))
     return erg
 

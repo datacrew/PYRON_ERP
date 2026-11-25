@@ -1581,6 +1581,17 @@ paths:
         required: true
       tags:
       - DMS
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DmsVerbuchenAnfrage'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DmsVerbuchenAnfrage'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DmsVerbuchenAnfrage'
       security:
       - cookieAuth: []
       - tokenAuth: []
@@ -4974,6 +4985,17 @@ components:
       - dubletten
       - fehler
       - stapel
+    DmsVerbuchenAnfrage:
+      type: object
+      properties:
+        bestellung:
+          type: string
+          description: 'Bestellbezug: ID der Bestellung, „ohne“ oder leer = automatisch
+            (Dreifach-Abgleich)'
+        begruendung:
+          type: string
+          description: Pflicht, wenn der Dreifach-Abgleich eine Abweichung außerhalb
+            der Toleranz meldet
     DmsVerbuchtAntwort:
       type: object
       properties:
@@ -7798,11 +7820,15 @@ components:
       - UPLOAD
       - EINGANGSORDNER
       - TRENNUNG
+      - EMAIL
+      - API
       type: string
       description: |-
         * `UPLOAD` - Mehrfach-Upload
         * `EINGANGSORDNER` - Eingangsordner (Hotfolder)
         * `TRENNUNG` - Trennung Sammel-PDF
+        * `EMAIL` - E-Mail-Eingang
+        * `API` - REST-API
     Status3ecEnum:
       enum:
       - NEU

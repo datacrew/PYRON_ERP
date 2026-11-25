@@ -118,7 +118,7 @@ Ursprünglicher Umfang:
 - ✅ Feinschliff: Reporting-Platzhalter ersetzt, globale Suche in der Kopfzeile, Rolle Lager/Fertigungsleitung mit Reporting-Leserecht
 - offen: geplante Berichte per E-Mail, Berichtsdesigner
 
-## Dokumentenmanagement (DMS) mit OCR und Belegerkennung (**umgesetzt** auf Branch `feature/dokumentenmanagement`, siehe README „Dokumentenmanagement“, Testsuite gesamt 185)
+## Dokumentenmanagement (DMS) mit OCR und Belegerkennung (**umgesetzt** auf Branch `feature/dokumentenmanagement`, siehe README „Dokumentenmanagement“, Testsuite siehe README)
 - ✅ Ablage mit Dokumentarten, Metadaten, Schlagwörtern, Versionierung, Verknüpfung Partner/Beleg/Buchung/Eingangsrechnung
 - ✅ GoBD: SHA-256 je Datei, Protokoll nur INSERT, Archivierung per PG-Trigger unveränderbar/nicht löschbar, Aufbewahrungsfristen
 - ✅ Volltextsuche (PostgreSQL-FTS `german`, GIN) inkl. globaler Suche
@@ -128,9 +128,12 @@ Ursprünglicher Umfang:
 - ✅ Prüfmaske (Split-Ansicht) und Verbuchung über `fibu.er_buchen` mit Rückverweis
 - ✅ E-Mail-Rechnungseingang `dms_mailabruf` (IMAP/SSL, Dubletten per Message-ID, Ziel-/Fehlerordner, systemd-Timer/Docker-Dienst) – nur mit gemocktem IMAP getestet
 - ✅ REST-API `/api/v1/dms/` (Upload/Stapel, Suche, Detail, Status, Download, Tags, Verbuchen, Protokoll), Schema `docs/schema.yml`
+- ✅ Dreifach-Abgleich Bestellung ↔ Wareneingang ↔ Rechnung in Prüfmaske und vor der Verbuchung (Bestellnummer aus
+  Text/BT-13 oder manuelle Auswahl, Toleranzen, Freigabe nur mit Begründung + Recht, Verknüpfung ER ↔ Bestellung)
 - offen: Validierung an einer größeren Zahl echter Lieferantenrechnungen (bisher nur synthetische Testrechnungen),
   bessere Tabellenerkennung für Positionen (ggf. Layout-Analyse/ML), Test des Mailabrufs gegen ein echtes
-  Postfach (Exchange/M365 ggf. OAuth2 statt Passwort), Rechnungsprüfung gegen Bestellung/Wareneingang beim Verbuchen, Skonto aus
+  Postfach (Exchange/M365 ggf. OAuth2 statt Passwort), Positionszuordnung im Dreifach-Abgleich an echten
+  Lieferantenrechnungen (Artikelnummern/Mengeneinheiten der Lieferanten) prüfen, Skonto aus
   Zahlungsbedingungen automatisch übernehmen, WORM-/Objektspeicher mit Object-Lock, Hintergrundverarbeitung
   für große Stapel (derzeit Browser-Schleife bzw. Timer)
 

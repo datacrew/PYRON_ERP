@@ -7,6 +7,9 @@ Legt einen Lieferanten „Bürobedarf Schneider GmbH“ und einen Demo-Stapel mi
 - Sammel-PDF mit Trennblatt → wird automatisch in zwei Dokumente geteilt
 - Vertrag (Sonstiges Dokument mit Schlagwort)
 - E-Mail-Eingang: eine simulierte Lieferantenmail mit PDF-Anhang (ohne IMAP-Verbindung) → eigener Stapel
+- Dreifach-Abgleich (nur wenn die ERP-Demodaten mit Einkauf/Lager vorhanden sind): Bestellung bei „Stahlhandel
+  Schmidt GmbH“ mit Wareneingang und eine Rechnung mit Bestellnummer und leicht erhöhtem Schraubenpreis → die
+  Prüfmaske zeigt die Preisabweichung, Verbuchung nur mit Begründung
 Alle Rechnungen sind erzeugte Beispiele (apps/dms/testdaten.py), keine echten Belege.
 """
 from datetime import timedelta
@@ -70,6 +73,10 @@ class Command(BaseCommand):
         tag, _ = Tag.objects.get_or_create(name="Rahmenvertrag", defaults={"farbe": "info"})
         vertrag.tags.add(tag)
 
+        bestellrechnung = self._bestellrechnung(stapel, admin, datum)
+        if bestellrechnung:
+            dokumente.append(bestellrechnung)
+
         mail_stapel = self._demo_mail(T.beispiel(rechnungsnummer=f"RE-{heute.year}-0960", datum=datum, positionen=[
             {"menge": D("2"), "einheit": "Pkg", "text": "Haftnotizen gelb", "preis": D("6.40"), "satz": 19}]))
 
@@ -89,6 +96,45 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"  Verbuchung der Demo-Rechnung nicht möglich: {exc}"))
         self.stdout.write(self.style.SUCCESS(
             f"DMS-Demodaten: Stapel {stapel.nummer}, verarbeitet {ok}, Fehler {fehler}{gebucht}."))
+
+    @staticmethod
+    def _bestellrechnung(stapel, admin, datum):
+        """Bestellung + Wareneingang + Rechnung mit Bestellnummer (Dreifach-Abgleich); None ohne ERP-Demodaten."""
+        from apps.einkauf import services as EK
+        from apps.einkauf.models import Bestellung, BestellPosition
+        from apps.lager.models import Lagerort
+        from apps.stammdaten.models import Artikel, Geschaeftspartner
+        from apps.wareneingang import services as WE
+
+        lieferant = Geschaeftspartner.objects.filter(ust_id="DE119876543", ist_lieferant=True).first()
+        artikel = {a.artikelnummer: a for a in Artikel.objects.filter(artikelnummer__in=["R-1020", "R-1010"])}
+        rl, we_ort = Lagerort.objects.filter(code="RL").first(), Lagerort.objects.filter(code="WE").first()
+        if not (lieferant and len(artikel) == 2 and rl and we_ort):
+            return None
+        b = Bestellung.objects.create(typ=Bestellung.Typ.BESTELLUNG, lieferant=lieferant, lieferort=rl,
+                                      zahlungsbedingung=lieferant.zahlungsbedingung, erstellt_von=admin,
+                                      kopftext="Demodaten DMS – Dreifach-Abgleich")
+        for pos, (nr, menge, preis) in enumerate((("R-1020", "2000", "0.06"), ("R-1010", "50", "4.80")), start=1):
+            EK.position_vorbelegen(BestellPosition(bestellung=b, position=pos * 10, artikel=artikel[nr],
+                                                   menge=D(menge), einzelpreis=D(preis), steuersatz=None)).save()
+        b.berechne_summen()
+        b.save()
+        b = EK.freigeben(b, admin)
+        bps = list(b.positionen.order_by("position"))
+        WE.buchen(b, [{"bestellposition": bps[0], "menge": "2000"},
+                      {"bestellposition": bps[1], "menge": "50", "chargennummer": "DEMO-DMS-1"}],
+                  lieferschein_nr="LS-DMS-DEMO", lagerort=we_ort, benutzer=admin)
+        rechnung = T.beispiel(
+            lieferant=lieferant.name, ust_id=lieferant.ust_id, iban=lieferant.iban or "DE75512108001245126199",
+            rechnungsnummer=f"SH-RE-{datum.year}-5120", datum=datum, bestellnummer=b.nummer, positionen=[
+                {"menge": D("2000"), "einheit": "Stk", "text": "R-1020 Sechskantschraube M8x20",
+                 "preis": D("0.065"), "satz": 19},
+                {"menge": D("50"), "einheit": "kg", "text": "R-1010 Rundstahl C45 20 mm", "preis": D("4.80"),
+                 "satz": 19},
+                {"menge": D("1"), "einheit": "pauschal", "text": "Frachtpauschale", "preis": D("18.00"),
+                 "satz": 19}])
+        return S.dokument_anlegen(T.pdf(rechnung), "schmidt_rechnung_bestellung.pdf",
+                                  art=Dokumentart.EINGANGSRECHNUNG, stapel=stapel, benutzer=admin)
 
     def _lieferant(self, name, ust_id, iban):
         from apps.stammdaten.models import Adresse, Geschaeftspartner, Zahlungsbedingung

@@ -11,7 +11,9 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from apps.core.permissions import hat_recht, recht_erforderlich
+from apps.einkauf.models import Bestellung
 
+from . import abgleich as A
 from . import pruefung as P
 from . import services as S
 from . import trennung as TR
@@ -349,6 +351,10 @@ def pruefen(request, pk):
         return redirect("dms:detail", pk)
     darf = hat_recht(request.user, M, "anlegen") and P.bearbeitbar(d)
     kopf_init, pos_init = P.formular_daten(d)
+    bestellungen = list(A.kandidaten(d.partner)[:30])
+    gewaehlt = (d.erkennung or {}).get("abgleich", {}).get("bestellung_id")
+    if gewaehlt and gewaehlt not in {b.pk for b in bestellungen}:
+        bestellungen += list(Bestellung.objects.filter(pk=gewaehlt))
     if request.method == "POST":
         if not darf:
             raise PermissionDenied
@@ -360,7 +366,7 @@ def pruefen(request, pk):
             else:
                 messages.success(request, "Kontierungsvorschlag neu ermittelt.")
             return redirect("dms:pruefen", pk)
-        kopf = PruefKopfForm(request.POST, prefix="kopf")
+        kopf = PruefKopfForm(request.POST, prefix="kopf", bestellungen=bestellungen)
         pos = PruefPositionFormSet(request.POST, prefix="pos")
         if kopf.is_valid() and pos.is_valid():
             positionen = [f.cleaned_data for f in pos.forms
@@ -373,14 +379,14 @@ def pruefen(request, pk):
                 if P.fehler(erg):
                     messages.warning(request, "Gespeichert – es bestehen noch Plausibilitätsfehler.")
                 elif request.POST.get("aktion") == "verbuchen":
-                    return _verbuchen(request, d)
+                    return _verbuchen(request, d, request.POST.get("begruendung", ""))
                 else:
                     messages.success(request, "Gespeichert – die Rechnung ist plausibel.")
                 return redirect("dms:pruefen", pk)
         else:
             messages.error(request, "Bitte die markierten Eingaben prüfen.")
     else:
-        kopf = PruefKopfForm(initial=kopf_init, prefix="kopf")
+        kopf = PruefKopfForm(initial=kopf_init, prefix="kopf", bestellungen=bestellungen)
         pos = PruefPositionFormSet(initial=pos_init, prefix="pos")
     if not darf:
         for f in [kopf, *pos.forms]:
@@ -394,6 +400,7 @@ def pruefen(request, pk):
     return render(request, "dms/pruefen.html", {
         "d": d, "kopf": kopf, "pos": pos, "darf": darf, "erg": erg, "konfidenz": konfidenz,
         "positionen_erkannt": erg.get("positionen", []), "lieferant": lieferant,
+        "abgleich": erg.get("abgleich") or {}, "darf_abweichung": A.darf_abweichung_freigeben(request.user),
         "darf_buchen": darf and hat_recht(request.user, M, "freigeben") and hat_recht(request.user, "fibu", "anlegen"),
         "aktiv": "liste"})
 
@@ -420,11 +427,11 @@ def regeln(request):
         "regeln": Kontierungsregel.objects.select_related("partner", "konto")})
 
 
-def _verbuchen(request, d):
+def _verbuchen(request, d, begruendung=""):
     if not (hat_recht(request.user, M, "freigeben") and hat_recht(request.user, "fibu", "anlegen")):
         raise PermissionDenied
     try:
-        er = VB.verbuchen(d, request.user)
+        er = VB.verbuchen(d, request.user, begruendung=begruendung)
     except FEHLER as exc:
         _fehler(request, exc)
         return redirect("dms:pruefen", d.pk)
@@ -437,4 +444,4 @@ def _verbuchen(request, d):
 @recht_erforderlich(M, "freigeben")
 def verbuchen(request, pk):
     """Freigabe ohne erneute Korrektur (z. B. aus der Liste der erkannten Rechnungen)."""
-    return _verbuchen(request, get_object_or_404(Dokument, pk=pk))
+    return _verbuchen(request, get_object_or_404(Dokument, pk=pk), request.POST.get("begruendung", ""))

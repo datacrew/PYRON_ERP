@@ -451,6 +451,10 @@ ZUGFeRD/Factur-X und XRechnung (XML) brauchen **kein** OCR.
 | `ERP_DMS_OCR_SPRACHE` | Tesseract-Sprache(n), z. B. `deu+eng` | `deu` |
 | `ERP_DMS_OCR_TIMEOUT` | Zeitlimit je Seite in Sekunden | `180` |
 | `ERP_DMS_IMAP_*` | E-Mail-Rechnungseingang, siehe 11.4 | deaktiviert |
+| `ERP_DMS_TOLERANZ_MENGE_PROZENT` | Dreifach-Abgleich: zulässige Mehrmenge gegenüber geliefert − bereits berechnet (%) | `0` |
+| `ERP_DMS_TOLERANZ_PREIS_PROZENT` | Dreifach-Abgleich: zulässige Preisabweichung gegenüber Wareneingang/Bestellung (%) | `1` |
+| `ERP_DMS_TOLERANZ_BETRAG` | Preisabweichung je Position erst ab diesem Betrag in € (beide Grenzen müssen überschritten sein) | `0.50` |
+| `ERP_DMS_ABWEICHUNG_RECHTE` | Rechte (Modul.Aktion, kommagetrennt), die Abweichungen mit Begründung freigeben dürfen | `einkauf.freigeben,fibu.freigeben` |
 
 Dokumente werden unter `MEDIA_ROOT/dms/JJJJ/MM/` abgelegt und sind Teil der normalen Datensicherung
 (Abschnitt 6). `python manage.py erp_pruefen` prüft zusätzlich die SHA-256-Siegel aller DMS-Dateien.

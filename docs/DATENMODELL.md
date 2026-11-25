@@ -659,12 +659,14 @@ erDiagram
     Kontierungsregel }o--|| Geschaeftspartner : Lieferant
     Kontierungsregel }o--|| Konto : Aufwandskonto
     MailEingang }o--o| Stapel : "Anhänge einer Mail"
+    Eingangsrechnung }o--o| Bestellung : "Dreifach-Abgleich"
+    ERPosition }o--o| BestellPosition : "zugeordnete Position"
 ```
 
 | Modell | Zweck / wichtige Felder |
 |---|---|
 | Stapel | Verarbeitungsstapel: Nummer (Kreis `DMS_STAPEL`), Quelle UPLOAD/EINGANGSORDNER/TRENNUNG/EMAIL/API, Vorgabe-Dokumentart, `automatisch_trennen`; Fortschritt aus den Status der Dokumente |
-| Dokument | Nummer (Kreis `DMS_DOKUMENT`), Titel, Art (ER/AR/VERTRAG/LIEFERSCHEIN/SONSTIGES), Status (NEU, OCR, ERKANNT, PRUEFEN, GEBUCHT, ABGELEGT, FEHLER), Stapel, `eltern`/`seiten_von`/`seiten_bis`/`aufgeteilt` (Sammel-PDF), Partner, Tags, Dokumentdatum, Bemerkung, `metadaten` (JSON), Bezüge `beleg`, `buchung`, `eingangsrechnung`, `seiten`, `textquelle` (textlayer/ocr/xml), `ocr_text`, `suchvektor` (tsvector, GIN-Index `dms_dokument_suche`), `erkennung` (JSON: Felder mit Wert + Konfidenz, Positionen, Plausibilität), `konfidenz`, `fehlermeldung`, `archiviert`/`archiviert_am`/`archiviert_von`, `aufbewahren_bis` |
+| Dokument | Nummer (Kreis `DMS_DOKUMENT`), Titel, Art (ER/AR/VERTRAG/LIEFERSCHEIN/SONSTIGES), Status (NEU, OCR, ERKANNT, PRUEFEN, GEBUCHT, ABGELEGT, FEHLER), Stapel, `eltern`/`seiten_von`/`seiten_bis`/`aufgeteilt` (Sammel-PDF), Partner, Tags, Dokumentdatum, Bemerkung, `metadaten` (JSON), Bezüge `beleg`, `buchung`, `eingangsrechnung`, `seiten`, `textquelle` (textlayer/ocr/xml), `ocr_text`, `suchvektor` (tsvector, GIN-Index `dms_dokument_suche`), `erkennung` (JSON: Felder mit Wert + Konfidenz inkl. `bestellnummer`, Positionen, Plausibilität, `abgleich` = Dreifach-Abgleich: Auswahl auto/manuell/ohne, Vorschläge offener Bestellungen, `bestellung_id`, Quelle, Vergleichszeilen je Position mit Abweichungen KEIN_WE/MENGE/PREIS, Positionen ohne Bezug, noch nicht berechnete Bestellpositionen, Toleranzen, `freigabe` mit Begründung/Benutzer/Signatur), `konfidenz`, `fehlermeldung`, `archiviert`/`archiviert_am`/`archiviert_von`, `aufbewahren_bis` |
 | DokumentVersion | Unveränderbare Datei: Version, Art ORIGINAL/PDFA, `quelle` (Original einer PDF/A-Ableitung), Datei (`media/dms/JJJJ/MM/`), Dateiname, MIME, Größe, `sha256` |
 | DokumentProtokoll | Revisionsprotokoll: Zeitpunkt, Benutzer(name), Aktion (Eingang, Texterkennung, Belegerkennung, Korrektur, Verbucht, Archiviert, …), Text |
 | Tag | Schlagwort mit Farbe |
@@ -682,5 +684,11 @@ Regeln:
 - Verbuchung legt **keine eigene Buchungsstruktur** an: `fibu.Eingangsrechnung` + `ERPosition` (Kreis `FIBU_ER`),
   gebucht über `fibu.services.er_buchen` (Aufwand + Vorsteuer an Kreditor, `OffenerPosten` Art K, Hash-Kette der Fibu).
   Danach zeigen `Dokument.eingangsrechnung`/`Dokument.buchung` auf das Ergebnis (Rückverweis `dms_dokumente`).
+- **Dreifach-Abgleich** (`apps/dms/abgleich.py`, keine eigene Tabelle, keine Migration): nutzt die vorhandenen
+  Felder `fibu.Eingangsrechnung.bestellung` (FK → `einkauf.Bestellung`, Rückverweis `eingangsrechnungen`) und
+  `fibu.ERPosition.bestellposition` (FK → `einkauf.BestellPosition`) sowie `BestellPosition.geliefert_menge` und
+  `wareneingang.WEPosition.lieferpreis`. Bereits berechnete Mengen = Summe der Positionen gebuchter
+  Eingangsrechnungen je Bestellposition. Die Verbuchung setzt `abweichung_akzeptiert`, weil die Prüfung samt
+  begründeter Freigabe im DMS erfolgt ist; das Ergebnis steht in `Dokument.erkennung["abgleich"]` und im Protokoll.
 - Dublettenprüfung: gleiche Datei (SHA-256 des Originals) beim Eingang; gleicher Lieferant + Rechnungsnummer
   gegen andere DMS-Dokumente und `fibu.Eingangsrechnung` vor der Verbuchung.

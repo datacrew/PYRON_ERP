@@ -1180,3 +1180,189 @@ class MailEingangSeiteTests(DmsTestBasis):
         r = self.client.get(reverse("dms:mails"))
         self.assertContains(r, "RE 4711")
         self.assertContains(r, "nicht eingerichtet")
+
+
+# ------------------------------------------------------------------ Dreifach-Abgleich Bestellung/WE/Rechnung
+
+class BestellnummerErkennungTests(TestCase):
+    """Bestellnummer (BT-13) aus Text, CII und UBL."""
+
+    def test_text_cii_ubl(self):
+        r = T.beispiel(bestellnummer="EK-2026-00012")
+        self.assertEqual(E.extrahieren("Rechnung 4711\nIhre Bestellung: EK-2026-00012 vom 01.11.2026\n")
+                         ["felder"]["bestellnummer"]["wert"], "EK-2026-00012")
+        self.assertEqual(E.extrahieren("Bestell-Nr. 4500012345")["felder"]["bestellnummer"]["wert"], "4500012345")
+        self.assertNotIn("bestellnummer", E.extrahieren("Bestellung vom 12.03.2026")["felder"])
+        for name, daten in (("c.xml", T.cii_xml(r)), ("u.xml", T.ubl_xml(r)), ("z.pdf", T.zugferd_pdf(r))):
+            with self.subTest(name=name):
+                e = O.analysieren(daten, name)
+                self.assertEqual(E.extrahieren(e.text, e.xml)["felder"]["bestellnummer"]["wert"], "EK-2026-00012")
+
+
+class DreifachAbgleichTests(DmsTestBasis):
+    """Prüfung Rechnung ↔ Bestellung ↔ Wareneingang in Prüfmaske, Verbuchung und API."""
+
+    DATUM = date(2026, 11, 10)  # Jan.–Sep. 2026 sind in den Demodaten gesperrt
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from apps.einkauf import services as EK
+        from apps.einkauf.tests import bestellung_anlegen
+
+        call_command("erp_demodaten", verbosity=0)
+        cls.schmidt = Geschaeftspartner.objects.get(name="Stahlhandel Schmidt GmbH")
+        cls.einkauf = get_user_model().objects.get(username="einkauf")
+        cls.bestellung = EK.freigeben(bestellung_anlegen(cls.schmidt, [("R-1020", "1000", "0.06"),
+                                                                       ("R-1010", "100", "4.80")]), cls.einkauf)
+
+    def setUp(self):
+        from apps.lager.models import Lagerort
+        from apps.wareneingang import services as WE
+
+        bp = list(self.bestellung.positionen.order_by("position"))
+        WE.buchen(self.bestellung, [{"bestellposition": bp[0], "menge": "1000"},
+                                    {"bestellposition": bp[1], "menge": "100", "chargennummer": "C-77"}],
+                  lieferschein_nr="LS-4711", lagerort=Lagerort.objects.get(code="WE"),
+                  benutzer=get_user_model().objects.get(username="lager"))
+        self.bestellung.refresh_from_db()
+
+    def rechnung(self, preis_schraube="0.06", menge_schraube="1000", bestellnummer=None, fracht=True, nr="SH-77"):
+        positionen = [
+            {"menge": Decimal(menge_schraube), "einheit": "Stk", "text": "R-1020 Sechskantschraube M8x20",
+             "preis": Decimal(preis_schraube), "satz": 19},
+            {"menge": Decimal("100"), "einheit": "kg", "text": "R-1010 Rundstahl S235", "preis": Decimal("4.80"),
+             "satz": 19}]
+        if fracht:
+            positionen.append({"menge": Decimal("1"), "einheit": "pauschal", "text": "Frachtpauschale",
+                               "preis": Decimal("15.00"), "satz": 19})
+        r = T.beispiel(lieferant=self.schmidt.name, ust_id="DE119876543", iban="DE75512108001245126199",
+                       rechnungsnummer=nr, datum=self.DATUM, positionen=positionen,
+                       bestellnummer=self.bestellung.nummer if bestellnummer is None else bestellnummer)
+        d = S.dokument_anlegen(T.pdf(r), "re.pdf", art=Dokumentart.EINGANGSRECHNUNG, benutzer=self.user)
+        V.verarbeiten(d, self.user)
+        d.refresh_from_db()
+        return d
+
+    def test_automatisch_ohne_abweichung_und_verbuchung(self):
+        from . import verbuchung as VB
+
+        d = self.rechnung()
+        a = d.erkennung["abgleich"]
+        self.assertEqual((a["bestellung_id"], a["quelle"]), (self.bestellung.pk, "Bestellnummer auf der Rechnung"))
+        self.assertFalse(a["abweichung"], a)
+        self.assertEqual([z["zuordnung"] for z in a["positionen"]], ["Artikelnummer", "Artikelnummer"])
+        self.assertEqual([p["beschreibung"] for p in a["ohne_bezug"]], ["Frachtpauschale"])
+        er = VB.verbuchen(d, self.user)
+        self.assertEqual(er.bestellung, self.bestellung)
+        self.assertTrue(er.abweichung_akzeptiert)
+        pos = list(er.positionen.order_by("position"))
+        self.assertEqual([p.bestellposition_id is not None for p in pos], [True, True, False])
+        self.assertEqual(pos[0].artikel.artikelnummer, "R-1020")
+        self.assertIsNotNone(pos[2].konto)  # Fracht über das Aufwandskonto
+        self.assertIn("Bestellbezug", d.protokoll.filter(aktion="Verbucht").get().text)
+        # Zweite Rechnung über dieselbe Lieferung → Menge bereits berechnet
+        d2 = self.rechnung(nr="SH-78", fracht=False)
+        arten = {a["art"] for z in d2.erkennung["abgleich"]["positionen"] for a in z["abweichungen"]}
+        self.assertEqual(arten, {"MENGE"})
+
+    def test_preisabweichung_nur_mit_begruendung_und_recht(self):
+        from . import verbuchung as VB
+
+        d = self.rechnung(preis_schraube="0.08")  # +33 %, +20,00 € auf die Position
+        a = d.erkennung["abgleich"]
+        self.assertTrue(a["abweichung"])
+        self.assertEqual(a["positionen"][0]["abweichungen"][0]["art"], "PREIS")
+        self.assertTrue(any("Dreifach-Abgleich" in m["text"] for m in d.erkennung["plausibilitaet"]))
+        with self.assertRaisesMessage(S.DmsFehler, "Begründung"):
+            VB.verbuchen(d, self.user)
+        with self.assertRaisesMessage(S.DmsFehler, "mindestens 10 Zeichen"):
+            VB.verbuchen(d, self.user, begruendung="ok")
+        lager = get_user_model().objects.get(username="lager")  # ohne Freigaberecht Einkauf/Fibu
+        with self.assertRaisesMessage(S.DmsFehler, "Recht"):
+            VB.verbuchen(d, lager, begruendung="Preiserhöhung telefonisch bestätigt")
+        er = VB.verbuchen(d, self.einkauf, begruendung="Preiserhöhung telefonisch bestätigt")
+        self.assertEqual(er.bestellung, self.bestellung)
+        self.assertIn("telefonisch", d.protokoll.get(aktion="Abweichung freigegeben").text)
+        d.refresh_from_db()
+        self.assertEqual(d.erkennung["abgleich"]["freigabe"]["von"], "einkauf")
+
+    @override_settings(ERP_DMS_TOLERANZ_PREIS_PROZENT="50", ERP_DMS_TOLERANZ_BETRAG="0.50")
+    def test_toleranz_konfigurierbar(self):
+        self.assertFalse(self.rechnung(preis_schraube="0.08").erkennung["abgleich"]["abweichung"])
+
+    def test_kleinbetrag_innerhalb_betragstoleranz(self):
+        # 0,0604 € statt 0,06 € → +0,7 %, 0,40 € auf die Position: innerhalb der Toleranz
+        self.assertFalse(self.rechnung(preis_schraube="0.0604").erkennung["abgleich"]["abweichung"])
+
+    def test_ohne_wareneingang(self):
+        from apps.einkauf import services as EK
+        from apps.einkauf.tests import bestellung_anlegen
+
+        b = EK.freigeben(bestellung_anlegen(self.schmidt, [("R-1020", "500", "0.06")]), self.einkauf)
+        d = self.rechnung(bestellnummer=b.nummer, fracht=False)
+        a = d.erkennung["abgleich"]
+        self.assertEqual(a["bestellung_id"], b.pk)
+        self.assertEqual(a["positionen"][0]["abweichungen"][0]["art"], "KEIN_WE")
+
+    def test_manuelle_auswahl_in_pruefmaske(self):
+        d = self.rechnung(bestellnummer="")
+        self.assertIsNone(d.erkennung["abgleich"]["bestellung_id"])
+        self.assertIn(self.bestellung.pk, [v["id"] for v in d.erkennung["abgleich"]["vorschlaege"]])
+        self.client.force_login(self.user)
+        r = self.client.get(reverse("dms:pruefen", args=[d.pk]))
+        self.assertContains(r, "Dreifach-Abgleich")
+        self.assertContains(r, self.bestellung.nummer)
+        r = self.client.post(reverse("dms:pruefen", args=[d.pk]),
+                             PruefmaskeTests.post_daten(self, d, bestellung=str(self.bestellung.pk)))
+        self.assertEqual(r.status_code, 302)
+        d.refresh_from_db()
+        a = d.erkennung["abgleich"]
+        self.assertEqual((a["auswahl"], a["bestellung_id"], a["abweichung"]), ("manuell", self.bestellung.pk, False))
+        self.assertContains(self.client.get(reverse("dms:pruefen", args=[d.pk])), "R-1020")
+        # „ohne Bestellbezug“ → klassische Verbuchung über Aufwandskonten
+        self.client.post(reverse("dms:pruefen", args=[d.pk]), PruefmaskeTests.post_daten(self, d, bestellung="ohne"))
+        d.refresh_from_db()
+        self.assertEqual((d.erkennung["abgleich"]["auswahl"], d.erkennung["abgleich"]["bestellung_id"]),
+                         ("ohne", None))
+
+    def test_verbuchen_in_pruefmaske_mit_begruendung(self):
+        d = self.rechnung(preis_schraube="0.08")
+        self.client.force_login(self.user)
+        daten = PruefmaskeTests.post_daten(self, d)
+        daten["aktion"] = "verbuchen"
+        self.client.post(reverse("dms:pruefen", args=[d.pk]), daten)
+        d.refresh_from_db()
+        self.assertIsNone(d.eingangsrechnung)
+        daten["begruendung"] = "Preis laut Rahmenvertrag 2027 angepasst"
+        r = self.client.post(reverse("dms:pruefen", args=[d.pk]), daten)
+        d.refresh_from_db()
+        self.assertIsNotNone(d.eingangsrechnung)
+        self.assertRedirects(r, reverse("fibu:er", args=[d.eingangsrechnung.pk]))
+
+    def test_api_verbuchen_mit_bestellbezug_und_begruendung(self):
+        from rest_framework.authtoken.models import Token
+        from rest_framework.test import APIClient
+
+        api = APIClient()
+        api.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}")
+        d = self.rechnung(bestellnummer="", preis_schraube="0.08")
+        url = f"/api/v1/dms/dokumente/{d.pk}/verbuchen/"
+        self.assertEqual(api.post(url, {"bestellung": "999999"}, format="json").status_code, 400)
+        r = api.post(url, {"bestellung": str(self.bestellung.pk)}, format="json")
+        self.assertEqual(r.status_code, 409, r.content)
+        r = api.post(url, {"bestellung": str(self.bestellung.pk), "begruendung": "Mehrpreis Sonderverpackung ok"},
+                     format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.data["dokument"]["erkennung"]["abgleich"]["bestellnummer"], self.bestellung.nummer)
+
+    def test_demodaten_bestellrechnung(self):
+        call_command("dms_demodaten", ohne_ocr=True, verbosity=0)
+        d = Dokument.objects.get(versionen__dateiname="schmidt_rechnung_bestellung.pdf")
+        V.verarbeiten(d, self.user)
+        d.refresh_from_db()
+        a = d.erkennung["abgleich"]
+        self.assertTrue(a["bestellnummer"].startswith("EK-"))
+        self.assertTrue(a["abweichung"], (a, d.erkennung["positionen"]))
+        self.assertEqual([x["art"] for z in a["positionen"] for x in z["abweichungen"]], ["PREIS"])
+        self.assertEqual([p["beschreibung"] for p in a["ohne_bezug"]], ["Frachtpauschale"])

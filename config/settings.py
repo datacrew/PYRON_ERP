@@ -224,6 +224,15 @@ ERP_DMS_IMAP_ART = os.environ.get("ERP_DMS_IMAP_ART", "ER")
 ERP_DMS_IMAP_MAX_MAILS = int(os.environ.get("ERP_DMS_IMAP_MAX_MAILS", "50"))
 ERP_DMS_IMAP_TIMEOUT = int(os.environ.get("ERP_DMS_IMAP_TIMEOUT", "60"))
 
+# Dreifach-Abgleich Bestellung/Wareneingang/Rechnung: Toleranzen je Position. Eine Preisabweichung gilt erst als
+# Abweichung, wenn sie die Prozent- UND die Betragsgrenze überschreitet (Kleinstbeträge/Rundung).
+ERP_DMS_TOLERANZ_MENGE_PROZENT = os.environ.get("ERP_DMS_TOLERANZ_MENGE_PROZENT", "0")
+ERP_DMS_TOLERANZ_PREIS_PROZENT = os.environ.get("ERP_DMS_TOLERANZ_PREIS_PROZENT", "1")
+ERP_DMS_TOLERANZ_BETRAG = os.environ.get("ERP_DMS_TOLERANZ_BETRAG", "0.50")
+# Wer Abweichungen (mit Begründung) freigeben darf – eines der Rechte (Modul, Aktion) genügt
+ERP_DMS_ABWEICHUNG_RECHTE = [tuple(r.split(".", 1)) for r in _env_liste(
+    "ERP_DMS_ABWEICHUNG_RECHTE", "einkauf.freigeben,fibu.freigeben") if "." in r]
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "login"

@@ -742,7 +742,7 @@ Systempakete und Betrieb: [deploy/INSTALLATION.md, Abschnitt 11](deploy/INSTALLA
   bzw. *Abgelegt/Fehler*; Fortschrittsbalken im Browser (ein Dokument je Anfrage, kein Celery nötig);
   `dms_verarbeiten` arbeitet Rückstände ab.
 - **E-Mail-Rechnungseingang** (`dms_mailabruf`, IMAP über SSL/TLS, Zugangsdaten nur per Umgebung `ERP_DMS_IMAP_*`):
-  Anhänge (PDF, PNG/JPEG, TIFF, XML) jeder ungelesenen Mail werden ein Stapel (Quelle „E-Mail-Eingang"),
+  Anhänge (PDF, PNG/JPEG, TIFF, XML) jeder ungelesenen Mail werden ein Stapel (Quelle „E-Mail-Eingang“),
   Absender/Betreff/Message-ID im Protokoll, Lieferant über die (Rechnungs-)E-Mail-Adresse; Dubletten per
   Message-ID und SHA-256; verarbeitete Mails werden in einen Zielordner verschoben bzw. als gelesen markiert,
   Mails ohne Anhang in einen Fehlerordner; technische Fehler werden bis zu 3-mal wiederholt. Übersicht unter
@@ -765,9 +765,22 @@ Systempakete und Betrieb: [deploy/INSTALLATION.md, Abschnitt 11](deploy/INSTALLA
 - **Prüfmaske (Split-Ansicht)**: Dokument links (PDF/Bild), rechts editierbare Kopffelder mit Konfidenz-Ampel,
   Positionen mit Konto/Steuerschlüssel, Live-Summen, Plausibilitätsmeldungen; „Speichern“, „Kontierung neu
   vorschlagen“, „Speichern, freigeben und verbuchen“.
+- **Dreifach-Abgleich Bestellung ↔ Wareneingang ↔ Rechnung**: Die Bestellnummer wird aus der E-Rechnung (BT-13,
+  CII `BuyerOrderReferencedDocument` bzw. UBL `OrderReference`) oder dem Text („Ihre Bestellung …“, „Bestell-Nr.“)
+  erkannt; alternativ wählt man in der Prüfmaske eine der offenen Bestellungen des Lieferanten (Vorschlagsliste)
+  oder „ohne Bestellbezug“. Rechnungspositionen werden den Bestellpositionen zugeordnet (Artikel-/
+  Lieferantenartikelnummer, Bezeichnung, sonst Reihenfolge) und Menge (gegen gelieferte minus bereits berechnete
+  Menge) sowie Preis (gegen Lieferpreis des Wareneingangs bzw. Bestellpreis) verglichen. Toleranzen konfigurierbar
+  (`ERP_DMS_TOLERANZ_MENGE_PROZENT`, `…_PREIS_PROZENT`, `…_BETRAG`; Preis gilt erst bei Überschreiten von Prozent-
+  **und** Betragsgrenze als Abweichung). Abweichungen außerhalb der Toleranz (auch „kein Wareneingang“) erlauben
+  die Verbuchung nur mit **Begründung (≥ 10 Zeichen) und Freigaberecht** (`einkauf.freigeben` oder
+  `fibu.freigeben`, einstellbar über `ERP_DMS_ABWEICHUNG_RECHTE`); die Freigabe wird protokolliert und gilt nur
+  für genau diesen Abweichungsstand. Bei der Verbuchung verweist die Eingangsrechnung auf die Bestellung und jede
+  zugeordnete Position auf ihre Bestellposition; diese Positionen werden gegen das WE/RE-Verrechnungskonto gebucht,
+  Fracht u. Ä. ohne Bezug weiter über das Aufwandskonto.
 - **REST-API** (`/api/v1/dms/…`, Token-Authentifizierung, Rechte wie in der Oberfläche): Upload als Stapel,
   Suche/Filter, Detail mit OCR-Text und erkannten Daten, Status, Download je Version, Schlagwörter, Verarbeitung,
-  Archivierung, Verbuchung, Protokoll – siehe Abschnitt „REST-API".
+  Archivierung, Verbuchung (mit Bestellbezug/Begründung), Protokoll – siehe Abschnitt „REST-API“.
 - **Verbuchung**: Freigabe erzeugt eine `fibu.Eingangsrechnung` mit `ERPosition`en (Nummernkreis `FIBU_ER`) und
   bucht sie über `fibu.services.er_buchen` – Aufwand + Vorsteuer an Kreditor, Offener Posten, Hash-Kette der Fibu
   unverändert. Das Dokument wird archiviert und mit Eingangsrechnung/Buchung verknüpft; Eingangsrechnung und
@@ -796,7 +809,9 @@ python3 manage.py erp_pruefen                                                   
 „Bürobedarf Schneider GmbH“ und einen Stapel mit **synthetischen** Rechnungen an: ZUGFeRD-Rechnung (wird direkt
 verbucht), digitale PDF-Rechnung (wartet auf Freigabe), gescannte Rechnung (OCR), Sammel-PDF mit Trennblatt
 (wird in zwei Dokumente geteilt), einen Rahmenvertrag mit Schlagwort und eine simulierte Lieferanten-E-Mail mit
-PDF-Anhang (E-Mail-Eingang ohne echtes Postfach).
+PDF-Anhang (E-Mail-Eingang ohne echtes Postfach). Sind die ERP-Demodaten (Einkauf/Lager) vorhanden, kommt eine
+Bestellung bei „Stahlhandel Schmidt GmbH“ mit Wareneingang und eine Rechnung mit Bestellnummer und leicht erhöhtem
+Schraubenpreis hinzu: Die Prüfmaske zeigt den **Dreifach-Abgleich** mit Preisabweichung (Verbuchung nur mit Begründung).
 1. **Dokumente** → Übersicht: Warteschlange und „Zu prüfen“/„Erkannt“.
 2. Rechnung öffnen → **Prüfmaske**: Felder kontrollieren, Konto anpassen → „Speichern, freigeben und verbuchen“.
 3. Weiterleitung zur Eingangsrechnung in der Fibu (Kreditor-OP, Buchung mit Vorsteuer) mit Link zum Originalbeleg.
@@ -833,7 +848,7 @@ Modulrechte des Benutzers.
 | `POST /api/v1/dms/dokumente/` (multipart: `dateien` mehrfach, `art`, `bezeichnung`, `partner`, `stapel`, `automatisch_trennen`, `sofort_verarbeiten`) | DMS: Upload einer oder mehrerer Dateien als Stapel (`dms.anlegen`); Antwort mit Stapel, Dokumenten, Fehlern und Dubletten-Hinweisen |
 | `GET /api/v1/dms/dokumente/{id}/` · `PATCH` (`titel`, `belegdatum`, `bemerkung`, `metadaten`, `partner`) · `DELETE` | DMS: Detail inkl. `ocr_text`, `erkennung` (Felder, Positionen, Plausibilität) und Versionen; Ändern/Löschen nur vor der Archivierung (sonst 409) |
 | `GET /api/v1/dms/dokumente/{id}/status/` · `GET .../datei/` (`?version=<id>`, `?original=true`; Header `X-Sha256`) · `GET .../protokoll/` | DMS: Verarbeitungsstatus, Download der Datei/Version, Protokoll |
-| `POST /api/v1/dms/dokumente/{id}/tags/` (`tags`, `modus` setzen/hinzufuegen/entfernen) · `.../archivieren/` (`dms.aendern`) · `.../verarbeiten/` (`dms.anlegen`) · `.../verbuchen/` (`dms.freigeben` + `fibu.anlegen`) | DMS: Schlagwörter, Archivierung, OCR/Erkennung, Freigabe und Buchung als Eingangsrechnung |
+| `POST /api/v1/dms/dokumente/{id}/tags/` (`tags`, `modus` setzen/hinzufuegen/entfernen) · `.../archivieren/` (`dms.aendern`) · `.../verarbeiten/` (`dms.anlegen`) · `.../verbuchen/` (`dms.freigeben` + `fibu.anlegen`; optional `bestellung` = ID/`ohne`/leer für automatisch, `begruendung` bei Abweichung im Dreifach-Abgleich) | DMS: Schlagwörter, Archivierung, OCR/Erkennung, Freigabe und Buchung als Eingangsrechnung (Abweichung ohne Begründung/Recht → 409) |
 | `GET /api/v1/dms/stapel/` · `POST /api/v1/dms/stapel/{id}/verarbeiten/` (`?limit=`) · `/api/v1/dms/tags/` | DMS: Stapel mit Fortschritt, Warteschlange abarbeiten, Schlagwörter |
 
 Gesperrte Belege und fachlich unzulässige Buchungen (z. B. zu wenig Bestand, fehlende Charge, Bestellung nicht
@@ -848,6 +863,9 @@ curl -H "Authorization: Token $TOKEN" -F dateien=@rechnung1.pdf -F dateien=@rech
      -F art=ER -F sofort_verarbeiten=true localhost:8000/api/v1/dms/dokumente/
 curl -H "Authorization: Token $TOKEN" "localhost:8000/api/v1/dms/dokumente/?q=Toner&status=ERKANNT"
 curl -X POST -H "Authorization: Token $TOKEN" localhost:8000/api/v1/dms/dokumente/<id>/verbuchen/
+curl -X POST -H "Authorization: Token $TOKEN" -H "Content-Type: application/json" \
+     -d '{"bestellung": "42", "begruendung": "Preiserhöhung vom Lieferanten bestätigt"}' \
+     localhost:8000/api/v1/dms/dokumente/<id>/verbuchen/
 curl -H "Authorization: Token $TOKEN" -OJ "localhost:8000/api/v1/dms/dokumente/<id>/datei/?original=true"
 ```
 

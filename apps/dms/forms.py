@@ -145,6 +145,25 @@ class PruefKopfForm(ErpForm):
     netto = forms.DecimalField(label="Netto", max_digits=14, decimal_places=2, required=False)
     steuer = forms.DecimalField(label="Steuer", max_digits=14, decimal_places=2, required=False)
     brutto = forms.DecimalField(label="Brutto", max_digits=14, decimal_places=2, required=False)
+    bestellung = forms.CharField(label="Bestellbezug (Dreifach-Abgleich)", required=False, widget=forms.Select)
+
+    def __init__(self, *args, bestellungen=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["bestellung"].widget.choices = [("", "automatisch (Bestellnummer erkennen)"),
+                                                    ("ohne", "ohne Bestellbezug")] + [
+            (str(b.pk), f"{b.nummer} vom {b.datum:%d.%m.%Y} · {b.get_status_display()} · netto "
+                        f"{b.summe_netto:.2f} €".replace(".", ",")) for b in bestellungen]
+        self.fields["bestellung"].widget.attrs["class"] = "form-select form-select-sm"
+
+    def clean_bestellung(self):
+        from apps.einkauf.models import Bestellung
+
+        wert = (self.cleaned_data.get("bestellung") or "").strip()
+        if wert in ("", "ohne"):
+            return wert
+        if not wert.isdigit() or not Bestellung.objects.filter(pk=wert, typ=Bestellung.Typ.BESTELLUNG).exists():
+            raise forms.ValidationError("Bestellung nicht gefunden.")
+        return wert
 
     def clean_iban(self):
         from .erkennung import iban_gueltig
